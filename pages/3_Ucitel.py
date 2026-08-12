@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import pandas as pd
 
 st.set_page_config(page_title="Kontrolní úřad", page_icon=":material/account_balance:", layout="wide")
 
@@ -10,13 +11,13 @@ st.markdown("""
     h1, h2, h3 { background: -webkit-linear-gradient(45deg, #00B4D8, #0077B6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800 !important; }
     .stButton>button { border-radius: 8px; transition: all 0.3s ease; border: 1px solid #00B4D8; }
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 180, 216, 0.4); border-color: #00B4D8; }
+    .card-box { background-color: #1e293b; padding: 15px; border-radius: 10px; border: 1px solid #334155; margin-bottom: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title(":material/account_balance: Kontrolní úřad (Učitel)")
-st.info("Zde máte kompletní přehled nad všemi účty v systému a můžete spravovat jejich kredity.")
+st.title(":material/account_balance: Kontrolní úřad & Audity (Učitel)")
 
-# --- NAČTENÍ KLÍČŮ ZE SECRETS ---
+# --- KONEKTOR K DATABÁZI ---
 try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"].rstrip("/")
     SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
@@ -30,51 +31,135 @@ except Exception:
     st.error("Chybí konfigurace databáze v Secrets!")
     st.stop()
 
-# --- FUNKCE PRO NAČTENÍ VŠECH UŽIVATELŮ ---
-def nacti_uzivatele():
-    endpoint = f"{SUPABASE_URL}/rest/v1/uzivatele?select=id,jmeno,role,kredity"
-    res = requests.get(endpoint, headers=headers)
-    if res.status_code == 200:
-        return res.json()
-    return []
+tab_licence, tab_produkty, tab_audit, tab_export = st.tabs([
+    "🏢 1. Licenční úřad (Firmy)", 
+    "📦 2. Schvalování produktů", 
+    "🔍 3. Finanční audit knih", 
+    "📊 4. Exporty dat & Hodnocení"
+])
 
-uzivatele = nacti_uzivatele()
-
-# --- ZOBRAZENÍ TABULKY UŽIVATELŮ ---
-st.subheader("Přehled uživatelů a zůstatků")
-if uzivatele:
-    st.dataframe(uzivatele, use_container_width=True)
-else:
-    st.warning("Nenašel jsem žádné uživatele v databázi.")
-
-st.write("---")
-
-# --- FORMULÁŘ PRO ÚPRAVU KREDITŮ ---
-st.subheader("Připsat / Strhnout M-Kredity")
-
-if uzivatele:
-    jmena_uzivatelu = [u["jmeno"] for u in uzivatele]
-    vybrany_uzivatel = st.selectbox("Vyberte uživatele:", jmena_uzivatelu)
+# --- TAB 1: LICENČNÍ ÚŘAD ---
+with tab_licence:
+    st.subheader("Schvalování nových žádostí o provoz firmy")
+    res_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?select=*", headers=headers)
+    firmy = res_firmy.json() if res_firmy.status_code == 200 else []
     
-    # Najdeme aktuální kredity vybraného uživatele
-    aktualni_data = next((u for u in uzivatele if u["jmeno"] == vybrany_uzivatel), None)
-    aktualni_kredity = aktualni_data["kredity"] if aktualni_data else 0
+    cekajici = [f for f in firmy if f.get("stave_licence") == "CEKA_NA_SCHVALENI"]
     
-    st.write(f"Aktuální zůstatek uživatele **{vybrany_uzivatel}**: `{aktualni_kredity} M-Kreditů`")
+    if cekajici:
+        for f in cekajici:
+            col_a, col_b = st.columns([3, 1])
+            with col_a:
+                st.markdown(f"""
+                    <div class="card-box">
+                        <h4 style="margin:0; color:#00B4D8;">{f['nazev_firmy']} (Level {f['uroven_projektu']})</h4>
+                        <p><b>Management:</b> CEO: {f['ceo_jmeno']} | CFO: {f['cfo_jmeno']} | CTO: {f['cto_jmeno']}</p>
+                        <p><b>Záměr:</b> {f['podnikatelsky_zamer']}</p>
+                        <small>Kód školy: {f['skolni_kod']} | Počáteční vklad: {f['pocatecni_kapital']} M-Kreditů</small>
+                    </div>
+                """, unsafe_allow_html=True)
+            with col_b:
+                if st.button("Udělit licenci", key=f"ok_firm_{f['id']}"):
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{f['id']}", headers=headers, json={"stave_licence": "SCHVALENO"})
+                    st.success(f"Licence udělena firmě {f['nazev_firmy']}!")
+                    st.rerun()
+                if st.button("Zamítnout", key=f"no_firm_{f['id']}"):
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{f['id']}", headers=headers, json={"stave_licence": "ZAMITNUTO"})
+                    st.warning(f"Žádost zamítnuta.")
+                    st.rerun()
+    else:
+        st.success("Žádné čekající žádosti o licenci.")
+
+    st.write("---")
+    st.caption("Přehled všech evidovaných firem:")
+    if firmy:
+        st.dataframe(pd.DataFrame(firmy), use_container_width=True)
+
+# --- TAB 2: SCHVALOVÁNÍ PRODUKTŮ ---
+with tab_produkty:
+    st.subheader("Schvalování Kalkulačních listů před vstupem na trh")
+    res_kalk = requests.get(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?select=*", headers=headers)
+    kalkulace = res_kalk.json() if res_kalk.status_code == 200 else []
     
-    zmena = st.number_input("Počet M-Kreditů k připsání/stržení (např. +50 nebo -20):", value=10, step=5)
+    neschvalene = [k for k in kalkulace if not k.get("schvaleno_uradem", False)]
     
-    if st.button("Provést změnu kreditů"):
-        nove_kredity = aktualni_kredity + zmena
-        
-        # Odeslání změny do databáze (PATCH REST API)
-        patch_endpoint = f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_uzivatel}"
-        payload = {"kredity": nove_kredity}
-        
-        patch_res = requests.patch(patch_endpoint, headers=headers, json=payload)
-        
-        if patch_res.status_code in [200, 204]:
-            st.success(f"Úspěšně upraveno! Uživatel **{vybrany_uzivatel}** má nyní **{nove_kredity} M-Kreditů**.")
+    if neschvalene:
+        for k in neschvalene:
+            col_k1, col_k2 = st.columns([3, 1])
+            with col_k1:
+                st.markdown(f"""
+                    <div class="card-box">
+                        <h4 style="margin:0;">{k['nazev_produktu']}</h4>
+                        <p>Přímé náklady: <b>{k['prime_naklady']} M-K</b> | Režie: <b>{k['rezie_skoly']} M-K</b> | Marže: <b>{k['marze_zisk']} M-K</b></p>
+                        <p>M-TECH Daň: <b>{k['mtech_dan_procento']}%</b> | Konečná prodejní cena: <b>{k['konecna_cena']} M-Kreditů</b></p>
+                    </div>
+                """, unsafe_allow_html=True)
+            with col_k2:
+                if st.button("Schválit kalkulaci", key=f"app_kalk_{k['id']}"):
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?id=eq.{k['id']}", headers=headers, json={"schvaleno_uradem": True})
+                    st.success(f"Produkt {k['nazev_produktu']} byl schválen k prodeji!")
+                    st.rerun()
+    else:
+        st.info("Žádné nové kalkulační listy k posouzení.")
+
+# --- TAB 3: FINANČNÍ AUDIT KNIH ---
+with tab_audit:
+    st.subheader("Finanční audit Knih příjmů a výdajů")
+    st.caption("Průběžná kontrola shody účetních zápisů podle metodiky M-TECH CORE.")
+    
+    res_kniha = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?select=*", headers=headers)
+    polozky = res_kniha.json() if res_kniha.status_code == 200 else []
+    
+    neauditovane = [p for p in polozky if not p.get("auditovano", False)]
+    
+    if neauditovane:
+        st.warning(f"Nalezeno {len(neauditovane)} neoverených účetních operací.")
+        if st.button("Udělit hromadné Auditní razítko"):
+            for p in neauditovane:
+                requests.patch(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?id=eq.{p['id']}", headers=headers, json={"auditovano": True})
+            st.success("Všechny položky byly auditovány a označeny razítkem!")
             st.rerun()
-        else:
-            st.error(f"Chyba při ukládání do databáze: {patch_res.text}")
+            
+    if polozky:
+        st.dataframe(pd.DataFrame(polozky), use_container_width=True)
+    else:
+        st.info("Účetní knihy jsou zatím bez záznamů.")
+
+# --- TAB 4: EXPORTY DAT A HODNOCENÍ ---
+with tab_export:
+    st.subheader("Export dat a Pedagogické hodnocení (Pilíře I–III)")
+    st.caption("Stáhněte si kompletní podklady pro známkování v předmětu Ekonomika.")
+    
+    col_ex1, col_ex2, col_ex3 = st.columns(3)
+    
+    # Export Firem
+    with col_ex1:
+        st.markdown("**1. Registr Firem & Licencí**")
+        if firmy:
+            df_firmy = pd.DataFrame(firmy)
+            csv_firmy = df_firmy.to_csv(index=False).encode('utf-8')
+            st.download_button("💾 Stáhnout CSV (Firmy)", data=csv_firmy, file_name="firmy_mtech_core.csv", mime="text/csv")
+            
+    # Export Kalkulací
+    with col_ex2:
+        st.markdown("**2. Produktové kalkulace**")
+        if kalkulace:
+            df_kalk = pd.DataFrame(kalkulace)
+            csv_kalk = df_kalk.to_csv(index=False).encode('utf-8')
+            st.download_button("💾 Stáhnout CSV (Kalkulace)", data=csv_kalk, file_name="kalkulace_mtech_core.csv", mime="text/csv")
+
+    # Export Účetních knih
+    with col_ex3:
+        st.markdown("**3. Účetní kniha & Audity**")
+        if polozky:
+            df_pol = pd.DataFrame(polozky)
+            csv_pol = df_pol.to_csv(index=False).encode('utf-8')
+            st.download_button("💾 Stáhnout CSV (Účetnictví)", data=csv_pol, file_name="ucto_mtech_core.csv", mime="text/csv")
+            
+    st.write("---")
+    st.markdown("""
+        **Hodnotící matice dle Metodické příručky M-TECH CORE:**
+        * **PILÍŘ I: Kvalita a integrita dokumentace (30 %)** – Účetní čistota, kalkulační přesnost, zakladatelské listiny.
+        * **PILÍŘ II: Analytické myšlení a reflexe (40 %)** – Kritická analýza neúspěchu, Lean Canvas, zdůvodnění marží.
+        * **PILÍŘ III: Prezentace a Soft-skills (30 %)** – Vizuální identita, vystupování na tržišti a týmová spolupráce.
+    """)
