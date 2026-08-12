@@ -3,7 +3,6 @@ import requests
 
 st.set_page_config(page_title="M-TECH CORE", page_icon=":material/hub:", layout="wide")
 
-# --- VIZUÁLNÍ ŠMRNC (CSS) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&display=swap');
@@ -14,7 +13,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- NAČTENÍ KLÍČŮ ZE SECRETS ---
 try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"].rstrip("/")
     SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
@@ -25,10 +23,9 @@ try:
         "Prefer": "return=representation"
     }
 except Exception:
-    st.error("Chybí SUPABASE_URL nebo SUPABASE_KEY ve Streamlit Secrets!")
+    st.error("Chybí konfigurace v Secrets!")
     st.stop()
 
-# --- INICIALIZACE PAMĚTI ---
 if "role" not in st.session_state:
     st.session_state.role = None
 if "kredity" not in st.session_state:
@@ -36,18 +33,15 @@ if "kredity" not in st.session_state:
 if "uzivatel" not in st.session_state:
     st.session_state.uzivatel = None
 
-# --- DEFINICE STRÁNEK ---
 zaci_page = st.Page("pages/1_Zaci.py", title="Moje peněženka", icon=":material/wallet:")
 firma_page = st.Page("pages/2_Firma.py", title="Firemní Dashboard", icon=":material/insights:")
 ucitel_page = st.Page("pages/3_Ucitel.py", title="Kontrolní úřad", icon=":material/account_balance:")
 
-# --- PŘIHLAŠOVACÍ A REGISTRAČNÍ BRÁNA ---
 if st.session_state.role is None:
     st.title(":material/fingerprint: Vstup do M-TECH CORE")
     
-    tab_login, tab_reg = st.tabs(["🔒 Přihlášení", "📝 Registrace nového účtu"])
+    tab_login, tab_reg = st.tabs(["🔒 Přihlášení", "💳 Žádost o účet / Registrace"])
     
-    # 1. PŘIHLÁŠENÍ
     with tab_login:
         with st.form("login_form"):
             jmeno = st.text_input("Přihlašovací jméno:")
@@ -57,52 +51,55 @@ if st.session_state.role is None:
             if submit:
                 endpoint = f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{jmeno}&heslo=eq.{heslo}&select=*"
                 try:
-                    odpoved = requests.get(endpoint, headers=headers)
-                    data = odpoved.json()
+                    res = requests.get(endpoint, headers=headers)
+                    data = res.json()
                     
                     if isinstance(data, list) and len(data) > 0:
                         uzivatel = data[0]
-                        st.session_state.role = uzivatel["role"]
-                        st.session_state.kredity = uzivatel["kredity"]
-                        st.session_state.uzivatel = uzivatel["jmeno"]
-                        st.rerun()
+                        
+                        # Kontrola schválení účtu
+                        if not uzivatel.get("aktivni", False):
+                            st.warning("⚠️ Váš účet ještě nebyl aktivován. Čeká se na potvzení platby registračního poplatku administrátorem.")
+                        else:
+                            st.session_state.role = uzivatel["role"]
+                            st.session_state.kredity = uzivatel["kredity"]
+                            st.session_state.uzivatel = uzivatel["jmeno"]
+                            st.rerun()
                     else:
-                        st.error("Nespravné přihlašovací údaje!")
+                        st.error("Nesprávné přihlašovací údaje!")
                 except Exception as e:
                     st.error(f"Chyba databáze: {e}")
 
-    # 2. REGISTRACE
     with tab_reg:
+        st.info("ℹ️ Po odoslání žádosti proveďte platbu poplatku. Účet bude zpřístupněn ihned po ověření platby adminem.")
         with st.form("reg_form"):
-            reg_jmeno = st.text_input("Nové uživatelské jméno:")
-            reg_heslo = st.text_input("Nové heslo:", type="password")
-            reg_role = st.selectbox("Typ účtu / Role:", ["zak", "firma"])
-            reg_submit = st.form_submit_button("Vytvořit účet")
+            reg_jmeno = st.text_input("Uživatelské jméno:")
+            reg_heslo = st.text_input("Heslo:", type="password")
+            reg_role = st.selectbox("Typ účtu:", ["zak", "firma"])
+            reg_submit = st.form_submit_button("Odeslat žádost o registraci")
             
             if reg_submit:
                 if reg_jmeno and reg_heslo:
-                    # Kontrola, zda už jméno neexistuje
                     check_res = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{reg_jmeno}", headers=headers)
                     if len(check_res.json()) > 0:
-                        st.error("Toto uživatelské jméno je již obsazené!")
+                        st.error("Toto jméno už existuje!")
                     else:
-                        # Výchozí kredity: 100 pro žáky, 300 pro firmy
                         start_kredity = 100 if reg_role == "zak" else 300
                         novy_uzivatel = {
                             "jmeno": reg_jmeno,
                             "heslo": reg_heslo,
                             "role": reg_role,
-                            "kredity": start_kredity
+                            "kredity": start_kredity,
+                            "aktivni": False  # Čeká na schválení!
                         }
                         reg_post = requests.post(f"{SUPABASE_URL}/rest/v1/uzivatele", headers=headers, json=novy_uzivatel)
                         if reg_post.status_code in [200, 201]:
-                            st.success(f"Účet {reg_jmeno} byl úspěšně vytvořen! Nyní se můžete přihlásit.")
+                            st.success("Registrace přijata! Proveďte platbu. Váš účet bude aktivován po ověření.")
                         else:
-                            st.error("Chyba při registrace nového účtu.")
+                            st.error("Chyba při registrace.")
                 else:
-                    st.warning("Vyplňte jméno i heslo.")
+                    st.warning("Vyplňte všechna pole.")
 
-# --- DYNAMICKÉ ZOBRAZENÍ STRÁNEK PODLE ROLE ---
 else:
     if st.session_state.role == "zak":
         pg = st.navigation([zaci_page])
