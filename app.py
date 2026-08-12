@@ -1,4 +1,5 @@
 import streamlit as st
+from supabase import create_client, Client
 
 st.set_page_config(page_title="M-TECH CORE", page_icon=":material/hub:", layout="wide")
 
@@ -13,16 +14,32 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Inicializace paměti pro roli
+# --- PŘIPOJENÍ K DATABÁZI ---
+# st.cache_resource zajistí, že se aplikace nepřipojuje k databázi zbytečně pořád dokola
+@st.cache_resource
+def init_connection():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
+
+try:
+    supabase: Client = init_connection()
+except Exception as e:
+    st.error("Chyba spojení s databází. Zkontroluj klíče ve Streamlit Secrets.")
+    st.stop()
+
+# --- INICIALIZACE PAMĚTI ---
 if "role" not in st.session_state:
     st.session_state.role = None
+if "kredity" not in st.session_state:
+    st.session_state.kredity = 0
 
 # --- DEFINICE STRÁNEK ---
 zaci_page = st.Page("pages/1_Zaci.py", title="Moje peněženka", icon=":material/wallet:")
 firma_page = st.Page("pages/2_Firma.py", title="Firemní Dashboard", icon=":material/insights:")
 ucitel_page = st.Page("pages/3_Ucitel.py", title="Kontrolní úřad", icon=":material/account_balance:")
 
-# --- PŘIHLAŠOVACÍ BRÁNA ---
+# --- PŘIHLAŠOVACÍ BRÁNA (Nyní ověřuje přes databázi) ---
 if st.session_state.role is None:
     st.title(":material/fingerprint: Systém uzamčen")
     st.info("Pro vstup do M-TECH CORE zadejte přihlašovací údaje.")
@@ -33,24 +50,20 @@ if st.session_state.role is None:
         submit = st.form_submit_button("Přihlásit se do systému")
         
         if submit:
-            if jmeno == "zak" and heslo == "123":
-                st.session_state.role = "zak"
-                st.rerun()
-            elif jmeno == "firma" and heslo == "123":
-                st.session_state.role = "firma"
-                st.rerun()
-            elif jmeno == "ucitel" and heslo == "123":
-                st.session_state.role = "ucitel"
-                st.rerun()
-            elif jmeno == "admin" and heslo == "core2026":
-                st.session_state.role = "admin"
+            # Zeptáme se databáze, jestli najde shodu jména a hesla
+            odpoved = supabase.table("uzivatele").select("*").eq("jmeno", jmeno).eq("heslo", heslo).execute()
+            
+            # Pokud databáze něco vrátí (délka dat > 0), přihlášení je úspěšné
+            if len(odpoved.data) > 0:
+                uzivatel = odpoved.data[0]
+                st.session_state.role = uzivatel["role"]
+                st.session_state.kredity = uzivatel["kredity"] # Načteme reálné zůstatky z databáze!
                 st.rerun()
             else:
                 st.error("Špatné jméno nebo heslo!")
 
 # --- DYNAMICKÉ ZOBRAZENÍ STRÁNEK PODLE ROLE ---
 else:
-    # Aplikace sestaví navigaci jen z těch stránek, na které má uživatel právo
     if st.session_state.role == "zak":
         pg = st.navigation([zaci_page])
     elif st.session_state.role == "firma":
@@ -58,16 +71,16 @@ else:
     elif st.session_state.role == "ucitel":
         pg = st.navigation([ucitel_page])
     elif st.session_state.role == "admin":
-        # ADMIN VIDÍ VŠECHNO NARÁZ
         pg = st.navigation([zaci_page, firma_page, ucitel_page])
     
-    # Spuštění povolené stránky
     pg.run()
     
-    # Přidání odhlašovacího tlačítka do bočního panelu
     with st.sidebar:
         st.divider()
-        st.caption(f"Přihlášen jako: **{st.session_state.role.upper()}**")
+        st.caption(f"Role: **{st.session_state.role.upper()}**")
+        # Rovnou do menu vypíšeme reálný stav kreditů z databáze
+        st.markdown(f"Zůstatek: **{st.session_state.kredity} M-Kreditů**")
+        
         if st.button("Odhlásit se"):
             st.session_state.role = None
             st.rerun()
