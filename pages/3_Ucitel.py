@@ -17,7 +17,6 @@ st.markdown("""
 
 st.title(":material/account_balance: Kontrolní úřad & Audity (Učitel)")
 
-# --- KONEKTOR K DATABÁZI ---
 try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"].rstrip("/")
     SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
@@ -48,7 +47,7 @@ with tab_licence:
     
     if cekajici:
         for f in cekajici:
-            col_a, col_b = st.columns([3, 1])
+            col_a, col_b = st.columns([3, 2])
             with col_a:
                 st.markdown(f"""
                     <div class="card-box">
@@ -59,14 +58,19 @@ with tab_licence:
                     </div>
                 """, unsafe_allow_html=True)
             with col_b:
-                if st.button("Udělit licenci", key=f"ok_firm_{f['id']}"):
-                    requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{f['id']}", headers=headers, json={"stave_licence": "SCHVALENO"})
+                if st.button("✅ Udělit licenci", key=f"ok_firm_{f['id']}"):
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{f['id']}", headers=headers, json={"stave_licence": "SCHVALENO", "duvod_zamitnuti": None})
                     st.success(f"Licence udělena firmě {f['nazev_firmy']}!")
                     st.rerun()
-                if st.button("Zamítnout", key=f"no_firm_{f['id']}"):
-                    requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{f['id']}", headers=headers, json={"stave_licence": "ZAMITNUTO"})
-                    st.warning(f"Žádost zamítnuta.")
-                    st.rerun()
+                
+                duvod = st.text_input("Důvod zamítnutí / co opravit:", key=f"reason_{f['id']}")
+                if st.button("❌ Zamítnout s důvodem", key=f"no_firm_{f['id']}"):
+                    if duvod:
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{f['id']}", headers=headers, json={"stave_licence": "ZAMITNUTO", "duvod_zamitnuti": duvod})
+                        st.warning(f"Žádost zamítnuta s důvodem.")
+                        st.rerun()
+                    else:
+                        st.error("Vyplňte prosím důvod zamítnutí!")
     else:
         st.success("Žádné čekající žádosti o licenci.")
 
@@ -105,11 +109,8 @@ with tab_produkty:
 # --- TAB 3: FINANČNÍ AUDIT KNIH ---
 with tab_audit:
     st.subheader("Finanční audit Knih příjmů a výdajů")
-    st.caption("Průběžná kontrola shody účetních zápisů podle metodiky M-TECH CORE.")
-    
     res_kniha = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?select=*", headers=headers)
     polozky = res_kniha.json() if res_kniha.status_code == 200 else []
-    
     neauditovane = [p for p in polozky if not p.get("auditovano", False)]
     
     if neauditovane:
@@ -117,49 +118,28 @@ with tab_audit:
         if st.button("Udělit hromadné Auditní razítko"):
             for p in neauditovane:
                 requests.patch(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?id=eq.{p['id']}", headers=headers, json={"auditovano": True})
-            st.success("Všechny položky byly auditovány a označeny razítkem!")
+            st.success("Všechny položky byly auditovány!")
             st.rerun()
             
     if polozky:
         st.dataframe(pd.DataFrame(polozky), use_container_width=True)
-    else:
-        st.info("Účetní knihy jsou zatím bez záznamů.")
 
 # --- TAB 4: EXPORTY DAT A HODNOCENÍ ---
 with tab_export:
     st.subheader("Export dat a Pedagogické hodnocení (Pilíře I–III)")
-    st.caption("Stáhněte si kompletní podklady pro známkování v předmětu Ekonomika.")
-    
     col_ex1, col_ex2, col_ex3 = st.columns(3)
     
-    # Export Firem
     with col_ex1:
         st.markdown("**1. Registr Firem & Licencí**")
         if firmy:
-            df_firmy = pd.DataFrame(firmy)
-            csv_firmy = df_firmy.to_csv(index=False).encode('utf-8')
-            st.download_button("💾 Stáhnout CSV (Firmy)", data=csv_firmy, file_name="firmy_mtech_core.csv", mime="text/csv")
+            st.download_button("💾 Stáhnout CSV (Firmy)", data=pd.DataFrame(firmy).to_csv(index=False).encode('utf-8'), file_name="firmy_mtech_core.csv", mime="text/csv")
             
-    # Export Kalkulací
     with col_ex2:
         st.markdown("**2. Produktové kalkulace**")
         if kalkulace:
-            df_kalk = pd.DataFrame(kalkulace)
-            csv_kalk = df_kalk.to_csv(index=False).encode('utf-8')
-            st.download_button("💾 Stáhnout CSV (Kalkulace)", data=csv_kalk, file_name="kalkulace_mtech_core.csv", mime="text/csv")
+            st.download_button("💾 Stáhnout CSV (Kalkulace)", data=pd.DataFrame(kalkulace).to_csv(index=False).encode('utf-8'), file_name="kalkulace_mtech_core.csv", mime="text/csv")
 
-    # Export Účetních knih
     with col_ex3:
         st.markdown("**3. Účetní kniha & Audity**")
         if polozky:
-            df_pol = pd.DataFrame(polozky)
-            csv_pol = df_pol.to_csv(index=False).encode('utf-8')
-            st.download_button("💾 Stáhnout CSV (Účetnictví)", data=csv_pol, file_name="ucto_mtech_core.csv", mime="text/csv")
-            
-    st.write("---")
-    st.markdown("""
-        **Hodnotící matice dle Metodické příručky M-TECH CORE:**
-        * **PILÍŘ I: Kvalita a integrita dokumentace (30 %)** – Účetní čistota, kalkulační přesnost, zakladatelské listiny.
-        * **PILÍŘ II: Analytické myšlení a reflexe (40 %)** – Kritická analýza neúspěchu, Lean Canvas, zdůvodnění marží.
-        * **PILÍŘ III: Prezentace a Soft-skills (30 %)** – Vizuální identita, vystupování na tržišti a týmová spolupráce.
-    """)
+            st.download_button("💾 Stáhnout CSV (Účetnictví)", data=pd.DataFrame(polozky).to_csv(index=False).encode('utf-8'), file_name="ucto_mtech_core.csv", mime="text/csv")
