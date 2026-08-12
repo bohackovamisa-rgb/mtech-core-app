@@ -33,7 +33,7 @@ zaci_page = st.Page("pages/1_Zaci.py", title="Moje peněženka", icon=":material
 firma_page = st.Page("pages/2_Firma.py", title="Firemní Dashboard", icon=":material/insights:")
 ucitel_page = st.Page("pages/3_Ucitel.py", title="Kontrolní úřad", icon=":material/account_balance:")
 
-# --- PŘIHLAŠOVACÍ BRÁNA (Přímé HTTP REST API spojení) ---
+# --- PŘIHLAŠOVACÍ BRÁNA ---
 if st.session_state.role is None:
     st.title(":material/fingerprint: Systém uzamčen")
     st.info("Pro vstup do M-TECH CORE zadejte přihlašovací údaje.")
@@ -44,8 +44,8 @@ if st.session_state.role is None:
         submit = st.form_submit_button("Přihlásit se do systému")
         
         if submit:
-            # Přímo oslovíme REST API Supabase
-            endpoint = f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{jmeno}&heslo=eq.{heslo}&select=*"
+            # Načteme všechny uživatele pro ověření obsahu tabulky
+            endpoint = f"{SUPABASE_URL}/rest/v1/uzivatele?select=*"
             headers = {
                 "apikey": SUPABASE_KEY,
                 "Authorization": f"Bearer {SUPABASE_KEY}"
@@ -55,13 +55,19 @@ if st.session_state.role is None:
                 odpoved = requests.get(endpoint, headers=headers)
                 data = odpoved.json()
                 
-                if isinstance(data, list) and len(data) > 0:
-                    uzivatel = data[0]
+                # Zobrazení odpovědi pro diagnostiku
+                st.write("Diagnostika odpovědi z databáze:", data)
+                
+                # Ruční ověření v Pythonu (nezávislé na SQL filtrech)
+                nalezene_uzivatele = [u for u in data if str(u.get("jmeno")).strip() == jmeno.strip() and str(u.get("heslo")).strip() == heslo.strip()]
+                
+                if len(nalezene_uzivatele) > 0:
+                    uzivatel = nalezene_uzivatele[0]
                     st.session_state.role = uzivatel["role"]
                     st.session_state.kredity = uzivatel["kredity"]
                     st.rerun()
                 else:
-                    st.error("Špatné jméno nebo heslo!")
+                    st.error("Uživatel nenalezen v načtených datech.")
             except Exception as e:
                 st.error(f"Chyba při komunikaci s databází: {e}")
 
