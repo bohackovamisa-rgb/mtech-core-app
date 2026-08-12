@@ -1,5 +1,5 @@
 import streamlit as st
-from supabase import create_client, Client
+import requests
 
 st.set_page_config(page_title="M-TECH CORE", page_icon=":material/hub:", layout="wide")
 
@@ -14,18 +14,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- PŘIPOJENÍ K DATABÁZI ---
-# st.cache_resource zajistí, že se aplikace nepřipojuje k databázi zbytečně pořád dokola
-@st.cache_resource
-def init_connection():
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
-
+# --- NAČTENÍ KLÍČŮ ZE SECRETS ---
 try:
-    supabase: Client = init_connection()
-except Exception as e:
-    st.error("Chyba spojení s databází. Zkontroluj klíče ve Streamlit Secrets.")
+    SUPABASE_URL = st.secrets["SUPABASE_URL"].rstrip("/")
+    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+except Exception:
+    st.error("Chybí SUPABASE_URL nebo SUPABASE_KEY ve Streamlit Secrets!")
     st.stop()
 
 # --- INICIALIZACE PAMĚTI ---
@@ -39,7 +33,7 @@ zaci_page = st.Page("pages/1_Zaci.py", title="Moje peněženka", icon=":material
 firma_page = st.Page("pages/2_Firma.py", title="Firemní Dashboard", icon=":material/insights:")
 ucitel_page = st.Page("pages/3_Ucitel.py", title="Kontrolní úřad", icon=":material/account_balance:")
 
-# --- PŘIHLAŠOVACÍ BRÁNA (Nyní ověřuje přes databázi) ---
+# --- PŘIHLAŠOVACÍ BRÁNA (Přímé HTTP REST API spojení) ---
 if st.session_state.role is None:
     st.title(":material/fingerprint: Systém uzamčen")
     st.info("Pro vstup do M-TECH CORE zadejte přihlašovací údaje.")
@@ -50,17 +44,26 @@ if st.session_state.role is None:
         submit = st.form_submit_button("Přihlásit se do systému")
         
         if submit:
-            # Zeptáme se databáze, jestli najde shodu jména a hesla
-            odpoved = supabase.table("uzivatele").select("*").eq("jmeno", jmeno).eq("heslo", heslo).execute()
+            # Přímo oslovíme REST API Supabase
+            endpoint = f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{jmeno}&heslo=eq.{heslo}&select=*"
+            headers = {
+                "apikey": SUPABASE_KEY,
+                "Authorization": f"Bearer {SUPABASE_KEY}"
+            }
             
-            # Pokud databáze něco vrátí (délka dat > 0), přihlášení je úspěšné
-            if len(odpoved.data) > 0:
-                uzivatel = odpoved.data[0]
-                st.session_state.role = uzivatel["role"]
-                st.session_state.kredity = uzivatel["kredity"] # Načteme reálné zůstatky z databáze!
-                st.rerun()
-            else:
-                st.error("Špatné jméno nebo heslo!")
+            try:
+                odpoved = requests.get(endpoint, headers=headers)
+                data = odpoved.json()
+                
+                if isinstance(data, list) and len(data) > 0:
+                    uzivatel = data[0]
+                    st.session_state.role = uzivatel["role"]
+                    st.session_state.kredity = uzivatel["kredity"]
+                    st.rerun()
+                else:
+                    st.error("Špatné jméno nebo heslo!")
+            except Exception as e:
+                st.error(f"Chyba při komunikaci s databází: {e}")
 
 # --- DYNAMICKÉ ZOBRAZENÍ STRÁNEK PODLE ROLE ---
 else:
@@ -78,7 +81,6 @@ else:
     with st.sidebar:
         st.divider()
         st.caption(f"Role: **{st.session_state.role.upper()}**")
-        # Rovnou do menu vypíšeme reálný stav kreditů z databáze
         st.markdown(f"Zůstatek: **{st.session_state.kredity} M-Kreditů**")
         
         if st.button("Odhlásit se"):
