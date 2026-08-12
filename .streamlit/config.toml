@@ -1,15 +1,6 @@
 [theme]
-# Hlavní azurová barva (pro tlačítka a interaktivní prvky)
 primaryColor = "#00B4D8"
-
-# Velmi tmavá modro-černá pro hlavní pozadí
-backgroundColor = "#070E20"
-
-# Tmavě modrá pro boční panel (odpovídá tvé značce)
-secondaryBackgroundColor = "#00186B"
-
-# Bílá barva pro čisté a čitelné texty
+backgroundColor = "#121212"
+secondaryBackgroundColor = "#1E1E1E"
 textColor = "#FFFFFF"
-
-# Moderní bezpatkové písmo
 font = "sans serif"
