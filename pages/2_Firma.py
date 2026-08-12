@@ -3,14 +3,21 @@ import requests
 
 st.set_page_config(page_title="Firemní Kancelář", page_icon=":material/business:", layout="wide")
 
+# --- DESIGN A CSS STYLY M-TECH CORE ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&display=swap');
     html, body, [class*="css"] { font-family: 'Montserrat', sans-serif !important; }
-    h1, h2, h3 { background: -webkit-linear-gradient(45deg, #00B4D8, #0077B6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800 !important; }
+    h1, h2, h3, h4 { background: -webkit-linear-gradient(45deg, #00B4D8, #0077B6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800 !important; }
     .stButton>button { border-radius: 8px; transition: all 0.3s ease; border: 1px solid #00B4D8; }
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 180, 216, 0.4); border-color: #00B4D8; }
     .card-box { background-color: #1e293b; padding: 20px; border-radius: 10px; border: 1px solid #334155; margin-bottom: 15px; }
+    
+    /* Vlastní stavové odznaky pro přehled plnění */
+    .status-badge-ok { background-color: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid #22c55e; padding: 12px; border-radius: 8px; font-weight: 700; text-align: center; }
+    .status-badge-wait { background-color: rgba(234, 179, 8, 0.15); color: #fde047; border: 1px solid #eab308; padding: 12px; border-radius: 8px; font-weight: 700; text-align: center; }
+    .status-badge-err { background-color: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid #ef4444; padding: 12px; border-radius: 8px; font-weight: 700; text-align: center; }
+    .status-badge-off { background-color: rgba(148, 163, 184, 0.1); color: #94a3b8; border: 1px solid #475569; padding: 12px; border-radius: 8px; font-weight: 600; text-align: center; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -35,7 +42,6 @@ uzivatel = st.session_state.get("uzivatel", "firma")
 res_firma = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?ceo_jmeno=eq.{uzivatel}&select=*", headers=headers)
 moje_firma = res_firma.json()[0] if (res_firma.status_code == 200 and len(res_firma.json()) > 0) else None
 
-# Kontrola plnění jednotlivých modulů
 has_canvas = False
 has_kalkulace = False
 has_ucto = False
@@ -52,53 +58,55 @@ if moje_firma:
     res_u = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{f_id}", headers=headers)
     has_ucto = len(res_u.json()) > 0 if res_u.status_code == 200 else False
 
-    # --- KONTROLNÍ NÁSTĚNKA POVINNOSTÍ FIRMY ---
-    st.subheader("📌 Stav plnění metodických kroků M-TECH CORE")
+    # --- PŘEHLEDNÝ NÁSTĚNNÝ PANEL PRO ŽÁKY ---
+    st.subheader(":material/fact_check: Přehled stavu a plnění povinností firmy")
     col_s1, col_s2, col_s3, col_s4 = st.columns(4)
     
     stav = moje_firma['stave_licence']
     
     with col_s1:
         if stav == "SCHVALENO":
-            st.success("✅ Licence udělena")
+            st.markdown('<div class="status-badge-ok">Licence Udělena</div>', unsafe_allow_html=True)
         elif stav == "CEKA_NA_SCHVALENI":
-            st.warning("⏳ Čeká na vyučujícího")
+            st.markdown('<div class="status-badge-wait">Čeká na Úřad</div>', unsafe_allow_html=True)
         else:
-            st.error("❌ Licence zamítnuta")
+            st.markdown('<div class="status-badge-err">Licence Zamítnuta</div>', unsafe_allow_html=True)
             
     with col_s2:
         if has_canvas:
-            st.success("✅ Lean Canvas vyplněn")
+            st.markdown('<div class="status-badge-ok">Lean Canvas Uložen</div>', unsafe_allow_html=True)
         else:
-            st.info("⚪ Lean Canvas chybí")
+            st.markdown('<div class="status-badge-off">Lean Canvas Chybí</div>', unsafe_allow_html=True)
             
     with col_s3:
         if has_kalkulace:
-            st.success("✅ Kalkulace zadána")
+            st.markdown('<div class="status-badge-ok">Kalkulace Zadány</div>', unsafe_allow_html=True)
         else:
-            st.info("⚪ Kalkulace chybí")
+            st.markdown('<div class="status-badge-off">Kalkulace Chybí</div>', unsafe_allow_html=True)
             
     with col_s4:
         if has_ucto:
-            st.success("✅ Účetnictví vedené")
+            st.markdown('<div class="status-badge-ok">Účetnictví Vedené</div>', unsafe_allow_html=True)
         else:
-            st.info("⚪ Účetní kniha prázdná")
+            st.markdown('<div class="status-badge-off">Kniha Prázdná</div>', unsafe_allow_html=True)
 
-    # --- PŘEHLEDNÝ HLAVNÍ BANNER STAVU LICENCE ---
+    st.write("")
+
+    # --- STAVOVÝ BANNER ---
     if stav == "CEKA_NA_SCHVALENI":
-        st.info("⏳ **Žádost o licencování byla úspěšně odeslána.** Čeká na posouzení vyučujícím (Kontrolním úřadem). Mezitím již můžete v záložkách níže vyplňovat Lean Canvas a připravovat kalkulace produktů!")
+        st.info("Žádost o licencování byla odeslána na Kontrolní úřad. V záložkách níže můžete pracovat na Lean Canvasu a kalkulacích.")
     elif stav == "ZAMITNUTO":
-        st.error(f"❌ **ŽÁDOST O LICENCI BYLA ZAMÍTNUTA**\n\n**Důvod od Kontrolního úřadu:**\n> {moje_firma.get('duvod_zamitnuti', 'Není uveden')}\n\nOpravte potřebné věci a klikněte na tlačítko 'Znovupodat žádost' níže.")
+        st.error(f"Žádost o licenci byla zamítnuta Kontrolním úřadem. Důvod: {moje_firma.get('duvod_zamitnuti', 'Není uveden')}")
     elif stav == "SCHVALENO":
-        st.success("🎉 **LICENCE JE AKTIVNÍ!** Vaše firma je plně registrovaná a schválená k podnikání na trhu.")
+        st.success("Licence je aktivní. Vaše firma je schválena k podnikání v M-TECH CORE.")
 
     st.write("---")
 
 tab_zaklad, tab_strategie, tab_kalkulace, tab_ucto = st.tabs([
-    "📜 1. Zakladatelská listina", 
-    "🧠 2. Lean Canvas & Porady", 
-    "🧮 3. Kalkulační listy produktů", 
-    "📊 4. Kniha příjmů a výdajů"
+    ":material/description: 1. Zakladatelská listina", 
+    ":material/lightbulb: 2. Lean Canvas & Porady", 
+    ":material/calculate: 3. Kalkulační listy produktů", 
+    ":material/menu_book: 4. Kniha příjmů a výdajů"
 ])
 
 # --- TAB 1: ZAKLADATELSKÁ LISTINA ---
@@ -128,7 +136,7 @@ with tab_zaklad:
             """, unsafe_allow_html=True)
             
         if moje_firma['stave_licence'] == "ZAMITNUTO":
-            if st.button("🔄 Znovupodat žádost ke schválení"):
+            if st.button("Znovupodat žádost ke schválení", icon=":material/refresh:"):
                 requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{moje_firma['id']}", headers=headers, json={"stave_licence": "CEKA_NA_SCHVALENI"})
                 st.success("Žádost byla znovu odeslána na Úřad!")
                 st.rerun()
@@ -145,7 +153,7 @@ with tab_zaklad:
             zamer = st.text_area("Stručný podnikatelský záměr:")
             kapital = st.number_input("Počáteční vklad v M-Kreditech na člena:", value=100)
             
-            submit_zaklad = st.form_submit_button("Odeslat Zakladatelskou listinu na Kontrolní úřad")
+            submit_zaklad = st.form_submit_button("Odeslat Zakladatelskou listinu", icon=":material/send:")
             
             if submit_zaklad:
                 if nazev_firmy and skolni_kod and cfo and cto:
@@ -186,10 +194,10 @@ with tab_strategie:
                 costs = st.text_area("5. Nákladová struktura:")
                 rev = st.text_area("6. Příjmové toky:")
             
-            if st.form_submit_button("Uložit Lean Canvas"):
+            if st.form_submit_button("Uložit Lean Canvas", icon=":material/save:"):
                 c_payload = {"firma_id": moje_firma["id"], "problem": prob, "reseni": sol, "cilova_skupina": target, "unikatni_hodnota": val, "nakladova_struktura": costs, "prijmove_toky": rev}
                 requests.post(f"{SUPABASE_URL}/rest/v1/lean_canvas", headers=headers, json=c_payload)
-                st.success("Lean Canvas byl úspěšně uložen!")
+                st.success("Lean Canvas uložován!")
                 st.rerun()
 
 # --- TAB 3: KALKULAČNÍ LISTY ---
@@ -211,7 +219,7 @@ with tab_kalkulace:
             
             st.markdown(f"**M-TECH daň:** `{vypoctena_dan:.2f} M-K` | **Prodejní cena:** `{doporucena_cena:.2f} M-Kreditů`")
             
-            if st.form_submit_button("Odeslat kalkulační list ke schválení"):
+            if st.form_submit_button("Odeslat kalkulační list ke schválení", icon=":material/send:"):
                 k_payload = {"firma_id": moje_firma["id"], "nazev_produktu": prod_nazev, "prime_naklady": p_naklady, "rezie_skoly": rezie, "mtech_dan_procento": dan_pct, "marze_zisk": marze, "konecna_cena": doporucena_cena, "schvaleno_uradem": False}
                 requests.post(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy", headers=headers, json=k_payload)
                 st.success("Kalkulační list odeslán!")
@@ -229,10 +237,10 @@ with tab_ucto:
             with col_t2: titul = st.text_input("Titul:", value="Nákup materiálu")
             with col_t3: castka = st.number_input("Částka v M-Kreditech:", min_value=1.0, value=50.0)
                 
-            if st.form_submit_button("Zapsat do účetní knihy"):
+            if st.form_submit_button("Zapsat do účetní knihy", icon=":material/add_circle:"):
                 t_payload = {"firma_id": moje_firma["id"], "typ_transakce": typ, "titul": titul, "castka": castka, "auditovano": False}
                 requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json=t_payload)
-                st.success("Zapsáno!")
+                st.success("Položka zapsána!")
                 st.rerun()
                 
         res_kniha = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{moje_firma['id']}&order=datum.desc", headers=headers)
