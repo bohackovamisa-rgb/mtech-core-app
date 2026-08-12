@@ -13,12 +13,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title(":material/wallet: Moje peněženka (Zákazník)")
-st.info("Zde žáci uvidí svůj zůstatek M-Kreditů a budou moci platit pomocí QR kódů.")
+st.info("Zde vidíš svůj skutečný zůstatek a můžeš platit pomocí QR kódů.")
+
+# Bezpečnostní pojistka pro případ, že by chybělo spojení
+if "kredity" not in st.session_state:
+    st.session_state.kredity = 0
 
 col1, col2 = st.columns(2)
 with col1:
-    st.metric("Aktuální zůstatek", "100 M-Kreditů")
+    # Zde se už vypisuje reálné číslo z naší nové databáze
+    st.metric("Aktuální zůstatek", f"{st.session_state.kredity} M-Kreditů")
+    
 with col2:
     st.text_input("Naskenujte nebo zadejte QR kód pro platbu:")
     if st.button("Odeslat platbu"):
-        st.success("Platba proběhla úspěšně!")
+        st.success("Platba zatím není napojena na databázi.")
