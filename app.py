@@ -18,6 +18,12 @@ st.markdown("""
 try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"].rstrip("/")
     SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+    headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+    }
 except Exception:
     st.error("Chybí SUPABASE_URL nebo SUPABASE_KEY ve Streamlit Secrets!")
     st.stop()
@@ -27,49 +33,74 @@ if "role" not in st.session_state:
     st.session_state.role = None
 if "kredity" not in st.session_state:
     st.session_state.kredity = 0
+if "uzivatel" not in st.session_state:
+    st.session_state.uzivatel = None
 
 # --- DEFINICE STRÁNEK ---
 zaci_page = st.Page("pages/1_Zaci.py", title="Moje peněženka", icon=":material/wallet:")
 firma_page = st.Page("pages/2_Firma.py", title="Firemní Dashboard", icon=":material/insights:")
 ucitel_page = st.Page("pages/3_Ucitel.py", title="Kontrolní úřad", icon=":material/account_balance:")
 
-# --- PŘIHLAŠOVACÍ BRÁNA ---
+# --- PŘIHLAŠOVACÍ A REGISTRAČNÍ BRÁNA ---
 if st.session_state.role is None:
-    st.title(":material/fingerprint: Systém uzamčen")
-    st.info("Pro vstup do M-TECH CORE zadejte přihlašovací údaje.")
+    st.title(":material/fingerprint: Vstup do M-TECH CORE")
     
-    with st.form("login_form"):
-        jmeno = st.text_input("Přihlašovací jméno:")
-        heslo = st.text_input("Heslo:", type="password")
-        submit = st.form_submit_button("Přihlásit se do systému")
-        
-        if submit:
-            # Načteme všechny uživatele pro ověření obsahu tabulky
-            endpoint = f"{SUPABASE_URL}/rest/v1/uzivatele?select=*"
-            headers = {
-                "apikey": SUPABASE_KEY,
-                "Authorization": f"Bearer {SUPABASE_KEY}"
-            }
+    tab_login, tab_reg = st.tabs(["🔒 Přihlášení", "📝 Registrace nového účtu"])
+    
+    # 1. PŘIHLÁŠENÍ
+    with tab_login:
+        with st.form("login_form"):
+            jmeno = st.text_input("Přihlašovací jméno:")
+            heslo = st.text_input("Heslo:", type="password")
+            submit = st.form_submit_button("Přihlásit se")
             
-            try:
-                odpoved = requests.get(endpoint, headers=headers)
-                data = odpoved.json()
-                
-                # Zobrazení odpovědi pro diagnostiku
-                st.write("Diagnostika odpovědi z databáze:", data)
-                
-                # Ruční ověření v Pythonu (nezávislé na SQL filtrech)
-                nalezene_uzivatele = [u for u in data if str(u.get("jmeno")).strip() == jmeno.strip() and str(u.get("heslo")).strip() == heslo.strip()]
-                
-                if len(nalezene_uzivatele) > 0:
-                    uzivatel = nalezene_uzivatele[0]
-                    st.session_state.role = uzivatel["role"]
-                    st.session_state.kredity = uzivatel["kredity"]
-                    st.rerun()
+            if submit:
+                endpoint = f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{jmeno}&heslo=eq.{heslo}&select=*"
+                try:
+                    odpoved = requests.get(endpoint, headers=headers)
+                    data = odpoved.json()
+                    
+                    if isinstance(data, list) and len(data) > 0:
+                        uzivatel = data[0]
+                        st.session_state.role = uzivatel["role"]
+                        st.session_state.kredity = uzivatel["kredity"]
+                        st.session_state.uzivatel = uzivatel["jmeno"]
+                        st.rerun()
+                    else:
+                        st.error("Nespravné přihlašovací údaje!")
+                except Exception as e:
+                    st.error(f"Chyba databáze: {e}")
+
+    # 2. REGISTRACE
+    with tab_reg:
+        with st.form("reg_form"):
+            reg_jmeno = st.text_input("Nové uživatelské jméno:")
+            reg_heslo = st.text_input("Nové heslo:", type="password")
+            reg_role = st.selectbox("Typ účtu / Role:", ["zak", "firma"])
+            reg_submit = st.form_submit_button("Vytvořit účet")
+            
+            if reg_submit:
+                if reg_jmeno and reg_heslo:
+                    # Kontrola, zda už jméno neexistuje
+                    check_res = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{reg_jmeno}", headers=headers)
+                    if len(check_res.json()) > 0:
+                        st.error("Toto uživatelské jméno je již obsazené!")
+                    else:
+                        # Výchozí kredity: 100 pro žáky, 300 pro firmy
+                        start_kredity = 100 if reg_role == "zak" else 300
+                        novy_uzivatel = {
+                            "jmeno": reg_jmeno,
+                            "heslo": reg_heslo,
+                            "role": reg_role,
+                            "kredity": start_kredity
+                        }
+                        reg_post = requests.post(f"{SUPABASE_URL}/rest/v1/uzivatele", headers=headers, json=novy_uzivatel)
+                        if reg_post.status_code in [200, 201]:
+                            st.success(f"Účet {reg_jmeno} byl úspěšně vytvořen! Nyní se můžete přihlásit.")
+                        else:
+                            st.error("Chyba při registrace nového účtu.")
                 else:
-                    st.error("Uživatel nenalezen v načtených datech.")
-            except Exception as e:
-                st.error(f"Chyba při komunikaci s databází: {e}")
+                    st.warning("Vyplňte jméno i heslo.")
 
 # --- DYNAMICKÉ ZOBRAZENÍ STRÁNEK PODLE ROLE ---
 else:
@@ -86,9 +117,11 @@ else:
     
     with st.sidebar:
         st.divider()
+        st.markdown(f"Přihlášen: **{st.session_state.uzivatel}**")
         st.caption(f"Role: **{st.session_state.role.upper()}**")
         st.markdown(f"Zůstatek: **{st.session_state.kredity} M-Kreditů**")
         
         if st.button("Odhlásit se"):
             st.session_state.role = None
+            st.session_state.uzivatel = None
             st.rerun()
