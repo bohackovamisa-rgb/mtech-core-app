@@ -13,7 +13,6 @@ st.markdown("""
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(14, 165, 233, 0.4); border-color: #0ea5e9; }
     .card-box { background-color: #1e293b; padding: 20px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 15px; transition: all 0.3s; }
     .card-box:hover { border-color: #0ea5e9; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-    .form-section { background-color: #0f172a; padding: 15px; border-radius: 8px; border-left: 4px solid #0ea5e9; margin-bottom: 15px; }
     
     /* Kanban styly */
     .kanban-col-header { text-align: center; font-weight: 800; padding: 12px; border-radius: 8px; margin-bottom: 15px; color: #fff; text-transform: uppercase; letter-spacing: 1px; font-size: 14px; }
@@ -41,7 +40,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🚀 Startup Hub M-TECH CORE")
-st.caption("Buduj. Inovuj. Škáloj. Tvoje cesta od nápadu v garáži až po plně funkční byznys.")
+st.caption("Buduj. Inovuj. Škáluj. Tvoje cesta od nápadu v garáži až po plně funkční byznys.")
 
 try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"].rstrip("/")
@@ -112,11 +111,11 @@ tab_zalozeni, tab_canvas, tab_agile, tab_hr, tab_kalkulace, tab_ucto = st.tabs([
 ])
 
 # ==========================================
-# TAB 1: ZALOŽENÍ (LEGAL) - PLNÉ ÚŘEDNÍ FORMULÁŘE
+# TAB 1: ZALOŽENÍ (LEGAL) - REÁLNÁ BYROKRACIE
 # ==========================================
 with tab_zalozeni:
     st.subheader("Legal & Founders – Právní základ startupu")
-    st.caption("Předtím než změníte svět, musíte mít v pořádku papíry pro všechny úřady. Vyplňte registrační spis s.r.o.")
+    st.caption("Založení firmy není jen o nápadu. Musíte mít v pořádku papíry pro všechny státní úřady. Vyplňte kompletní registrační spis s.r.o.")
     
     if moje_firma:
         st.success(f"EVIDOVANÝ REGISTRAČNÍ SPIS STARTUPU: {moje_firma['nazev_firmy']}")
@@ -130,22 +129,22 @@ with tab_zalozeni:
                     <p><b>CEO (Visionary):</b> {moje_firma['ceo_jmeno']}</p>
                     <p><b>CFO (Finance & Ops):</b> {moje_firma['cfo_jmeno']}</p>
                     <p><b>CTO (Tech & Product):</b> {moje_firma['cto_jmeno']}</p>
-                    <p><b>Seed Kapitál:</b> {moje_firma['pocatecni_kapital']} M-K</p>
+                    <p><b>Základní (Seed) Kapitál:</b> {moje_firma['pocatecni_kapital']} M-K</p>
                 </div>
             """, unsafe_allow_html=True)
             st.markdown(f"""
                 <div class='card-box'>
                     <h4>3. Finanční úřad</h4>
-                    <p><b>Režim M-TECH daně:</b> Odvod 15–20 % ze zisku</p>
-                    <p><b>Zpráva daně:</b> {'Transparentní účet Unie rodičů' if moje_firma['uroven_projektu'] == 3 else 'Interní systém M-Kreditů'}</p>
+                    <p><b>Daňový režim:</b> DPPO, Daň ze závislé činnosti, M-TECH Daň</p>
+                    <p><b>Správa daně:</b> {'Transparentní účet' if moje_firma['uroven_projektu'] == 3 else 'Interní systém M-Kreditů'}</p>
                 </div>
             """, unsafe_allow_html=True)
         with col_f2:
             st.markdown(f"""
                 <div class='card-box'>
                     <h4>2. Živnostenský úřad (JRF)</h4>
-                    <p><b>Předmět / Divize:</b> {moje_firma['podnikatelsky_zamer']}</p>
-                    <p><b>Kód akcelerátoru (školy):</b> {moje_firma['skolni_kod']}</p>
+                    <p><b>Divize & Předmět:</b> {moje_firma['podnikatelsky_zamer'].split('|')[0] if '|' in moje_firma['podnikatelsky_zamer'] else moje_firma['podnikatelsky_zamer']}</p>
+                    <p><b>Licenční kód školy:</b> {moje_firma['skolni_kod']}</p>
                 </div>
             """, unsafe_allow_html=True)
             st.markdown(f"""
@@ -169,23 +168,25 @@ with tab_zalozeni:
 
     if not moje_firma or st.session_state.get("edit_spis", False):
         if st.session_state.get("edit_spis", False): st.warning("Režim úprav odeslaného registračního spisu:")
-        u_notar, u_zivnost, u_financak, u_cssz, u_rejstrik = st.tabs(["📜 Notářství", "📋 JRF", "⚖️ FÚ (Daně)", "🏥 ČSSZ (Tým)", "🛡️ Rejstřík"])
+        u_notar, u_zivnost, u_financak, u_cssz, u_rejstrik = st.tabs(["📜 Notářství", "📋 JRF (Živnosti)", "⚖️ FÚ (Daně)", "🏥 ČSSZ & ZP", "🛡️ Rejstřík"])
         if "reg_data" not in st.session_state: st.session_state.reg_data = {}
 
         # 1. NOTÁŘSTVÍ
         with u_notar:
             st.markdown("**Formulář N-01: Zakladatelská listina a jmenování orgánů s.r.o.**")
-            st.session_state.reg_data["nazev_firmy"] = st.text_input("1.1 Obchodní firma (Jméno startupu):", value=st.session_state.reg_data.get("nazev_firmy", moje_firma['nazev_firmy'] if moje_firma else ""))
-            st.session_state.reg_data["sidlo"] = st.text_input("1.2 Sídlo společnosti (adresa školy / učebna):", value=st.session_state.reg_data.get("sidlo", "Školní 101, Učebna č. 12"))
-            st.session_state.reg_data["skolni_kod"] = st.text_input("1.3 Kód akcelerátoru (školy):", value=st.session_state.reg_data.get("skolni_kod", moje_firma['skolni_kod'] if moje_firma else "")).upper().strip()
+            st.session_state.reg_data["nazev_firmy"] = st.text_input("1.1 Obchodní firma (včetně koncovky s.r.o.):", value=st.session_state.reg_data.get("nazev_firmy", moje_firma['nazev_firmy'] if moje_firma else ""))
+            st.session_state.reg_data["sidlo"] = st.text_input("1.2 Sídlo společnosti (Ulice, č.p., Město, PSČ):", value=st.session_state.reg_data.get("sidlo", "Školní 101, 123 45 Město"))
+            st.session_state.reg_data["skolni_kod"] = st.text_input("1.3 Licenční kód školy (Akcelerátoru):", value=st.session_state.reg_data.get("skolni_kod", moje_firma['skolni_kod'] if moje_firma else "")).upper().strip()
             
             col_n1, col_n2 = st.columns(2)
             with col_n1:
-                st.session_state.reg_data["ceo"] = st.text_input("1.4 Jednatel / CEO (Visionary):", value=st.session_state.reg_data.get("ceo", moje_firma['ceo_jmeno'] if moje_firma else uzivatel))
-                st.session_state.reg_data["cfo"] = st.text_input("1.5 Finanční ředitel / CFO (Finance):", value=st.session_state.reg_data.get("cfo", moje_firma['cfo_jmeno'] if moje_firma else ""))
+                st.session_state.reg_data["ceo"] = st.text_input("1.4 Jednatel / CEO (Jméno a příjmení):", value=st.session_state.reg_data.get("ceo", moje_firma['ceo_jmeno'] if moje_firma else uzivatel))
+                st.session_state.reg_data["cfo"] = st.text_input("1.5 Finanční ředitel / CFO:", value=st.session_state.reg_data.get("cfo", moje_firma['cfo_jmeno'] if moje_firma else ""))
+                st.session_state.reg_data["cto"] = st.text_input("1.6 Technický ředitel / CTO:", value=st.session_state.reg_data.get("cto", moje_firma['cto_jmeno'] if moje_firma else ""))
             with col_n2:
-                st.session_state.reg_data["cto"] = st.text_input("1.6 Technický ředitel / CTO (Product):", value=st.session_state.reg_data.get("cto", moje_firma['cto_jmeno'] if moje_firma else ""))
-                st.session_state.reg_data["vklad"] = st.number_input("1.7 Seed Kapitál na člena (M-Kredity):", min_value=10, value=int(st.session_state.reg_data.get("vklad", 100)))
+                st.session_state.reg_data["ceo_narozeni"] = st.date_input("1.7 Datum narození jednatele (CEO):", value=datetime.date(2005, 1, 1))
+                st.session_state.reg_data["spravce_vkladu"] = st.text_input("1.8 Správce vkladu (kdo nese odpovědnost za kapitál):", value="CFO")
+                st.session_state.reg_data["vklad"] = st.number_input("1.9 Základní kapitál na 1 společníka (M-K / CZK):", min_value=10, value=int(st.session_state.reg_data.get("vklad", 100)))
 
         # 2. ŽIVNOSTENSKÝ ÚŘAD (JRF)
         with u_zivnost:
@@ -193,36 +194,42 @@ with tab_zalozeni:
             col_j1, col_j2 = st.columns(2)
             with col_j1:
                 st.session_state.reg_data["divize"] = st.selectbox("2.1 Oborová divize (Sektor):", ["Hardware & Strojírenství", "Energy & Elektro", "Software, AI & IT", "Služby & Marketing"])
-                st.session_state.reg_data["provozovna"] = st.text_input("2.2 Místo provozovny / laboratoře:", value=st.session_state.reg_data.get("provozovna", "Školní dílny – Výzkumný blok B"))
+                st.session_state.reg_data["druh_zivnosti"] = st.selectbox("2.2 Druh živnosti:", ["Ohlašovací volná", "Ohlašovací řemeslná", "Ohlašovací vázaná"])
+                st.session_state.reg_data["provozovna"] = st.text_input("2.3 Sídlo provozovny (Dílny / Laboratoře):", value="Školní dílny – Výzkumný blok B")
             with col_j2:
-                st.session_state.reg_data["predmet"] = st.text_input("2.3 Core Business (Předmět podnikání):", value=st.session_state.reg_data.get("predmet", ""))
-                st.session_state.reg_data["bozp_garant"] = st.text_input("2.4 Odpovědný zástupce BOZP:", value=st.session_state.reg_data.get("bozp_garant", uzivatel))
-            st.session_state.reg_data["zamer"] = st.text_area("2.5 Detailní popis činnosti (Pro JRF):", value=st.session_state.reg_data.get("zamer", ""))
+                st.session_state.reg_data["predmet"] = st.text_input("2.4 Předmět podnikání (Přesný název oboru):", value=st.session_state.reg_data.get("predmet", ""))
+                st.session_state.reg_data["datum_zahajeni"] = st.date_input("2.5 Datum zahájení provozování živnosti:", value=datetime.date.today())
+                st.session_state.reg_data["bozp_garant"] = st.text_input("2.6 Odpovědný zástupce BOZP a PO:", value=st.session_state.reg_data.get("bozp_garant", uzivatel))
+            st.session_state.reg_data["zamer"] = st.text_area("2.7 Detailní popis činnosti (Pro zápis do JRF):", value=st.session_state.reg_data.get("zamer", ""))
 
         # 3. FINANČNÍ ÚŘAD
         with u_financak:
-            st.markdown("**Formulář FÚ-5540: Přihláška k registraci k dani z příjmů a M-TECH dani**")
+            st.markdown("**Formulář FÚ-5540: Přihláška k registraci k daním**")
             col_f1, col_f2 = st.columns(2)
             with col_f1:
-                st.session_state.reg_data["zdani_obdobi"] = st.selectbox("3.1 Zdaňovací období:", ["Pololetní cyklus", "Měsíční tržní cyklus", "Celoroční maturitní projekt"])
+                st.session_state.reg_data["typ_dani"] = st.multiselect("3.1 Registrace k daním (Zaškrtněte platné):", ["Daň z příjmů právnických osob (DPPO)", "Daň ze závislé činnosti (Mzdy)", "M-TECH Daň"], default=["Daň z příjmů právnických osob (DPPO)", "Daň ze závislé činnosti (Mzdy)", "M-TECH Daň"])
+                st.session_state.reg_data["zdani_obdobi"] = st.selectbox("3.2 Zdaňovací období:", ["Kalendářní rok", "Pololetní cyklus (M-TECH)"])
             with col_f2:
-                st.session_state.reg_data["ucet_pro_dan"] = st.text_input("3.2 Účet pro odvod daně:", value="Přiřazuje systém automaticky (Dle úrovně licence)", disabled=True)
-            st.session_state.reg_data["dan_souhlas"] = st.checkbox("3.3 Zavazujeme se k odvodu M-TECH daně z profitu (15–20 % - Giving Back).", value=st.session_state.reg_data.get("dan_souhlas", True))
+                st.session_state.reg_data["dph_status"] = st.selectbox("3.3 Registrace k DPH:", ["Neplátce DPH", "Plátce DPH", "Identifikovaná osoba"])
+                st.session_state.reg_data["ucet_pro_dan"] = st.text_input("3.4 Účet pro odvod daní (Číslo účtu):", value="Přiřazuje systém automaticky (Dle úrovně licence)", disabled=True)
+            st.session_state.reg_data["dan_souhlas"] = st.checkbox("3.5 Souhlasím s povinností automatického výpočtu a odvodu M-TECH daně z profitu.", value=st.session_state.reg_data.get("dan_souhlas", True))
 
         # 4. ČSSZ A ZP
         with u_cssz:
-            st.markdown("**Formulář ČSSZ-801: Oznámení o nástupu & Registrace zaměstnavatele**")
+            st.markdown("**Formulář ČSSZ-801 a ZP: Oznámení o nástupu & Registrace zaměstnavatele**")
             col_p1, col_p2 = st.columns(2)
             with col_p1:
-                st.session_state.reg_data["seznam_zamestnancu"] = st.text_area("4.1 Core Team Members (Zaměstnanci):", value=st.session_state.reg_data.get("seznam_zamestnancu", f"{uzivatel}, CFO, CTO"))
+                st.session_state.reg_data["datum_prvniho_zamestnance"] = st.date_input("4.1 Datum nástupu prvního zaměstnance:")
+                st.session_state.reg_data["zp_kod"] = st.selectbox("4.2 Převažující zdravotní pojišťovna zaměstnanců:", ["111 - VZP ČR", "201 - VoZP ČR", "205 - ČPZP", "207 - OZP", "211 - ZPMV ČR"])
             with col_p2:
-                st.session_state.reg_data["mzdovy_fond"] = st.number_input("4.2 Předpokládaný mzdový fond (M-Kredity):", value=int(st.session_state.reg_data.get("mzdovy_fond", 300)))
+                st.session_state.reg_data["seznam_zamestnancu"] = st.text_area("4.3 Seznam prvních pojištěnců (Zaměstnanci/Dohodáři):", value=st.session_state.reg_data.get("seznam_zamestnancu", f"{uzivatel}, CFO, CTO"))
+                st.session_state.reg_data["mzdovy_fond"] = st.number_input("4.4 Předpokládaný měsíční mzdový fond (M-Kredity):", value=int(st.session_state.reg_data.get("mzdovy_fond", 300)))
 
         # 5. OBCHODNÍ REJSTŘÍK
         with u_rejstrik:
             st.markdown("**Formulář OR-LIST: Návrh na zápis do Obchodního rejstříku M-TECH CORE**")
-            st.session_state.reg_data["bozp_souhlas"] = st.checkbox("5.1 Prohlašujeme, že máme hotový bezpečnostní onboarding (BOZP).", value=st.session_state.reg_data.get("bozp_souhlas", True))
-            st.session_state.reg_data["kodex_souhlas"] = st.checkbox("5.2 Přijímáme Etický kodex (No toxic culture).", value=st.session_state.reg_data.get("kodex_souhlas", True))
+            st.session_state.reg_data["bozp_souhlas"] = st.checkbox("5.1 Prohlašujeme, že jako zakladatelé máme platné proškolení z BOZP a PO pro naši provozovnu.", value=st.session_state.reg_data.get("bozp_souhlas", True))
+            st.session_state.reg_data["kodex_souhlas"] = st.checkbox("5.2 Zavazujeme se k Etickému kodexu (Férové podnikání).", value=st.session_state.reg_data.get("kodex_souhlas", True))
             
             st.write("---")
             if st.button("🚀 ODESLAT REGISTRAČNÍ SPIS DO AKCELERÁTORU (Úřad)", icon=":material/send:"):
@@ -231,7 +238,8 @@ with tab_zalozeni:
                     res_lic = requests.get(f"{SUPABASE_URL}/rest/v1/licencovane_skoly?licencni_kod=eq.{d.get('skolni_kod')}", headers=headers)
                     u_num = res_lic.json()[0].get("uroven_projektu", 2) if (res_lic.status_code == 200 and res_lic.json()) else 2
                     
-                    souhrn_zameru = f"[{d.get('divize')}] {d.get('predmet')} | Sídlo: {d.get('sidlo')} | Provozovna: {d.get('provozovna')} | BOZP: {d.get('bozp_garant')} | Záměr: {d.get('zamer')}"
+                    # Agregace všech úředních dat do jednoho textu pro databázi
+                    souhrn_zameru = f"[{d.get('divize')}] {d.get('predmet')} | Sídlo: {d.get('sidlo')} | FÚ: {d.get('dph_status')} | ČSSZ: od {d.get('datum_prvniho_zamestnance')} (ZP: {d.get('zp_kod')}) | BOZP: {d.get('bozp_garant')} | Záměr: {d.get('zamer')}"
                     
                     payload = {
                         "nazev_firmy": d.get("nazev_firmy"), "skolni_kod": d.get("skolni_kod"), "uroven_projektu": u_num,
@@ -255,8 +263,6 @@ with tab_canvas:
         st.warning("Nejprve musíte projít procesem Založení (Legal).")
     else:
         st.subheader("Business Model & Elevator Pitch")
-        st.caption("Zapomeňte na nudné padesátistránkové plány. Lean Canvas je 1-page strategie pro moderní startupy.")
-        
         with st.form("form_canvas"):
             col_c1, col_c2, col_c3, col_c4 = st.columns(4)
             with col_c1:
@@ -348,7 +354,6 @@ with tab_agile:
                         st.rerun()
 
         with ag_porady:
-            st.caption("Pravidelné syncy týmu. Co se povedlo? Kde jsme zablokovaní (Blockers)?")
             with st.form("form_porada"):
                 projednano = st.text_area("Stand-up Agenda & Blockers:")
                 ukoly_zapis = st.text_area("Akční kroky (Action Items):")
@@ -370,20 +375,30 @@ with tab_hr:
         st.warning("Nejprve musíte projít procesem Založení.")
     else:
         st.subheader("Tým, Hiring & Kultura (HR)")
-        hr_nabor, hr_mzdy, hr_peer = st.tabs(["🤝 Talent Acquisition", "💸 Výplatní pásky", "⭐ 360° Kulturní Fit"])
+        hr_nabor, hr_mzdy, hr_peer = st.tabs(["🤝 Talent Acquisition (Nábor)", "💸 Výplatní pásky", "⭐ 360° Kulturní Fit"])
         
         with hr_nabor:
+            st.caption("U každého zaměstnance musíte uzavřít smlouvu a zkontrolovat proškolení BOZP.")
             with st.form("form_novy_zamestnanec"):
                 col_z1, col_z2 = st.columns(2)
                 with col_z1:
-                    z_jmeno = st.text_input("Nová posila (Jméno):")
-                    z_pozice = st.text_input("Role (např. Dev, Designer, Sales):")
+                    z_jmeno = st.text_input("Nová posila (Jméno a příjmení):")
+                    z_pozice = st.text_input("Pracovní role (např. Operátor, Sales):")
                 with col_z2:
-                    z_smlouva = st.selectbox("Typ kontraktu:", ["Core Team (Management)", "Part-time (DPP/DPČ)", "Freelancer (IČO)"])
-                    z_sazba = st.number_input("Hodinový rate (M-K / hod):", min_value=10, value=50)
+                    z_smlouva = st.selectbox("Typ kontraktu:", ["Pracovní smlouva (HPP)", "Dohoda o provedení práce (DPP)", "Dohoda o pracovní činnosti (DPČ)"])
+                    z_sazba = st.number_input("Hodinový rate / Tarif (M-K / hod):", min_value=10, value=50)
+                
+                st.markdown("**Povinné HR náležitosti:**")
+                z_podpis = st.checkbox("Pracovní smlouva (DPP/DPČ) byla fyzicky/digitálně podepsána.")
+                z_bozp = st.checkbox("Zaměstnanec prošel prokazatelným školením BOZP a PO.")
+                
                 if st.form_submit_button("Onboardovat nováčka", icon=":material/badge:"):
-                    requests.post(f"{SUPABASE_URL}/rest/v1/zamestnanci", headers=headers, json={"firma_id": moje_firma["id"], "jmeno_zamestnance": z_jmeno, "pozice": z_pozice, "typ_smlouva": z_smlouva, "hodinova_sazba": z_sazba, "odpracovane_hodiny": 0, "vyplaceno_celkem": 0, "hodnoceni_skore": 100})
-                    st.rerun()
+                    if z_jmeno and z_pozice and z_podpis and z_bozp:
+                        requests.post(f"{SUPABASE_URL}/rest/v1/zamestnanci", headers=headers, json={"firma_id": moje_firma["id"], "jmeno_zamestnance": z_jmeno, "pozice": z_pozice, "typ_smlouva": z_smlouva, "hodinova_sazba": z_sazba, "odpracovane_hodiny": 0, "vyplaceno_celkem": 0, "hodnoceni_skore": 100})
+                        st.success(f"Zaměstnanec {z_jmeno} byl legálně přidán do firmy!")
+                        st.rerun()
+                    else:
+                        st.error("Pro nábor musíte vyplnit jméno, roli a potvrdit PODPIS SMLOUVY a proškolení BOZP!")
 
         with hr_mzdy:
             res_z = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{moje_firma['id']}&select=*", headers=headers)
@@ -424,7 +439,6 @@ with tab_kalkulace:
         st.warning("Nejprve musíte projít procesem Založení.")
     else:
         st.subheader("Unit Economics & Cenotvorba produktu")
-        st.caption("Základní ekonomika startupu. Zjistěte, jaké máte marže na jednom prodaném kusu a nastavte prodejní cenu.")
         with st.form("form_kalkulace"):
             prod_nazev = st.text_input("Core Produkt / Služba (Název):")
             p_naklady = st.number_input("Přímé náklady materiálu (M-K / ks):", min_value=0.0, value=35.0)
@@ -450,7 +464,6 @@ with tab_ucto:
         st.warning("Nejprve musíte projít procesem Založení.")
     else:
         st.subheader("Cash-flow deník & Runway")
-        st.caption("Startup žije jen tak dlouho, dokud nedojdou peníze (Runway). Pečlivě evidujte každý příjem a výdaj.")
         with st.form("form_transakce"):
             col_t1, col_t2, col_t3 = st.columns(3)
             with col_t1: typ = st.selectbox("Typ transakce:", ["PRIJEM (Revenue)", "VYDAJ (Burn)"])
