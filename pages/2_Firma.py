@@ -36,12 +36,16 @@ except Exception:
 
 uzivatel = st.session_state.get("uzivatel", "firma")
 
-# Hledání firmy podle CEO, CFO nebo CTO
-res_firma = requests.get(
-    f"{SUPABASE_URL}/rest/v1/firmy?or=(ceo_jmeno.eq.{uzivatel},cfo_jmeno.eq.{uzivatel},cto_jmeno.eq.{uzivatel})&select=*", 
-    headers=headers
-)
-moje_firma = res_firma.json()[0] if (res_firma.status_code == 200 and len(res_firma.json()) > 0) else None
+# Načtení všech firem a vyhledání té správné
+res_vsechny = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?select=*&order=id.desc", headers=headers)
+vsechny_firmy = res_vsechny.json() if res_vsechny.status_code == 200 else []
+
+# 1. Hledáme firmu, kde je přihlášený uživatel uvedený jako CEO, CFO nebo CTO
+moje_firma = next((f for f in vsechny_firmy if uzivatel.lower() in [f.get('ceo_jmeno','').lower(), f.get('cfo_jmeno','').lower(), f.get('cto_jmeno','').lower()]), None)
+
+# 2. Záložní logika pro testování: pokud existují firmy v DB, vezmeme tu nejnovější
+if not moje_firma and len(vsechny_firmy) > 0:
+    moje_firma = vsechny_firmy[0]
 
 has_canvas = False
 has_kalkulace = False
@@ -59,6 +63,7 @@ if moje_firma:
     res_u = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{f_id}", headers=headers)
     has_ucto = len(res_u.json()) > 0 if res_u.status_code == 200 else False
 
+    # --- PŘEHLEDNÝ NÁSTĚNNÝ PANEL ---
     st.subheader(":material/fact_check: Přehled stavu a plnění povinností firmy")
     col_s1, col_s2, col_s3, col_s4 = st.columns(4)
     stav = moje_firma['stave_licence']
@@ -92,11 +97,11 @@ if moje_firma:
     st.write("")
 
     if stav == "CEKA_NA_SCHVALENI":
-        st.info("Žádost o licencování byla odeslána na Kontrolní úřad. V záložkách níže můžete pracovat na Lean Canvasu a kalkulacích.")
+        st.info(f"📋 **Zakladatelská listina firmy '{moje_firma['nazev_firmy']}' byla úspěšně odeslána!** Nyní čeká na posouzení vyučujícím. Mezitím můžete pokračovat vyplňováním dalších záložek.")
     elif stav == "ZAMITNUTO":
-        st.error(f"Žádost o licenci byla zamítnuta Kontrolním úřadem. Důvod: {moje_firma.get('duvod_zamitnuti', 'Není uveden')}")
+        st.error(f"❌ **Žádost o licenci byla zamítnuta Kontrolním úřadem.** Důvod: {moje_firma.get('duvod_zamitnuti', 'Není uveden')}")
     elif stav == "SCHVALENO":
-        st.success("Licence je aktivní. Vaše firma je schválena k podnikání v M-TECH CORE.")
+        st.success(f"🎉 **Licence firmy '{moje_firma['nazev_firmy']}' je aktivní!** Můžete plně podnikat na trhu M-TECH CORE.")
 
     st.write("---")
 
@@ -112,6 +117,7 @@ with tab_zaklad:
     st.subheader("Zakladatelská listina a Žádost o licenci")
     
     if moje_firma:
+        st.success(f"✔️ **EVIDOVANÁ ŽÁDOST FIRMY: {moje_firma['nazev_firmy']}**")
         col_f1, col_f2 = st.columns(2)
         with col_f1:
             st.markdown(f"""
@@ -130,6 +136,7 @@ with tab_zaklad:
                     <p><b>Podnikatelský záměr:</b> {moje_firma['podnikatelsky_zamer']}</p>
                     <p><b>Počáteční vklad:</b> {moje_firma['pocatecni_kapital']} M-Kreditů</p>
                     <p><b>Kód školy:</b> {moje_firma['skolni_kod']}</p>
+                    <p><b>Datum podání:</b> {moje_firma.get('datum_vzniku', '')[:10]}</p>
                 </div>
             """, unsafe_allow_html=True)
             
@@ -145,7 +152,7 @@ with tab_zaklad:
             nazev_firmy = st.text_input("Název firmy (např. MechTech s.r.o.):")
             skolni_kod = st.text_input("Licenční kód školy:").upper().strip()
             uroven = st.selectbox("Zvolená úroveň projektu:", [1, 2, 3])
-            ceo = st.text_input("Jméno CEO (Generální ředitel):", value=uzivatel, disabled=True)
+            ceo = st.text_input("Jméno CEO (Generální ředitel):", value=uzivatel)
             cfo = st.text_input("Jméno CFO (Finanční ředitel):")
             cto = st.text_input("Jméno CTO (Technický ředitel):")
             zamer = st.text_area("Stručný podnikatelský záměr:")
