@@ -1,7 +1,16 @@
 import streamlit as st
 
-# Profi vektorová ikona v záložce prohlížeče
 st.set_page_config(page_title="M-TECH CORE", page_icon=":material/hub:", layout="wide")
+
+# Vynucení fontu Montserrat pomocí CSS
+st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&display=swap');
+    html, body, [class*="css"] {
+        font-family: 'Montserrat', sans-serif !important;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- 1. BEZPEČNOSTNÍ ZÁMEK ---
 if "prihlasen" not in st.session_state:
@@ -17,18 +26,18 @@ if not st.session_state.prihlasen:
     if st.button("Přihlásit"):
         if jmeno == "admin" and heslo == "core2026":
             st.session_state.prihlasen = True
-            st.rerun() # Znovu načte stránku, tentokrát už jako přihlášený
+            st.rerun()
         else:
             st.error("Špatné jméno nebo heslo!")
             
-    st.stop() # Zastaví vykreslování čehokoliv dalšího
+    st.stop()
 
-# --- 2. OBSAH ÚVODNÍ STRÁNKY (Zobrazí se až po přihlášení) ---
+# --- 2. OBSAH ÚVODNÍ STRÁNKY ---
 st.title(":material/hub: Vítejte v M-TECH CORE")
 st.markdown("""
 **Praktická ekonomie v technickém vzdělávání.**
 
 Tento portál slouží k obsluze virtuálních financí (M-Kreditů), správě studentských firem a komunikaci s Kontrolním úřadem.
 
-👈 **Pro vstup do systému si vyberte svou roli v levém bočním menu.**
+:material/arrow_back: **Pro vstup do systému si vyberte svou roli v levém bočním menu.**
 """)
