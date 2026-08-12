@@ -3,7 +3,6 @@ import requests
 
 st.set_page_config(page_title="Firemní Kancelář", page_icon=":material/business:", layout="wide")
 
-# --- DESIGN A CSS STYLY M-TECH CORE ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&display=swap');
@@ -13,7 +12,6 @@ st.markdown("""
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 180, 216, 0.4); border-color: #00B4D8; }
     .card-box { background-color: #1e293b; padding: 20px; border-radius: 10px; border: 1px solid #334155; margin-bottom: 15px; }
     
-    /* Vlastní stavové odznaky pro přehled plnění */
     .status-badge-ok { background-color: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid #22c55e; padding: 12px; border-radius: 8px; font-weight: 700; text-align: center; }
     .status-badge-wait { background-color: rgba(234, 179, 8, 0.15); color: #fde047; border: 1px solid #eab308; padding: 12px; border-radius: 8px; font-weight: 700; text-align: center; }
     .status-badge-err { background-color: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid #ef4444; padding: 12px; border-radius: 8px; font-weight: 700; text-align: center; }
@@ -38,8 +36,11 @@ except Exception:
 
 uzivatel = st.session_state.get("uzivatel", "firma")
 
-# Načtení firmy uživatele
-res_firma = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?ceo_jmeno=eq.{uzivatel}&select=*", headers=headers)
+# Hledání firmy podle CEO, CFO nebo CTO
+res_firma = requests.get(
+    f"{SUPABASE_URL}/rest/v1/firmy?or=(ceo_jmeno.eq.{uzivatel},cfo_jmeno.eq.{uzivatel},cto_jmeno.eq.{uzivatel})&select=*", 
+    headers=headers
+)
 moje_firma = res_firma.json()[0] if (res_firma.status_code == 200 and len(res_firma.json()) > 0) else None
 
 has_canvas = False
@@ -58,10 +59,8 @@ if moje_firma:
     res_u = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{f_id}", headers=headers)
     has_ucto = len(res_u.json()) > 0 if res_u.status_code == 200 else False
 
-    # --- PŘEHLEDNÝ NÁSTĚNNÝ PANEL PRO ŽÁKY ---
     st.subheader(":material/fact_check: Přehled stavu a plnění povinností firmy")
     col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-    
     stav = moje_firma['stave_licence']
     
     with col_s1:
@@ -92,7 +91,6 @@ if moje_firma:
 
     st.write("")
 
-    # --- STAVOVÝ BANNER ---
     if stav == "CEKA_NA_SCHVALENI":
         st.info("Žádost o licencování byla odeslána na Kontrolní úřad. V záložkách níže můžete pracovat na Lean Canvasu a kalkulacích.")
     elif stav == "ZAMITNUTO":
@@ -147,7 +145,7 @@ with tab_zaklad:
             nazev_firmy = st.text_input("Název firmy (např. MechTech s.r.o.):")
             skolni_kod = st.text_input("Licenční kód školy:").upper().strip()
             uroven = st.selectbox("Zvolená úroveň projektu:", [1, 2, 3])
-            ceo = st.text_input("Jméno CEO (Generální ředitel):", value=uzivatel)
+            ceo = st.text_input("Jméno CEO (Generální ředitel):", value=uzivatel, disabled=True)
             cfo = st.text_input("Jméno CFO (Finanční ředitel):")
             cto = st.text_input("Jméno CTO (Technický ředitel):")
             zamer = st.text_area("Stručný podnikatelský záměr:")
@@ -161,7 +159,7 @@ with tab_zaklad:
                         "nazev_firmy": nazev_firmy,
                         "skolni_kod": skolni_kod,
                         "uroven_projektu": uroven,
-                        "ceo_jmeno": ceo,
+                        "ceo_jmeno": uzivatel,
                         "cfo_jmeno": cfo,
                         "cto_jmeno": cto,
                         "podnikatelsky_zamer": zamer,
@@ -170,8 +168,10 @@ with tab_zaklad:
                     }
                     res_post = requests.post(f"{SUPABASE_URL}/rest/v1/firmy", headers=headers, json=payload)
                     if res_post.status_code in [200, 201]:
-                        st.success("Zakladatelská listina odeslána!")
+                        st.success("Zakladatelská listina byla úspěšně odeslána!")
                         st.rerun()
+                    elif "already exists" in res_post.text:
+                        st.error(f"Firma s názvem '{nazev_firmy}' již existuje! Zvolte prosím jiný název.")
                     else:
                         st.error(f"Chyba při zakládání firmy: {res_post.text}")
                 else:
@@ -197,7 +197,7 @@ with tab_strategie:
             if st.form_submit_button("Uložit Lean Canvas", icon=":material/save:"):
                 c_payload = {"firma_id": moje_firma["id"], "problem": prob, "reseni": sol, "cilova_skupina": target, "unikatni_hodnota": val, "nakladova_struktura": costs, "prijmove_toky": rev}
                 requests.post(f"{SUPABASE_URL}/rest/v1/lean_canvas", headers=headers, json=c_payload)
-                st.success("Lean Canvas uložován!")
+                st.success("Lean Canvas uložen!")
                 st.rerun()
 
 # --- TAB 3: KALKULAČNÍ LISTY ---
