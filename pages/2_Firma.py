@@ -96,7 +96,7 @@ with tab_zaklad:
                         "stave_licence": "CEKA_NA_SCHVALENI"
                     }
                     res_post = requests.post(f"{SUPABASE_URL}/rest/v1/firmy", headers=headers, json=payload)
-if res_post.status_code in [200, 201]:
+                    if res_post.status_code in [200, 201]:
                         st.success("Zakladatelská listina odeslána! Čeká na schválení učitelem.")
                         st.rerun()
                     else:
@@ -162,7 +162,6 @@ with tab_kalkulace:
             marze = st.number_input("Plánovaná marže (odměna týmu) v M-Kreditech:", min_value=0.0, value=50.0)
             dan_pct = st.number_input("M-TECH Daň pro Fond rozvoje (%):", min_value=10.0, max_value=30.0, value=15.0)
             
-            # Automatický výpočet kalkulace
             zaklad_dane = p_naklady + rezie + marze
             vypoctena_dan = zaklad_dane * (dan_pct / 100.0)
             doporucena_cena = zaklad_dane + vypoctena_dan
@@ -183,7 +182,6 @@ with tab_kalkulace:
                 }
                 requests.post(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy", headers=headers, json=k_payload)
                 
-                # Zpětné vytvoření nabídky v tržním katalogu
                 requests.post(f"{SUPABASE_URL}/rest/v1/zakazky", headers=headers, json={
                     "firma": moje_firma["nazev_firmy"], "nazev": prod_nazev, "popis": f"Schválený produkt firmy {moje_firma['nazev_firmy']}", "cena": int(doporucena_cena)
                 })
