@@ -25,7 +25,7 @@ ucitel_page = st.Page("pages/3_Ucitel.py", title="Kontrolní úřad", icon=":mat
 # --- PŘIHLAŠOVACÍ BRÁNA ---
 if st.session_state.role is None:
     st.title(":material/fingerprint: Systém uzamčen")
-    st.info("Pro vstup do M-TECH CORE zadejte přihlašovací údaje (zak / firma / ucitel).")
+    st.info("Pro vstup do M-TECH CORE zadejte přihlašovací údaje.")
     
     with st.form("login_form"):
         jmeno = st.text_input("Přihlašovací jméno:")
@@ -42,6 +42,9 @@ if st.session_state.role is None:
             elif jmeno == "ucitel" and heslo == "123":
                 st.session_state.role = "ucitel"
                 st.rerun()
+            elif jmeno == "admin" and heslo == "core2026":
+                st.session_state.role = "admin"
+                st.rerun()
             else:
                 st.error("Špatné jméno nebo heslo!")
 
@@ -54,6 +57,9 @@ else:
         pg = st.navigation([firma_page])
     elif st.session_state.role == "ucitel":
         pg = st.navigation([ucitel_page])
+    elif st.session_state.role == "admin":
+        # ADMIN VIDÍ VŠECHNO NARÁZ
+        pg = st.navigation([zaci_page, firma_page, ucitel_page])
     
     # Spuštění povolené stránky
     pg.run()
@@ -61,6 +67,7 @@ else:
     # Přidání odhlašovacího tlačítka do bočního panelu
     with st.sidebar:
         st.divider()
+        st.caption(f"Přihlášen jako: **{st.session_state.role.upper()}**")
         if st.button("Odhlásit se"):
             st.session_state.role = None
             st.rerun()
