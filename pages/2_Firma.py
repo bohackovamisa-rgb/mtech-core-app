@@ -31,8 +31,68 @@ except Exception:
 
 uzivatel = st.session_state.get("uzivatel", "firma")
 
+# Načtení firmy uživatele
 res_firma = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?ceo_jmeno=eq.{uzivatel}&select=*", headers=headers)
 moje_firma = res_firma.json()[0] if (res_firma.status_code == 200 and len(res_firma.json()) > 0) else None
+
+# Kontrola plnění jednotlivých modulů
+has_canvas = False
+has_kalkulace = False
+has_ucto = False
+
+if moje_firma:
+    f_id = moje_firma["id"]
+    
+    res_c = requests.get(f"{SUPABASE_URL}/rest/v1/lean_canvas?firma_id=eq.{f_id}", headers=headers)
+    has_canvas = len(res_c.json()) > 0 if res_c.status_code == 200 else False
+
+    res_k = requests.get(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?firma_id=eq.{f_id}", headers=headers)
+    has_kalkulace = len(res_k.json()) > 0 if res_k.status_code == 200 else False
+
+    res_u = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{f_id}", headers=headers)
+    has_ucto = len(res_u.json()) > 0 if res_u.status_code == 200 else False
+
+    # --- KONTROLNÍ NÁSTĚNKA POVINNOSTÍ FIRMY ---
+    st.subheader("📌 Stav plnění metodických kroků M-TECH CORE")
+    col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+    
+    stav = moje_firma['stave_licence']
+    
+    with col_s1:
+        if stav == "SCHVALENO":
+            st.success("✅ Licence udělena")
+        elif stav == "CEKA_NA_SCHVALENI":
+            st.warning("⏳ Čeká na vyučujícího")
+        else:
+            st.error("❌ Licence zamítnuta")
+            
+    with col_s2:
+        if has_canvas:
+            st.success("✅ Lean Canvas vyplněn")
+        else:
+            st.info("⚪ Lean Canvas chybí")
+            
+    with col_s3:
+        if has_kalkulace:
+            st.success("✅ Kalkulace zadána")
+        else:
+            st.info("⚪ Kalkulace chybí")
+            
+    with col_s4:
+        if has_ucto:
+            st.success("✅ Účetnictví vedené")
+        else:
+            st.info("⚪ Účetní kniha prázdná")
+
+    # --- PŘEHLEDNÝ HLAVNÍ BANNER STAVU LICENCE ---
+    if stav == "CEKA_NA_SCHVALENI":
+        st.info("⏳ **Žádost o licencování byla úspěšně odeslána.** Čeká na posouzení vyučujícím (Kontrolním úřadem). Mezitím již můžete v záložkách níže vyplňovat Lean Canvas a připravovat kalkulace produktů!")
+    elif stav == "ZAMITNUTO":
+        st.error(f"❌ **ŽÁDOST O LICENCI BYLA ZAMÍTNUTA**\n\n**Důvod od Kontrolního úřadu:**\n> {moje_firma.get('duvod_zamitnuti', 'Není uveden')}\n\nOpravte potřebné věci a klikněte na tlačítko 'Znovupodat žádost' níže.")
+    elif stav == "SCHVALENO":
+        st.success("🎉 **LICENCE JE AKTIVNÍ!** Vaše firma je plně registrovaná a schválená k podnikání na trhu.")
+
+    st.write("---")
 
 tab_zaklad, tab_strategie, tab_kalkulace, tab_ucto = st.tabs([
     "📜 1. Zakladatelská listina", 
@@ -46,21 +106,12 @@ with tab_zaklad:
     st.subheader("Zakladatelská listina a Žádost o licenci")
     
     if moje_firma:
-        stav = moje_firma['stave_licence']
-        
-        if stav == "ZAMITNUTO":
-            st.error(f"❌ **ŽÁDOST O LICENCI BYLA ZAMÍTNUTA**\n\n**Důvod zamítnutí od Kontrolního úřadu:**\n> {moje_firma.get('duvod_zamitnuti', 'Není uveden')}")
-            st.info("Můžete upravit údaje a odeslat žádost znovu ke schválení.")
-        elif stav == "CEKA_NA_SCHVALENI":
-            st.warning("⏳ Vaše Zakladatelská listina čeká na posouzení Kontrolním úřadem.")
-        else:
-            st.success(f"✅ Firma **{moje_firma['nazev_firmy']}** má platnou licencí.")
-
         col_f1, col_f2 = st.columns(2)
         with col_f1:
             st.markdown(f"""
                 <div class="card-box">
-                    <p><b>Stav licence:</b> {stav}</p>
+                    <p><b>Název firmy:</b> {moje_firma['nazev_firmy']}</p>
+                    <p><b>Stav licence:</b> {moje_firma['stave_licence']}</p>
                     <p><b>Úroveň projektu:</b> Level {moje_firma['uroven_projektu']}</p>
                     <p><b>Generální ředitel (CEO):</b> {moje_firma['ceo_jmeno']}</p>
                     <p><b>Finanční ředitel (CFO):</b> {moje_firma['cfo_jmeno']}</p>
@@ -76,8 +127,8 @@ with tab_zaklad:
                 </div>
             """, unsafe_allow_html=True)
             
-        if stav == "ZAMITNUTO":
-            if st.button("Znovupodat žádost ke schválení"):
+        if moje_firma['stave_licence'] == "ZAMITNUTO":
+            if st.button("🔄 Znovupodat žádost ke schválení"):
                 requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{moje_firma['id']}", headers=headers, json={"stave_licence": "CEKA_NA_SCHVALENI"})
                 st.success("Žádost byla znovu odeslána na Úřad!")
                 st.rerun()
@@ -138,7 +189,8 @@ with tab_strategie:
             if st.form_submit_button("Uložit Lean Canvas"):
                 c_payload = {"firma_id": moje_firma["id"], "problem": prob, "reseni": sol, "cilova_skupina": target, "unikatni_hodnota": val, "nakladova_struktura": costs, "prijmove_toky": rev}
                 requests.post(f"{SUPABASE_URL}/rest/v1/lean_canvas", headers=headers, json=c_payload)
-                st.success("Uloženo!")
+                st.success("Lean Canvas byl úspěšně uložen!")
+                st.rerun()
 
 # --- TAB 3: KALKULAČNÍ LISTY ---
 with tab_kalkulace:
@@ -163,6 +215,7 @@ with tab_kalkulace:
                 k_payload = {"firma_id": moje_firma["id"], "nazev_produktu": prod_nazev, "prime_naklady": p_naklady, "rezie_skoly": rezie, "mtech_dan_procento": dan_pct, "marze_zisk": marze, "konecna_cena": doporucena_cena, "schvaleno_uradem": False}
                 requests.post(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy", headers=headers, json=k_payload)
                 st.success("Kalkulační list odeslán!")
+                st.rerun()
 
 # --- TAB 4: KNIHA PŘÍJMŮ A VÝDAJŮ ---
 with tab_ucto:
