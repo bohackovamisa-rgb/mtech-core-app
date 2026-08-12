@@ -13,6 +13,7 @@ st.markdown("""
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(14, 165, 233, 0.4); border-color: #0ea5e9; }
     .card-box { background-color: #1e293b; padding: 20px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 15px; transition: all 0.3s; }
     .card-box:hover { border-color: #0ea5e9; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .form-section { background-color: #0f172a; padding: 15px; border-radius: 8px; border-left: 4px solid #0ea5e9; margin-bottom: 15px; }
     
     /* Kanban styly */
     .kanban-col-header { text-align: center; font-weight: 800; padding: 12px; border-radius: 8px; margin-bottom: 15px; color: #fff; text-transform: uppercase; letter-spacing: 1px; font-size: 14px; }
@@ -23,8 +24,8 @@ st.markdown("""
     .kanban-card h5 { margin: 0 0 8px 0; color: #f8fafc; font-size: 15px; }
     .kanban-badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: bold; background: rgba(14, 165, 233, 0.15); color: #38bdf8; margin-top: 8px;}
     
-    /* Elevator Pitch & Vibe */
-    .pitch-box { background: linear-gradient(135deg, #0f172a, #1e293b); padding: 30px; border-radius: 16px; border: 2px dashed #0ea5e9; text-align: center; margin-top: 20px; position: relative; }
+    /* Elevator Pitch */
+    .pitch-box { background: linear-gradient(135deg, #0f172a, #1e293b); padding: 30px; border-radius: 16px; border: 2px dashed #0ea5e9; text-align: center; margin-top: 20px; }
     .pitch-box h3 { color: #38bdf8 !important; margin-bottom: 15px; font-size: 24px; }
     .pitch-text { font-size: 19px; line-height: 1.6; color: #f8fafc; font-weight: 600; font-style: italic; }
     .pitch-hl { color: #10b981; text-decoration: underline; text-underline-offset: 4px; }
@@ -66,7 +67,6 @@ has_canvas, has_porada, has_kalkulace, has_ucto = False, False, False, False
 
 if moje_firma:
     f_id = moje_firma["id"]
-    
     res_c = requests.get(f"{SUPABASE_URL}/rest/v1/lean_canvas?firma_id=eq.{f_id}", headers=headers)
     if res_c.status_code == 200 and len(res_c.json()) > 0:
         exist_canvas = res_c.json()[0]
@@ -76,11 +76,9 @@ if moje_firma:
     has_kalkulace = len(requests.get(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?firma_id=eq.{f_id}", headers=headers).json()) > 0
     has_ucto = len(requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{f_id}", headers=headers).json()) > 0
 
-    # Startup Stage Tag
     stage = "Garážový Startup 🛠️" if moje_firma['uroven_projektu'] == 1 else ("Seed Fáze (Trh) 🌱" if moje_firma['uroven_projektu'] == 2 else "Scale-up (Pro) 🦄")
     st.markdown(f"<div class='startup-tag'>{stage}</div>", unsafe_allow_html=True)
 
-    # --- KONTROLNÍ PANEL STAVU (HEALTH CHECK) ---
     st.subheader("📊 Startup Health Check (Trakce)")
     col_s1, col_s2, col_s3, col_s4, col_s5 = st.columns(5)
     stav = moje_firma['stave_licence']
@@ -108,25 +106,56 @@ tab_zalozeni, tab_canvas, tab_agile, tab_hr, tab_kalkulace, tab_ucto = st.tabs([
     "🏛️ 1. Legal & Founders", 
     "💡 2. Vision & Pitch", 
     "⚡ 3. Agilní vývoj (Scrum)",
-    "🦄 4. Tým & Kultura",
+    "🦄 4. Tým & Kultura (HR)",
     "📈 5. Unit Economics", 
     "💸 6. Cash-flow & Burn Rate"
 ])
 
 # ==========================================
-# TAB 1: ZALOŽENÍ (LEGAL)
+# TAB 1: ZALOŽENÍ (LEGAL) - PLNÉ ÚŘEDNÍ FORMULÁŘE
 # ==========================================
 with tab_zalozeni:
     st.subheader("Legal & Founders – Právní základ startupu")
-    st.caption("Předtím než změníte svět, musíte mít v pořádku papíry (Compliance). Zde je váš registrační spis.")
+    st.caption("Předtím než změníte svět, musíte mít v pořádku papíry pro všechny úřady. Vyplňte registrační spis s.r.o.")
     
     if moje_firma:
         st.success(f"EVIDOVANÝ REGISTRAČNÍ SPIS STARTUPU: {moje_firma['nazev_firmy']}")
         col_f1, col_f2 = st.columns(2)
         with col_f1:
-            st.markdown(f"<div class='card-box'><h4>Founders & Board</h4><p><b>Startup:</b> {moje_firma['nazev_firmy']}</p><p><b>CEO (Visionary):</b> {moje_firma['ceo_jmeno']}</p><p><b>CFO (Finance & Ops):</b> {moje_firma['cfo_jmeno']}</p><p><b>CTO (Tech & Product):</b> {moje_firma['cto_jmeno']}</p><p><b>Seed Kapitál:</b> {moje_firma['pocatecni_kapital']} M-K</p></div>", unsafe_allow_html=True)
+            st.markdown(f"""
+                <div class='card-box'>
+                    <h4>1. Notářský zápis & Orgány s.r.o.</h4>
+                    <p><b>Startup:</b> {moje_firma['nazev_firmy']}</p>
+                    <p><b>Úroveň:</b> Level {moje_firma['uroven_projektu']}</p>
+                    <p><b>CEO (Visionary):</b> {moje_firma['ceo_jmeno']}</p>
+                    <p><b>CFO (Finance & Ops):</b> {moje_firma['cfo_jmeno']}</p>
+                    <p><b>CTO (Tech & Product):</b> {moje_firma['cto_jmeno']}</p>
+                    <p><b>Seed Kapitál:</b> {moje_firma['pocatecni_kapital']} M-K</p>
+                </div>
+            """, unsafe_allow_html=True)
+            st.markdown(f"""
+                <div class='card-box'>
+                    <h4>3. Finanční úřad</h4>
+                    <p><b>Režim M-TECH daně:</b> Odvod 15–20 % ze zisku</p>
+                    <p><b>Zpráva daně:</b> {'Transparentní účet Unie rodičů' if moje_firma['uroven_projektu'] == 3 else 'Interní systém M-Kreditů'}</p>
+                </div>
+            """, unsafe_allow_html=True)
         with col_f2:
-            st.markdown(f"<div class='card-box'><h4>Compliance & Legal</h4><p><b>Market:</b> {moje_firma['podnikatelsky_zamer']}</p><p><b>M-TECH Daň:</b> Odvod 15–20 % ze zisku (Giving back)</p><p><b>Status licence:</b> <b>{moje_firma['stave_licence']}</b></p></div>", unsafe_allow_html=True)
+            st.markdown(f"""
+                <div class='card-box'>
+                    <h4>2. Živnostenský úřad (JRF)</h4>
+                    <p><b>Předmět / Divize:</b> {moje_firma['podnikatelsky_zamer']}</p>
+                    <p><b>Kód akcelerátoru (školy):</b> {moje_firma['skolni_kod']}</p>
+                </div>
+            """, unsafe_allow_html=True)
+            st.markdown(f"""
+                <div class='card-box'>
+                    <h4>4. ČSSZ, ZP & Rejstřík</h4>
+                    <p><b>Registrace zaměstnavatele:</b> Hotovo</p>
+                    <p><b>BOZP & Kodex:</b> Potvrzeno ✅</p>
+                    <p><b>Status na Úřadu:</b> <b style="color:#0ea5e9;">{moje_firma['stave_licence']}</b></p>
+                </div>
+            """, unsafe_allow_html=True)
         
         col_btn1, col_btn2 = st.columns(2)
         with col_btn1:
@@ -134,58 +163,88 @@ with tab_zalozeni:
                 requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{moje_firma['id']}", headers=headers, json={"stave_licence": "CEKA_NA_SCHVALENI"})
                 st.rerun()
         with col_btn2:
-            if st.button("Pivot / Upravit údaje", icon=":material/edit:"):
+            if st.button("Pivot / Upravit úřední údaje", icon=":material/edit:"):
                 st.session_state.edit_spis = True
                 st.rerun()
 
     if not moje_firma or st.session_state.get("edit_spis", False):
-        u_notar, u_zivnost, u_financak, u_cssz, u_rejstrik = st.tabs(["📜 Zakladatelská", "📋 JRF", "⚖️ Daně", "🏥 Tým", "🛡️ Compliance"])
+        if st.session_state.get("edit_spis", False): st.warning("Režim úprav odeslaného registračního spisu:")
+        u_notar, u_zivnost, u_financak, u_cssz, u_rejstrik = st.tabs(["📜 Notářství", "📋 JRF", "⚖️ FÚ (Daně)", "🏥 ČSSZ (Tým)", "🛡️ Rejstřík"])
         if "reg_data" not in st.session_state: st.session_state.reg_data = {}
 
+        # 1. NOTÁŘSTVÍ
         with u_notar:
+            st.markdown("**Formulář N-01: Zakladatelská listina a jmenování orgánů s.r.o.**")
             st.session_state.reg_data["nazev_firmy"] = st.text_input("1.1 Obchodní firma (Jméno startupu):", value=st.session_state.reg_data.get("nazev_firmy", moje_firma['nazev_firmy'] if moje_firma else ""))
-            st.session_state.reg_data["skolni_kod"] = st.text_input("1.2 Kód akcelerátoru (školy):", value=st.session_state.reg_data.get("skolni_kod", moje_firma['skolni_kod'] if moje_firma else "")).upper().strip()
+            st.session_state.reg_data["sidlo"] = st.text_input("1.2 Sídlo společnosti (adresa školy / učebna):", value=st.session_state.reg_data.get("sidlo", "Školní 101, Učebna č. 12"))
+            st.session_state.reg_data["skolni_kod"] = st.text_input("1.3 Kód akcelerátoru (školy):", value=st.session_state.reg_data.get("skolni_kod", moje_firma['skolni_kod'] if moje_firma else "")).upper().strip()
+            
             col_n1, col_n2 = st.columns(2)
             with col_n1:
-                st.session_state.reg_data["ceo"] = st.text_input("1.3 CEO (Visionary):", value=st.session_state.reg_data.get("ceo", moje_firma['ceo_jmeno'] if moje_firma else uzivatel))
-                st.session_state.reg_data["cfo"] = st.text_input("1.4 CFO (Finance):", value=st.session_state.reg_data.get("cfo", moje_firma['cfo_jmeno'] if moje_firma else ""))
+                st.session_state.reg_data["ceo"] = st.text_input("1.4 Jednatel / CEO (Visionary):", value=st.session_state.reg_data.get("ceo", moje_firma['ceo_jmeno'] if moje_firma else uzivatel))
+                st.session_state.reg_data["cfo"] = st.text_input("1.5 Finanční ředitel / CFO (Finance):", value=st.session_state.reg_data.get("cfo", moje_firma['cfo_jmeno'] if moje_firma else ""))
             with col_n2:
-                st.session_state.reg_data["cto"] = st.text_input("1.5 CTO (Tech / Product):", value=st.session_state.reg_data.get("cto", moje_firma['cto_jmeno'] if moje_firma else ""))
-                st.session_state.reg_data["vklad"] = st.number_input("1.6 Seed Kapitál (M-K):", min_value=10, value=int(st.session_state.reg_data.get("vklad", 100)))
+                st.session_state.reg_data["cto"] = st.text_input("1.6 Technický ředitel / CTO (Product):", value=st.session_state.reg_data.get("cto", moje_firma['cto_jmeno'] if moje_firma else ""))
+                st.session_state.reg_data["vklad"] = st.number_input("1.7 Seed Kapitál na člena (M-Kredity):", min_value=10, value=int(st.session_state.reg_data.get("vklad", 100)))
 
+        # 2. ŽIVNOSTENSKÝ ÚŘAD (JRF)
         with u_zivnost:
+            st.markdown("**Formulář JRF: Jednotný registrační formulář pro právnické osoby**")
             col_j1, col_j2 = st.columns(2)
             with col_j1:
-                st.session_state.reg_data["divize"] = st.selectbox("2.1 Sektor (Divize):", ["Hardware & Strojírenství", "Energy & Elektro", "Software, AI & IT", "Služby & Marketing"])
+                st.session_state.reg_data["divize"] = st.selectbox("2.1 Oborová divize (Sektor):", ["Hardware & Strojírenství", "Energy & Elektro", "Software, AI & IT", "Služby & Marketing"])
+                st.session_state.reg_data["provozovna"] = st.text_input("2.2 Místo provozovny / laboratoře:", value=st.session_state.reg_data.get("provozovna", "Školní dílny – Výzkumný blok B"))
             with col_j2:
-                st.session_state.reg_data["predmet"] = st.text_input("2.2 Hlavní produkt / Core business:", value=st.session_state.reg_data.get("predmet", ""))
-            st.session_state.reg_data["zamer"] = st.text_area("2.3 Detailní popis (Proč to děláme):", value=st.session_state.reg_data.get("zamer", ""))
+                st.session_state.reg_data["predmet"] = st.text_input("2.3 Core Business (Předmět podnikání):", value=st.session_state.reg_data.get("predmet", ""))
+                st.session_state.reg_data["bozp_garant"] = st.text_input("2.4 Odpovědný zástupce BOZP:", value=st.session_state.reg_data.get("bozp_garant", uzivatel))
+            st.session_state.reg_data["zamer"] = st.text_area("2.5 Detailní popis činnosti (Pro JRF):", value=st.session_state.reg_data.get("zamer", ""))
 
+        # 3. FINANČNÍ ÚŘAD
         with u_financak:
-            st.session_state.reg_data["dan_souhlas"] = st.checkbox("3.1 Zavazujeme se k odvodu M-TECH daně z profitu (Giving Back komunitě).", value=st.session_state.reg_data.get("dan_souhlas", True))
+            st.markdown("**Formulář FÚ-5540: Přihláška k registraci k dani z příjmů a M-TECH dani**")
+            col_f1, col_f2 = st.columns(2)
+            with col_f1:
+                st.session_state.reg_data["zdani_obdobi"] = st.selectbox("3.1 Zdaňovací období:", ["Pololetní cyklus", "Měsíční tržní cyklus", "Celoroční maturitní projekt"])
+            with col_f2:
+                st.session_state.reg_data["ucet_pro_dan"] = st.text_input("3.2 Účet pro odvod daně:", value="Přiřazuje systém automaticky (Dle úrovně licence)", disabled=True)
+            st.session_state.reg_data["dan_souhlas"] = st.checkbox("3.3 Zavazujeme se k odvodu M-TECH daně z profitu (15–20 % - Giving Back).", value=st.session_state.reg_data.get("dan_souhlas", True))
 
+        # 4. ČSSZ A ZP
         with u_cssz:
-            st.session_state.reg_data["seznam_zamestnancu"] = st.text_area("4.1 Core Team Members:", value=st.session_state.reg_data.get("seznam_zamestnancu", f"{uzivatel}, CFO, CTO"))
+            st.markdown("**Formulář ČSSZ-801: Oznámení o nástupu & Registrace zaměstnavatele**")
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                st.session_state.reg_data["seznam_zamestnancu"] = st.text_area("4.1 Core Team Members (Zaměstnanci):", value=st.session_state.reg_data.get("seznam_zamestnancu", f"{uzivatel}, CFO, CTO"))
+            with col_p2:
+                st.session_state.reg_data["mzdovy_fond"] = st.number_input("4.2 Předpokládaný mzdový fond (M-Kredity):", value=int(st.session_state.reg_data.get("mzdovy_fond", 300)))
 
+        # 5. OBCHODNÍ REJSTŘÍK
         with u_rejstrik:
+            st.markdown("**Formulář OR-LIST: Návrh na zápis do Obchodního rejstříku M-TECH CORE**")
             st.session_state.reg_data["bozp_souhlas"] = st.checkbox("5.1 Prohlašujeme, že máme hotový bezpečnostní onboarding (BOZP).", value=st.session_state.reg_data.get("bozp_souhlas", True))
             st.session_state.reg_data["kodex_souhlas"] = st.checkbox("5.2 Přijímáme Etický kodex (No toxic culture).", value=st.session_state.reg_data.get("kodex_souhlas", True))
             
-            if st.button("🚀 ODESLAT DO AKCELERÁTORU (Kontrolní úřad)", icon=":material/send:"):
+            st.write("---")
+            if st.button("🚀 ODESLAT REGISTRAČNÍ SPIS DO AKCELERÁTORU (Úřad)", icon=":material/send:"):
                 d = st.session_state.reg_data
-                if d.get("nazev_firmy") and d.get("skolni_kod") and d.get("cfo") and d.get("cto"):
+                if d.get("nazev_firmy") and d.get("skolni_kod") and d.get("cfo") and d.get("cto") and d.get("dan_souhlas") and d.get("bozp_souhlas") and d.get("kodex_souhlas"):
                     res_lic = requests.get(f"{SUPABASE_URL}/rest/v1/licencovane_skoly?licencni_kod=eq.{d.get('skolni_kod')}", headers=headers)
                     u_num = res_lic.json()[0].get("uroven_projektu", 2) if (res_lic.status_code == 200 and res_lic.json()) else 2
+                    
+                    souhrn_zameru = f"[{d.get('divize')}] {d.get('predmet')} | Sídlo: {d.get('sidlo')} | Provozovna: {d.get('provozovna')} | BOZP: {d.get('bozp_garant')} | Záměr: {d.get('zamer')}"
+                    
                     payload = {
                         "nazev_firmy": d.get("nazev_firmy"), "skolni_kod": d.get("skolni_kod"), "uroven_projektu": u_num,
                         "ceo_jmeno": d.get("ceo"), "cfo_jmeno": d.get("cfo"), "cto_jmeno": d.get("cto"),
-                        "podnikatelsky_zamer": f"[{d.get('divize')}] {d.get('predmet')} - {d.get('zamer')}",
+                        "podnikatelsky_zamer": souhrn_zameru,
                         "pocatecni_kapital": d.get("vklad", 100) * 3, "stave_licence": "CEKA_NA_SCHVALENI"
                     }
                     if moje_firma: requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{moje_firma['id']}", headers=headers, json=payload)
                     else: requests.post(f"{SUPABASE_URL}/rest/v1/firmy", headers=headers, json=payload)
                     st.session_state.edit_spis = False
                     st.rerun()
+                else:
+                    st.warning("Vyplňte všechny povinné pole a potvrďte souhlasy.")
 
 
 # ==========================================
