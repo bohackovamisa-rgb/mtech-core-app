@@ -11,6 +11,7 @@ st.markdown("""
     .stButton>button { border-radius: 8px; transition: all 0.3s ease; border: 1px solid #00B4D8; }
     .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 180, 216, 0.4); border-color: #00B4D8; }
     .card-box { background-color: #1e293b; padding: 20px; border-radius: 10px; border: 1px solid #334155; margin-bottom: 15px; }
+    .form-section { background-color: #0f172a; padding: 15px; border-radius: 8px; border-left: 4px solid #00B4D8; margin-bottom: 15px; }
     
     .status-badge-ok { background-color: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid #22c55e; padding: 10px; border-radius: 8px; font-weight: 700; text-align: center; }
     .status-badge-wait { background-color: rgba(234, 179, 8, 0.15); color: #fde047; border: 1px solid #eab308; padding: 10px; border-radius: 8px; font-weight: 700; text-align: center; }
@@ -36,7 +37,6 @@ except Exception:
 
 uzivatel = st.session_state.get("uzivatel", "firma")
 
-# Načtení firem
 res_vsechny = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?select=*&order=id.desc", headers=headers)
 vsechny_firmy = res_vsechny.json() if res_vsechny.status_code == 200 else []
 
@@ -64,23 +64,22 @@ if moje_firma:
     res_u = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{f_id}", headers=headers)
     has_ucto = len(res_u.json()) > 0 if res_u.status_code == 200 else False
 
-    # --- KONTROLNÍ PANEL STAVU FIRMY ---
     st.subheader(":material/fact_check: Přehled plnění povinností podle metodiky M-TECH CORE")
     col_s1, col_s2, col_s3, col_s4, col_s5 = st.columns(5)
     stav = moje_firma['stave_licence']
     
     with col_s1:
-        if stav == "SCHVALENO": st.markdown('<div class="status-badge-ok">Licence Udělena</div>', unsafe_allow_html=True)
+        if stav == "SCHVALENO": st.markdown('<div class="status-badge-ok">Rejstřík OK</div>', unsafe_allow_html=True)
         elif stav == "CEKA_NA_SCHVALENI": st.markdown('<div class="status-badge-wait">Čeká na Úřad</div>', unsafe_allow_html=True)
-        else: st.markdown('<div class="status-badge-err">Licence Zamítnuta</div>', unsafe_allow_html=True)
+        else: st.markdown('<div class="status-badge-err">Spis Zamítnut</div>', unsafe_allow_html=True)
             
     with col_s2:
         if has_canvas: st.markdown('<div class="status-badge-ok">Lean Canvas OK</div>', unsafe_allow_html=True)
         else: st.markdown('<div class="status-badge-off">Lean Canvas Chybí</div>', unsafe_allow_html=True)
 
     with col_s3:
-        if has_porada: st.markdown('<div class="status-badge-ok">Zápis z Porady OK</div>', unsafe_allow_html=True)
-        else: st.markdown('<div class="status-badge-off">Zápis Chybí</div>', unsafe_allow_html=True)
+        if has_porada: st.markdown('<div class="status-badge-ok">Porady OK</div>', unsafe_allow_html=True)
+        else: st.markdown('<div class="status-badge-off">Porada Chybí</div>', unsafe_allow_html=True)
             
     with col_s4:
         if has_kalkulace: st.markdown('<div class="status-badge-ok">Kalkulace OK</div>', unsafe_allow_html=True)
@@ -93,11 +92,11 @@ if moje_firma:
     st.write("")
 
     if stav == "CEKA_NA_SCHVALENI":
-        st.info(f"📋 **Kompletní registrační spis firmy '{moje_firma['nazev_firmy']}' byl úspěšně podán na Kontrolní úřad.**")
+        st.info(f"📋 **Registrační spis firmy '{moje_firma['nazev_firmy']}' byl úspěšně podán na Kontrolní úřad.**")
     elif stav == "ZAMITNUTO":
-        st.error(f"❌ **Žádost o licenci byla zamítnuta Kontrolním úřadem.** Důvod: {moje_firma.get('duvod_zamitnuti', 'Není uveden')}")
+        st.error(f"❌ **Registrační spis byl zamítnut Kontrolním úřadem.** Důvod: {moje_firma.get('duvod_zamitnuti', 'Není uveden')}")
     elif stav == "SCHVALENO":
-        st.success(f"🎉 **Licence firmy '{moje_firma['nazev_firmy']}' je aktivní!** Můžete plně podnikat.")
+        st.success(f"🎉 **Firma '{moje_firma['nazev_firmy']}' byla zapsána do Obchodního rejstříku M-TECH CORE!**")
 
     st.write("---")
 
@@ -109,10 +108,10 @@ tab_zalozeni, tab_canvas, tab_porady, tab_kalkulace, tab_ucto = st.tabs([
     ":material/menu_book: 5. Kniha příjmů a výdajů"
 ])
 
-# --- TAB 1: ÚŘEDNÍ KOLEČKO ZALOŽENÍ FIRMY ---
+# --- TAB 1: REÁLNÉ ÚŘEDNÍ KOLEČKO ZALOŽENÍ FIRMY ---
 with tab_zalozeni:
-    st.subheader("Registrační spis firmy – Úřední kolečko")
-    st.caption("Postupný proces založení a registraci podniku dle reálné české legislativy a metodiky M-TECH CORE.")
+    st.subheader("Registrační spis firmy – Kompletní Úřední Kolečko")
+    st.caption("Vyplnění oficiálních formulářů pro Notářství, Živnostenský úřad (JRF), Finanční úřad, ČSSZ/ZP a Obchodní rejstřík.")
     
     if moje_firma:
         st.success(f"✔️ **EVIDOVANÝ REGISTRAČNÍ SPIS FIRMY: {moje_firma['nazev_firmy']}**")
@@ -120,22 +119,24 @@ with tab_zalozeni:
         with col_f1:
             st.markdown(f"""
                 <div class="card-box">
-                    <p><b>1. Notářství (Zakladatelská listina):</b> Schváleno</p>
+                    <h4>🏛️ Notářský zápis & Živnostenský úřad</h4>
                     <p><b>Název firmy:</b> {moje_firma['nazev_firmy']}</p>
-                    <p><b>Právní forma:</b> Studentská firma (Level {moje_firma['uroven_projektu']})</p>
-                    <p><b>CEO (Statutární orgán):</b> {moje_firma['ceo_jmeno']}</p>
+                    <p><b>Právní forma:</b> Společnost s ručením omezeným (s.r.o.)</p>
+                    <p><b>Úroveň projektu:</b> Úroveň {moje_firma['uroven_projektu']}</p>
+                    <p><b>CEO (Jednatel):</b> {moje_firma['ceo_jmeno']}</p>
                     <p><b>CFO (Finanční ředitel):</b> {moje_firma['cfo_jmeno']}</p>
-                    <p><b>CTO (Garant BOZP & Výroby):</b> {moje_firma['cto_jmeno']}</p>
+                    <p><b>CTO (Garant BOZP & Provozovny):</b> {moje_firma['cto_jmeno']}</p>
                 </div>
             """, unsafe_allow_html=True)
         with col_f2:
             st.markdown(f"""
                 <div class="card-box">
-                    <p><b>2. Živnostenský úřad (JRF):</b> Registrováno</p>
-                    <p><b>Předmět podnikání:</b> {moje_firma['podnikatelsky_zamer']}</p>
-                    <p><b>3. Finanční úřad:</b> Registrace k M-TECH dani (15-20 %)</p>
-                    <p><b>4. Licenční úřad:</b> {moje_firma['stave_licence']}</p>
-                    <p><b>Kód školy:</b> {moje_firma['skolni_kod']} | <b>Vklad:</b> {moje_firma['pocatecni_kapital']} M-K</p>
+                    <h4>⚖️ Finanční úřad, ČSSZ/ZP a Rejstřík</h4>
+                    <p><b>Předmět podnikání & Divize:</b> {moje_firma['podnikatelsky_zamer']}</p>
+                    <p><b>M-TECH Daň:</b> Registrováno k odvodu 15–20 % ze zisku</p>
+                    <p><b>ČSSZ / ZP:</b> Přihlášena jako zaměstnavatel</p>
+                    <p><b>Stav spisu v Obchodním rejstříku:</b> {moje_firma['stave_licence']}</p>
+                    <p><b>Kód školy:</b> {moje_firma['skolni_kod']} | <b>Základní kapitál:</b> {moje_firma['pocatecni_kapital']} M-K</p>
                 </div>
             """, unsafe_allow_html=True)
             
@@ -146,44 +147,73 @@ with tab_zalozeni:
                 st.rerun()
 
     else:
-        st.info("Pro vznik firmy musíte postupně vyplnit všechny 4 úřední kroky:")
+        st.info("Vyplňte postupně všechny úřední formuláře pro vznik s.r.o. v M-TECH CORE:")
         
         with st.form("form_urad_kolecko"):
-            st.markdown("**🏛️ KROK 1: Notářství (Zakladatelská listina)**")
+            # 1. NOTÁŘSKÝ ÚŘAD
+            st.markdown('<div class="form-section"><h4>🏛️ 1. NOTÁŘSKÝ ÚŘAD – Zakladatelská listina & Orgány společnosti</h4></div>', unsafe_allow_html=True)
             col_n1, col_n2 = st.columns(2)
             with col_n1:
-                nazev_firmy = st.text_input("Obchodní firma (název s r.o.):")
+                nazev_firmy = st.text_input("Obchodní firma (přesný název s koncovkou s.r.o.):", placeholder="např. Precision Mech s.r.o.")
+                sidlo = st.text_input("Sídlo společnosti (adresa školy / učebna):", value="Školní 101, Učebna č. 12")
                 skolni_kod = st.text_input("Licenční kód školy:").upper().strip()
-                uroven = st.radio("Úroveň integrace:", ["Level 1: Inkubátor", "Level 2: Školní trh", "Level 3: Plná integrace (UR)"])
+                uroven = st.radio("Zvolená úroveň integrace M-TECH CORE:", [
+                    "Úroveň 1: Teoretický start-up (Inkubátor & Prototyp)", 
+                    "Úroveň 2: Uzavřený školní trh (Virtuální M-Kredity)", 
+                    "Úroveň 3: Plná integrace (Reálná odpovědnost & Unie rodičů)"
+                ])
             with col_n2:
-                ceo = st.text_input("Statutární orgán / CEO:", value=uzivatel)
-                cfo = st.text_input("Finanční ředitel / CFO:")
-                cto = st.text_input("Technický ředitel / CTO (Garant BOZP):")
-                vklad = st.number_input("Základní kapitál na člena (M-Kredity / CZK):", value=100)
+                ceo = st.text_input("Jednatel / CEO (Statutární orgán):", value=uzivatel)
+                cfo = st.text_input("Finanční ředitel / CFO (Správce pokladny a účtu):")
+                cto = st.text_input("Technický ředitel / CTO (Vedoucí výroby a kvality):")
+                vklad = st.number_input("Základní kapitál – Vklad společníka (M-Kredity / CZK):", value=100)
 
-            st.markdown("---")
-            st.markdown("**📋 KROK 2: Živnostenský úřad (Jednotný registrační formulář - JRF)**")
+            # 2. ŽIVNOSTENSKÝ ÚŘAD (JRF)
+            st.markdown('<div class="form-section"><h4>📋 2. ŽIVNOSTENSKÝ ÚŘAD – Jednotný registrační formulář (JRF)</h4></div>', unsafe_allow_html=True)
             col_j1, col_j2 = st.columns(2)
             with col_j1:
-                divize = st.selectbox("Oborová divize (Živnost):", ["Mechanical (Strojírenství)", "Power (Elektrotechnika)", "Cyber (IT & Software)", "Strategy (Služby / Lyceum)"])
+                divize = st.selectbox("Oborová divize (Druh živnosti):", [
+                    "Mechanical (Strojírenství & Kovoobrábění)", 
+                    "Power (Elektrotechnika & Diagnostika)", 
+                    "Cyber (IT, Software & 3D Tisk)", 
+                    "Strategy (Služby, Marketing & Káva)"
+                ])
+                provozovna = st.text_input("Místo provozovny / dílny:", value="Školní dílny – Strojírenský blok B")
             with col_j2:
-                predmet = st.text_input("Předmět podnikání / Popis výroby:")
-            zamer = st.text_area("Detailní popis podnikatelského záměru pro JRF:")
+                predmet = st.text_input("Předmět podnikání (Volná živnost):", placeholder="např. Výroba kovových dárkových předmětů")
+                bozp_garant = st.text_input("Odpovědný zástupce pro BOZP & Živnost:", value=uzivatel)
+            zamer = st.text_area("Podrobný popis činnosti a výrobního programu pro JRF:")
 
-            st.markdown("---")
-            st.markdown("**⚖️ KROK 3: Finanční úřad & Registrace k dani**")
-            st.caption("Příhláška k odvodu M-TECH daně z marže (15–20 %) na účet Fondu rozvoje / Unie rodičů.")
-            dan_souhlas = st.checkbox("Registrovat firmu k povinnému odvodu M-TECH daně ze zisku.")
+            # 3. FINANČNÍ ÚŘAD
+            st.markdown('<div class="form-section"><h4>⚖️ 3. FINANČNÍ ÚŘAD – Přihláška k registraci k dani</h4></div>', unsafe_allow_html=True)
+            st.caption("Registrace k odvodu M-TECH daně (15–20 % ze zisku) určené pro Fond rozvoje školy / Unii rodičů.")
+            col_f1, col_f2 = st.columns(2)
+            with col_f1:
+                zdani_obdobi = st.selectbox("Zdaňovací období:", ["Pololetní cyklus", "Měsíční tržní cyklus", "Celoroční maturitní projekt"])
+            with col_f2:
+                ucet_pro_dan = st.text_input("Účet pro odvod daně:", value="Transparentní účet Unie rodičů M-TECH")
+            dan_souhlas = st.checkbox("Zavazujeme se k řádnému výpočtu a odvodu M-TECH daně ze zisku Kontrolnímu úřadu.")
 
-            st.markdown("---")
-            st.markdown("**🛡️ KROK 4: Obchodní rejstřík & Licenční úřad (Vyučující)**")
-            bozp_souhlas = st.checkbox("Prohlašujeme, že jsme proškoleni v BOZP a budeme dodržovat Etický kodex M-TECH CORE.")
+            # 4. ČSSZ A ZDRAVOTNÍ POJIŠŤOVNA
+            st.markdown('<div class="form-section"><h4>🏥 4. ČSSZ & ZDRAVOTNÍ POJIŠŤOVNA – Registrace zaměstnavatele</h4></div>', unsafe_allow_html=True)
+            st.caption("Evidence členů týmu jako pojištěných pracovníků a stanovení mzdového fondu.")
+            col_p1, col_p2 = st.columns(2)
+            with col_p1:
+                seznam_zamestnancu = st.text_area("Seznam pojištěných členů týmu (CEO, CFO, CTO a pracovníci):", value=f"{uzivatel}, CFO, CTO")
+            with col_p2:
+                mzdovy_fond = st.number_input("Předpokládaný mzdový fond / Odměny členů (M-Kredity):", value=300)
 
-            submit_spis = st.form_submit_button("Odeslat kompletní registrační spis ke schválení", icon=":material/send:")
+            # 5. OBCHODNÍ REJSTŘÍK
+            st.markdown('<div class="form-section"><h4>🛡️ 5. OBCHODNÍ REJSTŘÍK – Návrh na zápis a čestná prohlášení</h4></div>', unsafe_allow_html=True)
+            bozp_souhlas = st.checkbox("Prohlašujeme, že jsme absolvovali školení BOZP pro práci na školních strojích a zařízeních.")
+            kodex_souhlas = st.checkbox("Zavazujeme se k dodržování Etického kodexu M-TECH CORE a poctivému vedení účetní knihy.")
+
+            submit_spis = st.form_submit_button("Podat kompletní registrační spis na Kontrolní úřad", icon=":material/send:")
             
             if submit_spis:
-                if nazev_firmy and skolni_kod and cfo and cto and dan_souhlas and bozp_souhlas:
-                    u_num = 1 if "Level 1" in uroven else (2 if "Level 2" in uroven else 3)
+                if nazev_firmy and skolni_kod and cfo and cto and dan_souhlas and bozp_souhlas and kodex_souhlas:
+                    u_num = 1 if "Úroveň 1" in uroven else (2 if "Úroveň 2" in uroven else 3)
+                    souhrn_zameru = f"[{divize}] {predmet} | Sídlo: {sidlo} | Provozovna: {provozovna} | BOZP Garant: {bozp_garant} | Popis: {zamer}"
                     payload = {
                         "nazev_firmy": nazev_firmy,
                         "skolni_kod": skolni_kod,
@@ -191,23 +221,23 @@ with tab_zalozeni:
                         "ceo_jmeno": ceo,
                         "cfo_jmeno": cfo,
                         "cto_jmeno": cto,
-                        "podnikatelsky_zamer": f"[{divize}] {predmet} - {zamer}",
+                        "podnikatelsky_zamer": souhrn_zameru,
                         "pocatecni_kapital": vklad * 3,
                         "stave_licence": "CEKA_NA_SCHVALENI"
                     }
                     res_post = requests.post(f"{SUPABASE_URL}/rest/v1/firmy", headers=headers, json=payload)
                     if res_post.status_code in [200, 201]:
-                        st.success("Registrační spis byl úspěšně podán!")
+                        st.success("Kompletní registrační spis firmy byl úspěšně odeslán na Úřad!")
                         st.rerun()
                     else:
                         st.error(f"Chyba při podání spisu: {res_post.text}")
                 else:
-                    st.warning("Vyplňte všechny úřední kroky a potvrďte souhlasy.")
+                    st.warning("Vyplňte prosím všechna povinná pole na všech úřadech a zaškrtněte všechna prohlášení.")
 
 # --- TAB 2: LEAN CANVAS ---
 with tab_canvas:
     if not moje_firma:
-        st.warning("Nejprve musíte odeslat registrační spis.")
+        st.warning("Nejprve musíte podat registrační spis.")
     else:
         st.subheader("Strategický plán (Lean Canvas)")
         with st.form("form_canvas"):
@@ -230,7 +260,7 @@ with tab_canvas:
 # --- TAB 3: ZÁPISY Z PORAD ---
 with tab_porady:
     if not moje_firma:
-        st.warning("Nejprve musíte odeslat registrační spis.")
+        st.warning("Nejprve musíte podat registrační spis.")
     else:
         st.subheader("Zápisy z porad managementu (CEO, CFO, CTO)")
         with st.form("form_porada"):
@@ -258,7 +288,7 @@ with tab_porady:
 # --- TAB 4: KALKULAČNÍ LISTY ---
 with tab_kalkulace:
     if not moje_firma:
-        st.warning("Nejprve musíte odeslat registrační spis.")
+        st.warning("Nejprve musíte podat registrační spis.")
     else:
         st.subheader("Návrh nového produktu a Kalkulační vzorec")
         with st.form("form_kalkulace"):
@@ -283,7 +313,7 @@ with tab_kalkulace:
 # --- TAB 5: KNIHA PŘÍJMŮ A VÝDAJŮ ---
 with tab_ucto:
     if not moje_firma:
-        st.warning("Nejprve musíte odeslat registrační spis.")
+        st.warning("Nejprve musíte podat registrační spis.")
     else:
         st.subheader("Kniha příjmů a výdajů (Cash-flow)")
         with st.form("form_transakce"):
