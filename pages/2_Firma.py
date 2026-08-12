@@ -111,7 +111,6 @@ tab_zalozeni, tab_canvas, tab_porady, tab_hr, tab_kalkulace, tab_ucto = st.tabs(
 with tab_zalozeni:
     st.subheader("Registrační spis firmy – Úřední tiskopisy a stav podání")
     
-    # 1. ZOBRAZENÍ ODESLANÉHO SPISU (POKUD UŽ EXISTUJE)
     if moje_firma:
         st.success(f"EVIDOVANÝ REGISTRAČNÍ SPIS FIRMY: {moje_firma['nazev_firmy']}")
         
@@ -122,7 +121,7 @@ with tab_zalozeni:
                     <h4>1. Notářský zápis & Orgány s.r.o.</h4>
                     <p><b>Obchodní firma:</b> {moje_firma['nazev_firmy']}</p>
                     <p><b>Právní forma:</b> Společnost s ručením omezeným (s.r.o.)</p>
-                    <p><b>Úroveň integrace:</b> Úroveň {moje_firma['uroven_projektu']}</p>
+                    <p><b>Úroveň integrace:</b> Úroveň {moje_firma['uroven_projektu']} (Dle licencování školy)</p>
                     <p><b>Jednatel / CEO:</b> {moje_firma['ceo_jmeno']}</p>
                     <p><b>Finanční ředitel / CFO:</b> {moje_firma['cfo_jmeno']}</p>
                     <p><b>Technický ředitel / CTO:</b> {moje_firma['cto_jmeno']}</p>
@@ -168,7 +167,6 @@ with tab_zalozeni:
                 st.session_state.edit_spis = True
                 st.rerun()
 
-    # 2. ZOBRAZENÍ FORMULÁŘŮ PRO VYPLNĚNÍ (POKUD SPIS JEŠTĚ NEEXISTUJE NEBO SE UPRAVUJE)
     if not moje_firma or st.session_state.get("edit_spis", False):
         if st.session_state.get("edit_spis", False):
             st.warning("Režim úprav odeslaného registračního spisu:")
@@ -195,11 +193,7 @@ with tab_zalozeni:
                 st.session_state.reg_data["cto"] = st.text_input("1.6 Technický ředitel / CTO:", value=st.session_state.reg_data.get("cto", moje_firma['cto_jmeno'] if moje_firma else ""))
                 st.session_state.reg_data["vklad"] = st.number_input("1.7 Základní kapitál na člena (M-Kredity):", min_value=10, value=int(st.session_state.reg_data.get("vklad", 100)))
 
-            st.session_state.reg_data["uroven"] = st.radio("1.8 Zvolená úroveň integrace M-TECH CORE:", [
-                "Úroveň 1: Teoretický start-up (Inkubátor & Prototyp)", 
-                "Úroveň 2: Uzavřený školní trh (Virtuální M-Kredity)", 
-                "Úroveň 3: Plná integrace (Reálná odpovědnost & Unie rodičů)"
-            ])
+            st.caption("ℹ️ **Úroveň integrace (Level 1–3):** Bude automaticky přiřazena na základě zakoupené licenční smlouvy vaší školy a schválení vyučujícím.")
 
         # 2. ŽIVNOSTENSKÝ ÚŘAD (JRF)
         with u_zivnost:
@@ -214,22 +208,15 @@ with tab_zalozeni:
                 
             st.session_state.reg_data["zamer"] = st.text_area("2.5 Podrobný popis činnosti:", value=st.session_state.reg_data.get("zamer", ""))
 
-        # 3. FINANČNÍ ÚŘAD (DYNAMICKY UPRAVEN DLE ÚROVNĚ)
+        # 3. FINANČNÍ ÚŘAD
         with u_financak:
             st.markdown("**Formulář FÚ-5540: Přihláška k registraci k dani z příjmů a M-TECH dani**")
-            
-            je_uroven_3 = "Úroveň 3" in st.session_state.reg_data.get("uroven", "")
             
             col_f1, col_f2 = st.columns(2)
             with col_f1:
                 st.session_state.reg_data["zdani_obdobi"] = st.selectbox("3.1 Zdaňovací období:", ["Pololetní cyklus", "Měsíční tržní cyklus", "Celoroční maturitní projekt"])
             with col_f2:
-                if je_uroven_3:
-                    st.session_state.reg_data["ucet_pro_dan"] = st.text_input("3.2 Účet pro odvod daně:", value="Transparentní účet Unie rodičů M-TECH CORE (CZK)", disabled=True)
-                    st.caption("ℹ️ V Úrovni 3 se reálné odvody poukazují na transparentní účet Unie rodičů.")
-                else:
-                    st.session_state.reg_data["ucet_pro_dan"] = st.text_input("3.2 Účet pro odvod daně:", value="Interní virtuální účet M-TECH CORE (M-Kredity v aplikaci)", disabled=True)
-                    st.caption("ℹ️ V Úrovni 1 a 2 probíhá odvod daně čistě virtuálně ve fiktivních M-Kreditech uvnitř aplikace.")
+                st.session_state.reg_data["ucet_pro_dan"] = st.text_input("3.2 Režim správy M-TECH daně:", value="Přiřazuje vyučující dle zakoupené licence školy", disabled=True)
                 
             st.session_state.reg_data["dan_souhlas"] = st.checkbox("3.3 Zavazujeme se k řádnému odvodu M-TECH daně ze zisku (15–20 %).", value=st.session_state.reg_data.get("dan_souhlas", True))
 
@@ -252,7 +239,13 @@ with tab_zalozeni:
             if st.button("PODAT KOMPLETNÍ REGISTRAČNÍ SPIS NA KONTROLNÍ ÚŘAD", icon=":material/send:"):
                 d = st.session_state.reg_data
                 if d.get("nazev_firmy") and d.get("skolni_kod") and d.get("cfo") and d.get("cto") and d.get("dan_souhlas") and d.get("bozp_souhlas") and d.get("kodex_souhlas"):
-                    u_num = 1 if "Úroveň 1" in d.get("uroven", "") else (2 if "Úroveň 2" in d.get("uroven", "") else 3)
+                    
+                    # Načtení úrovně licence ze školního kódu
+                    u_kod = d.get("skolni_kod")
+                    res_lic = requests.get(f"{SUPABASE_URL}/rest/v1/licencovane_skoly?licencni_kod=eq.{u_kod}", headers=headers)
+                    lic_data = res_lic.json() if res_lic.status_code == 200 else []
+                    u_num = lic_data[0].get("uroven_projektu", 2) if lic_data else 2
+                    
                     souhrn_zameru = f"[{d.get('divize')}] {d.get('predmet')} | Sídlo: {d.get('sidlo')} | Provozovna: {d.get('provozovna')} | BOZP Garant: {d.get('bozp_garant')} | Popis: {d.get('zamer')}"
                     
                     payload = {
