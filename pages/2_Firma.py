@@ -96,11 +96,11 @@ with tab_zaklad:
                         "stave_licence": "CEKA_NA_SCHVALENI"
                     }
                     res_post = requests.post(f"{SUPABASE_URL}/rest/v1/firmy", headers=headers, json=payload)
-                    if res_post.status_code in [200, 201]:
+if res_post.status_code in [200, 201]:
                         st.success("Zakladatelská listina odeslána! Čeká na schválení učitelem.")
                         st.rerun()
                     else:
-                        st.error("Chyba při zakládání firmy.")
+                        st.error(f"Chyba při zakládání firmy: {res_post.text}")
                 else:
                     st.warning("Vyplňte všechny členy vedení i kód školy.")
 
