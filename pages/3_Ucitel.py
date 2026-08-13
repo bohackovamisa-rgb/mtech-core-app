@@ -646,7 +646,7 @@ with tab_hodnoceni:
     st.caption("AI asistent, který vám ušetří desítky hodin administrativy. Zde vidíte zdraví firem a aktivitu jednotlivých žáků.")
 
     # --- 1. FIREMNÍ SEMAFOR ---
-    st.markdown("#### 🚦 Firemní Semafor (Index zdraví)")
+    st.markdown("#### 🚦 Firemní Semafor (Index zdraví a Týmy)")
     
     semafor_data = []
     
@@ -664,13 +664,27 @@ with tab_hodnoceni:
         r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers).json()
         finance = r_ceo[0]['kredity'] if r_ceo else 0
         
+        # PŘIDÁNO: Získání všech členů týmu
+        clenove = []
+        if f.get('ceo_jmeno'): clenove.append(f"{f['ceo_jmeno']} (CEO)")
+        if f.get('cfo_jmeno'): clenove.append(f"{f['cfo_jmeno']} (CFO)")
+        if f.get('cto_jmeno'): clenove.append(f"{f['cto_jmeno']} (CTO)")
+        
+        res_zam = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{f_id_v}", headers=headers).json()
+        if res_zam:
+            for z in res_zam:
+                clenove.append(f"{z['jmeno_zamestnance']} (HR)")
+                
+        seznam_clenu = ", ".join(clenove) if clenove else "Bez členů"
+        
         semafor_data.append({
             "Firma": f['nazev_firmy'],
+            "Tým (Žáci)": seznam_clenu,
             "Rejstřík": rejstrik,
             "Lean Canvas": canvas_znak,
-            "E-shop (Produkty)": produkty_znak,
+            "E-shop": produkty_znak,
             "Daně": dane_znak,
-            "Zůstatek účtu (M-K)": round(finance, 2)
+            "Účet (M-K)": round(finance, 2)
         })
         
     if semafor_data:
@@ -692,27 +706,22 @@ with tab_hodnoceni:
             
             skore = (xp_celkem * 2) + majetek
             
-            if skore >= 400:
-                znamka = "1 (Výborný)"
-            elif skore >= 200:
-                znamka = "2 (Chvalitebný)"
-            elif skore >= 80:
-                znamka = "3 (Dobrý)"
-            elif skore >= 30:
-                znamka = "4 (Dostatečný)"
-            else:
-                znamka = "5 (Nedostatečný - Neaktivní)"
+            if skore >= 400: znamka = "1 (Výborný)"
+            elif skore >= 200: znamka = "2 (Chvalitebný)"
+            elif skore >= 80: znamka = "3 (Dobrý)"
+            elif skore >= 30: znamka = "4 (Dostatečný)"
+            else: znamka = "5 (Nedostatečný)"
             
             zaci_data.append({
                 "Jméno": z['jmeno'],
                 "Majetek (M-K)": round(majetek, 2),
-                "XP Body (Celkem)": xp_celkem,
-                "Aktivita (Skóre)": round(skore, 2),
+                "XP Body": xp_celkem,
+                "Skóre aktivity": round(skore, 2),
                 "Návrh známky": znamka
             })
         st.dataframe(pd.DataFrame(zaci_data), use_container_width=True)
         
-        # --- 3. AI SLOVNÍ HODNOCENÍ ---
+        # --- 3. AI SLOVNÍ HODNOCENÍ (OPRAVENO) ---
         st.write("---")
         st.markdown("#### 🤖 AI Generátor slovního hodnocení do Bakalářů")
         st.caption("Vyberte žáka. AI posoudí jeho data z celé hry a vygeneruje na míru psaný, profesionální posudek.")
@@ -730,25 +739,18 @@ with tab_hodnoceni:
                     
                     for f in firmy:
                         if f['ceo_jmeno'] == vybrany_zak_jmeno:
-                            firma_zaka = f['nazev_firmy']
-                            pozice = "CEO (Ředitel)"
-                            break
+                            firma_zaka = f['nazev_firmy']; pozice = "CEO (Ředitel)"; break
                         elif f.get('cfo_jmeno') == vybrany_zak_jmeno:
-                            firma_zaka = f['nazev_firmy']
-                            pozice = "CFO (Finanční ředitel)"
-                            break
+                            firma_zaka = f['nazev_firmy']; pozice = "CFO (Finanční ředitel)"; break
                         elif f.get('cto_jmeno') == vybrany_zak_jmeno:
-                            firma_zaka = f['nazev_firmy']
-                            pozice = "CTO (Technický ředitel)"
-                            break
+                            firma_zaka = f['nazev_firmy']; pozice = "CTO (Technický ředitel)"; break
                     
                     if firma_zaka == "Žádná (Freelancer na volné noze)":
                         vsechna_hr = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?jmeno_zamestnance=eq.{vybrany_zak_jmeno}", headers=headers).json()
                         if vsechna_hr:
                             pozice = vsechna_hr[0].get('pozice', 'Zaměstnanec')
                             f_info = next((f for f in firmy if f['id'] == vsechna_hr[0]['firma_id']), None)
-                            if f_info:
-                                firma_zaka = f_info['nazev_firmy']
+                            if f_info: firma_zaka = f_info['nazev_firmy']
                             
                     xp_c = vybrany_zak.get('xp_it', 0) + vybrany_zak.get('xp_marketing', 0) + vybrany_zak.get('xp_byznys', 0)
                     
@@ -764,17 +766,40 @@ with tab_hodnoceni:
                     gemini_key = st.secrets.get("GEMINI_API_KEY", "")
                     if gemini_key:
                         try:
-                            g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={gemini_key}"
-                            res_ai = requests.post(g_url, json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=20).json()
+                            # PŘIDÁNO: Dynamický vyhledávač funkčních modelů proti chybám Googlu
+                            list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={gemini_key}"
+                            models_data = requests.get(list_url, timeout=30).json()
                             
-                            if 'error' in res_ai:
-                                g_url_fallback = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={gemini_key}"
-                                res_ai = requests.post(g_url_fallback, json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=20).json()
+                            dostupne_modely = []
+                            if "models" in models_data:
+                                for m in models_data["models"]:
+                                    if "generateContent" in m.get("supportedGenerationMethods", []):
+                                        nazev = m["name"].replace("models/", "")
+                                        if "flash" in nazev and "vision" not in nazev and "audio" not in nazev:
+                                            dostupne_modely.insert(0, nazev)
+                                        else:
+                                            dostupne_modely.append(nazev)
+                            
+                            if not dostupne_modely:
+                                dostupne_modely = ["gemini-1.5-flash", "gemini-1.5-pro"]
 
-                            if 'error' in res_ai:
-                                st.error(f"Chyba AI: {res_ai['error']['message']}")
+                            p_load = {"contents": [{"parts": [{"text": prompt}]}]}
+                            uspesna_odpoved = None
+                            chyba_msg = ""
+                            
+                            for model in dostupne_modely:
+                                g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
+                                res_ai = requests.post(g_url, json=p_load, timeout=30).json()
+                                if 'error' not in res_ai:
+                                    uspesna_odpoved = res_ai
+                                    break
+                                else:
+                                    chyba_msg = res_ai['error']['message']
+                            
+                            if not uspesna_odpoved:
+                                st.error(f"Googlu selhaly všechny modely! Chyba: {chyba_msg}")
                             else:
-                                hodnotici_text = res_ai['candidates'][0]['content']['parts'][0]['text']
+                                hodnotici_text = uspesna_odpoved['candidates'][0]['content']['parts'][0]['text']
                                 st.markdown(f"<div style='background:rgba(16, 185, 129, 0.1); border-left:4px solid #10b981; padding: 15px; font-style: italic; border-radius: 5px;'>{hodnotici_text}</div>", unsafe_allow_html=True)
                         except Exception as e:
                             st.error(f"Chyba při generování: {e}")
