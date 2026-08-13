@@ -78,7 +78,7 @@ with tab_legal:
                 st.rerun()
 
 # ==========================================
-# ZÁLOŽKA 2: VIZE + SHARK TANK
+# ZÁLOŽKA 2: VIZE A AI (LEAN CANVAS + SHARK TANK)
 # ==========================================
 with tab_aktiva:
     canvas = requests.get(f"{SUPABASE_URL}/rest/v1/lean_canvas?firma_id=eq.{f_id}", headers=headers).json()
@@ -88,12 +88,22 @@ with tab_aktiva:
         st.markdown("#### Digitální aktiva")
         if firma.get('logo_url'): st.markdown(f"<a href='{firma['logo_url']}' class='asset-link' target='_blank'>Firemní Logo</a>", unsafe_allow_html=True)
         if firma.get('web_url'): st.markdown(f"<a href='{firma['web_url']}' class='asset-link' target='_blank'>Webové stránky</a>", unsafe_allow_html=True)
+    
     with col_a2:
         st.markdown("#### Strategie")
         if canvas:
-            with st.expander("Detail Lean Canvasu"):
-                st.write("**Problém:**", canvas[0]['problem'])
-                st.write("**Řešení:**", canvas[0]['reseni'])
+            with st.expander("Detail Lean Canvasu (8 bloků)"):
+                col_c1, col_c2 = st.columns(2)
+                with col_c1:
+                    st.write("**1. Problém:**", canvas[0].get('problem', ''))
+                    st.write("**3. Cílová skupina:**", canvas[0].get('cilova_skupina', ''))
+                    st.write("**5. Kanály:**", canvas[0].get('kanaly', ''))
+                    st.write("**7. Náklady:**", canvas[0].get('naklady', ''))
+                with col_c2:
+                    st.write("**2. Řešení:**", canvas[0].get('reseni', ''))
+                    st.write("**4. Unikátní hodnota:**", canvas[0].get('hodnota', ''))
+                    st.write("**6. Nefér výhoda:**", canvas[0].get('vyhoda', ''))
+                    st.write("**8. Příjmy:**", canvas[0].get('prijmy', ''))
         else:
             st.info("Firma zatím nedodala Lean Canvas.")
     
