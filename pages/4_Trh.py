@@ -24,7 +24,6 @@ if not st.session_state.get("prihlasen"):
     st.stop()
 
 st.title("Globální Tržiště M-TECH CORE")
-st.caption("Nakupujte produkty a služby od schválených studentských startupů. Platby probíhají v M-Kreditech.")
 
 try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"].rstrip("/")
@@ -35,15 +34,17 @@ except Exception:
     st.stop()
 
 uzivatel = st.session_state.get("uzivatel")
-aktualni_kredity = st.session_state.get("kredity", 0)
+res_u = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers)
+aktualni_kredity = res_u.json()[0]['kredity'] if res_u.status_code == 200 and res_u.json() else st.session_state.get("kredity", 0)
+st.session_state.kredity = aktualni_kredity
 
-st.markdown(f"### Vaše peněženka: <span style='color:#00B4D8;'>{aktualni_kredity} M-Kreditů</span>", unsafe_allow_html=True)
+st.markdown(f"### Vaše peněženka: <span style='color:#00B4D8;'>{aktualni_kredity:.2f} M-Kreditů</span>", unsafe_allow_html=True)
 st.write("---")
 
-res_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?select=id,nazev_firmy", headers=headers)
+res_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?select=id,nazev_firmy,ceo_jmeno", headers=headers)
 firmy_dict = {f['id']: f['nazev_firmy'] for f in res_firmy.json()} if res_firmy.status_code == 200 else {}
+firmy_ceo_dict = {f['id']: f['ceo_jmeno'] for f in res_firmy.json()} if res_firmy.status_code == 200 else {}
 
-# Načtení schválených produktů (s novými poli popis a obrazek_url)
 res_produkty = requests.get(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?schvaleno_uradem=eq.true", headers=headers)
 produkty = res_produkty.json() if res_produkty.status_code == 200 else []
 
@@ -51,13 +52,17 @@ if not produkty:
     st.info("Zatím zde nejsou žádné produkty. Firmy musí nejprve nechat schválit své kalkulace na Kontrolním úřadě.")
 else:
     cols = st.columns(3)
-    
     for index, p in enumerate(produkty):
         fid = p['firma_id']
         nazev_firmy = firmy_dict.get(fid, "Neznámá firma")
+        ceo_firmy = firmy_ceo_dict.get(fid, "Neznamy")
         cena = float(p['konecna_cena'])
+        dan_pct = float(p.get('mtech_dan_procento', 15.0))
         
-        # Ochrana, pokud chybí obrázek nebo popis
+        # Matematika daně
+        zaklad_dane = cena / (1 + (dan_pct / 100.0))
+        castka_dan = cena - zaklad_dane
+        
         obrazek = p.get('obrazek_url') or "https://via.placeholder.com/300x200/0f172a/00B4D8?text=Bez+fotografie"
         popis = p.get('popis') or "Prodejce zatím nedodal popis produktu."
         
@@ -78,17 +83,31 @@ else:
             
             if st.button("Koupit produkt", key=f"buy_{p['id']}", icon=":material/shopping_cart_checkout:", use_container_width=True):
                 if aktualni_kredity >= cena:
-                    novy_zustatek = aktualni_kredity - cena
-                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers, json={"kredity": novy_zustatek})
+                    # 1. Strhnout kupujícímu celou cenu
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers, json={"kredity": aktualni_kredity - cena})
+                    
+                    # 2. Přičíst zisk firmě (CEO)
+                    res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ceo_firmy}", headers=headers).json()
+                    if res_ceo:
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ceo_firmy}", headers=headers, json={"kredity": res_ceo[0]['kredity'] + zaklad_dane})
+                    
+                    # 3. Přičíst daň státu
+                    res_stat = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers).json()
+                    if res_stat:
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers, json={"kredity": res_stat[0]['kredity'] + castka_dan})
+                    
+                    # 4. Účetnictví firmy (Zapsat jen základ jako čistý příjem)
                     requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={
-                        "firma_id": fid, "typ_transakce": "PRIJEM", "titul": f"E-shop: {p['nazev_produktu']} (Kupující: {uzivatel})",
-                        "castka": cena, "auditovano": False
+                        "firma_id": fid, "typ_transakce": "PRIJEM", "titul": f"E-shop (Po zdanění): {p['nazev_produktu']}",
+                        "castka": zaklad_dane, "auditovano": False
                     })
+                    
+                    # 5. Zápis objednávky
                     requests.post(f"{SUPABASE_URL}/rest/v1/objednavky", headers=headers, json={
                         "kupujici": uzivatel, "prodavajici_firma_id": fid, "produkt": p['nazev_produktu'], "cena": cena
                     })
-                    st.session_state.kredity = novy_zustatek
-                    st.success(f"Úspěšně jste zakoupili {p['nazev_produktu']} za {cena:.2f} M-K!")
+                    
+                    st.success(f"Zakoupeno za {cena:.2f} M-K! (Z toho odvedena M-TECH daň {castka_dan:.2f} M-K státu).")
                     st.rerun()
                 else:
                     st.error(f"Nedostatek prostředků! Chybí vám {cena - aktualni_kredity:.2f} M-Kreditů.")
@@ -96,14 +115,8 @@ else:
 st.write("---")
 st.subheader("Moje historie nákupů")
 res_moje_objednavky = requests.get(f"{SUPABASE_URL}/rest/v1/objednavky?kupujici=eq.{uzivatel}&order=datum.desc", headers=headers)
-moje_objednavky = res_moje_objednavky.json() if res_moje_objednavky.status_code == 200 else []
-
-if moje_objednavky:
+if res_moje_objednavky.status_code == 200 and res_moje_objednavky.json():
     import pandas as pd
-    df = pd.DataFrame(moje_objednavky)
+    df = pd.DataFrame(res_moje_objednavky.json())
     df['Firma'] = df['prodavajici_firma_id'].map(lambda x: firmy_dict.get(x, "Neznámá firma"))
-    df_show = df[['datum', 'Firma', 'produkt', 'cena']]
-    df_show.columns = ['Datum', 'Prodejce', 'Produkt / Služba', 'Cena (M-K)']
-    st.dataframe(df_show, use_container_width=True)
-else:
-    st.info("Zatím jste neuskutečnili žádný nákup.")
+    st.dataframe(df[['datum', 'Firma', 'produkt', 'cena']], use_container_width=True)
