@@ -370,29 +370,18 @@ with tab_stat:
         st.info("Žádné firmy momentálně nečekají na daňový audit.")
 
 # ==========================================
-# ZÁLOŽKA 7: BANKA A CENÍK
+# ZÁLOŽKA 7: BANKA, CENÍK A BURZOVNÍ DOHLED
 # ==========================================
 with tab_banka:
-    st.subheader("Centrální Banka (Kurz, Daně a Ceník)")
+    st.subheader("Centrální Banka a Dozor nad Burzou")
     col_cb1, col_cb2 = st.columns(2)
     
     target_skola = skolni_kod_ucitele or firma.get('skolni_kod', '') or 'SYSTEM'
+    nastaveni_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers).json()
+    akt_nastaveni = nastaveni_res[0] if nastaveni_res else {}
     
     with col_cb1:
         st.markdown("#### Nastavení ekonomiky školy")
-        nastaveni_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers).json()
-        
-        if not nastaveni_res:
-            default_data = {
-                "skolni_kod": target_skola, "start_kredit_zak": 100, "start_kredit_firma": 300,
-                "mtech_dan_pct": 15.0, "dan_prijem_pct": 15.0, "kurz_kc": 10.0, 
-                "globalni_cenik": "=== FYZICKÁ VÝROBA ===\n• 3D Tisk: 5 M-K / hodina\n• Materiál: 10 M-K"
-            }
-            requests.post(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni", headers=headers, json=default_data)
-            akt_nastaveni = default_data
-        else:
-            akt_nastaveni = nastaveni_res[0]
-
         with st.form("form_makro"):
             st.caption(f"Pravidla platná pro školní kód: **{target_skola}**")
             n_kurz = st.number_input("Kurz M-Kreditu k CZK (1 M-K = X Kč):", min_value=1.0, value=float(akt_nastaveni.get('kurz_kc', 10.0)))
@@ -400,7 +389,7 @@ with tab_banka:
             n_firma = st.number_input("Startovací kredit pro FIRMU (M-K):", value=float(akt_nastaveni.get('start_kredit_firma', 300)))
             n_dan = st.number_input("M-TECH Daň pro e-shop (% z prodeje):", min_value=0.0, max_value=50.0, value=float(akt_nastaveni.get('mtech_dan_pct', 15.0)))
             n_dan_prijem = st.number_input("Daň z příjmu zaměstnanců (% ze mzdy):", min_value=0.0, max_value=50.0, value=float(akt_nastaveni.get('dan_prijem_pct', 15.0)))
-            n_cenik = st.text_area("Ceník pro výpočet nákladů:", value=str(akt_nastaveni.get('globalni_cenik', '')), height=300)
+            n_cenik = st.text_area("Ceník pro výpočet nákladů:", value=str(akt_nastaveni.get('globalni_cenik', '')), height=200)
             
             if st.form_submit_button("Uložit makroekonomická pravidla"):
                 requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={
@@ -411,6 +400,26 @@ with tab_banka:
                 st.rerun()
 
     with col_cb2:
+        st.markdown("#### 📰 Ovlivňování nálady na trhu (AI News)")
+        st.caption("Kliknutím vygenerujete zprávu z trhu, kterou uvidí všechny firmy. Zpráva vznikne na základě aktuálních krizí a dění.")
+        gemini_key = st.secrets.get("GEMINI_API_KEY", "")
+        
+        if st.button("Vygenerovat AI Burzovní zprávu", type="primary"):
+            with st.spinner("Generuji bleskovou zprávu na Wall Street..."):
+                if gemini_key:
+                    try:
+                        g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+                        prompt = f"""Jsi finanční reportér. Ve škole je aktivní krize: {akt_nastaveni.get('aktivni_krize', 'Zadna')}.
+                        Napiš stručný, úderný článek na Wall Street (1 věta titulek, 2 věty text), který to komentuje a radí, zda mají investoři nakupovat nebo prodávat akcie.
+                        Odpověz VÝHRADNĚ ve formátu JSON: {{"titulek": "...", "text_zpravy": "..."}}"""
+                        res_ai = requests.post(g_url, json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"response_mime_type": "application/json"}}, timeout=10).json()
+                        data_ai = json.loads(res_ai['candidates'][0]['content']['parts'][0]['text'])
+                        requests.post(f"{SUPABASE_URL}/rest/v1/burza_zpravy", headers=headers, json={"titulek": data_ai['titulek'], "text_zpravy": data_ai['text_zpravy']})
+                        st.rerun()
+                    except Exception:
+                        st.error("Nepodařilo se zprávu vygenerovat.")
+
+        st.write("---")
         st.markdown("#### Žádosti o podnikatelský úvěr")
         uvery = requests.get(f"{SUPABASE_URL}/rest/v1/bankovni_uvery?stav=eq.ZADOST", headers=headers).json()
         if uvery:
