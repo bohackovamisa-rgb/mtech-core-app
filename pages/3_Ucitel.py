@@ -82,7 +82,8 @@ with tab_legal:
         """, unsafe_allow_html=True)
         
     with col_l2:
-        st.markdown(f"<div class='card-box'><h4>Stav licence: <span class='{'status-ok' if firma['stave_licence'] == 'SCHVALENO' else 'status-wait'}'>{firma['stave_licence']}</span></h4></div>", unsafe_allow_html=True)
+        stav_tridy = 'status-ok' if firma['stave_licence'] == 'SCHVALENO' else 'status-wait'
+        st.markdown(f"<div class='card-box'><h4>Stav licence: <span class='{stav_tridy}'>{firma['stave_licence']}</span></h4></div>", unsafe_allow_html=True)
     
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
@@ -105,8 +106,10 @@ with tab_aktiva:
     col_a1, col_a2 = st.columns(2)
     with col_a1:
         st.markdown("#### Digitální aktiva")
-        if firma.get('logo_url'): st.markdown(f"<a href='{firma['logo_url']}' class='asset-link' target='_blank'>Firemní Logo</a>", unsafe_allow_html=True)
-        if firma.get('web_url'): st.markdown(f"<a href='{firma['web_url']}' class='asset-link' target='_blank'>Webové stránky</a>", unsafe_allow_html=True)
+        if firma.get('logo_url'): 
+            st.markdown(f"<a href='{firma['logo_url']}' class='asset-link' target='_blank'>Firemní Logo</a>", unsafe_allow_html=True)
+        if firma.get('web_url'): 
+            st.markdown(f"<a href='{firma['web_url']}' class='asset-link' target='_blank'>Webové stránky</a>", unsafe_allow_html=True)
     
     with col_a2:
         st.markdown("#### Strategie")
@@ -193,15 +196,22 @@ with tab_finance:
             stav = "VYŘEŠENO" if r['vysledek'] in ['SCHVALENO', 'ZAMITNUTO_POKUTA'] else "NEODPOVĚZENO"
             barva = "status-ok" if r['vysledek'] == 'SCHVALENO' else ("status-err" if r['vysledek'] == 'ZAMITNUTO_POKUTA' else "status-wait")
             
+            odpoved_firmy = r.get('odpoved_firmy')
+            if not odpoved_firmy:
+                odpoved_firmy = "<i>Zatím bez odpovědi.</i>"
+            
+            barva_odpovedi = '#10b981' if r['vysledek'] == 'SCHVALENO' else '#f43f5e'
+            hodnoceni = r.get('hodnoceni_ai', 'Čeká se na reakci firmy')
+            
             st.markdown(f"""
             <div class='card-box'>
                 <h5>Stěžovatel: {r['zakaznik_jmeno']} <span class='{barva}' style='float: right;'>{stav}</span></h5>
                 <p><b>Stížnost:</b> <i>"{r['text_stiznosti']}"</i></p>
-                <p style="background: rgba(0,0,0,0.2); padding: 10px; border-left: 3px solid {'#10b981' if r['vysledek'] == 'SCHVALENO' else '#f43f5e'};">
+                <p style="background: rgba(0,0,0,0.2); padding: 10px; border-left: 3px solid {barva_odpovedi};">
                     <b>Odpověď firmy:</b><br>
-                    {r.get('odpoved_firmy') if r.get('odpoved_firmy') else '<i>Zatím bez odpovědi.</i>'}
+                    {odpoved_firmy}
                 </p>
-                <p><b>Verdikt AI a dopad:</b> {r.get('hodnoceni_ai', 'Čeká se na reakci firmy')}</p>
+                <p><b>Verdikt AI a dopad:</b> {hodnoceni}</p>
             </div>
             """, unsafe_allow_html=True)
     else:
@@ -214,7 +224,8 @@ with tab_finance:
             neauditovane = [u for u in ucto if not u['auditovano']]
             if neauditovane:
                 if st.button("Provést hromadný audit (Schválit transakce)"):
-                    for u in neauditovane: requests.patch(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?id=eq.{u['id']}", headers=headers, json={"auditovano": True})
+                    for u in neauditovane: 
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?id=eq.{u['id']}", headers=headers, json={"auditovano": True})
                     st.rerun()
             df_show = pd.DataFrame(ucto)[['datum', 'typ_transakce', 'titul', 'castka', 'auditovano']]
             st.dataframe(df_show, use_container_width=True)
@@ -270,7 +281,14 @@ with tab_questy:
                         if res_r: 
                             z_data = res_r[0]
                             nove_kredity = z_data['kredity'] + q['odmena']
-                            xp_col = "xp_it" if kategorie_xp == "IT a Technologie" else "xp_marketing" if kategorie_xp == "Marketing a Kreativita" else "xp_byznys"
+                            
+                            if kategorie_xp == "IT a Technologie":
+                                xp_col = "xp_it"
+                            elif kategorie_xp == "Marketing a Kreativita":
+                                xp_col = "xp_marketing"
+                            else:
+                                xp_col = "xp_byznys"
+                                
                             nove_xp = z_data.get(xp_col, 0) + pocet_xp
                             requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{q['resitel']}", headers=headers, json={"kredity": nove_kredity, xp_col: nove_xp})
                         
@@ -278,7 +296,8 @@ with tab_questy:
                         requests.post(f"{SUPABASE_URL}/rest/v1/bankovni_prevody", headers=headers, json={"odesilatel": "Stát", "prijemce": q['resitel'], "castka": q['odmena'], "ucel": f"Odměna za: {q['nazev']} (+ {pocet_xp} XP)"})
                         st.success("Odměna i XP body odeslány!")
                         st.rerun()
-        else: st.info("Žádné úkoly nečekají na schválení.")
+        else:
+            st.info("Žádné úkoly nečekají na schválení.")
 
 # ==========================================
 # ZÁLOŽKA 6: STÁTNÍ POKLADNA A AI DAŇOVÝ AUDIT
@@ -294,13 +313,15 @@ with tab_stat:
         castka_dotace = st.number_input("Výše grantu (M-K):", min_value=1.0, value=100.0)
         ucel_dotace = st.text_input("Účel grantu:", value="Státní podpora inovací")
         if st.form_submit_button("Schválit dotační program"):
-            if castka_dotace > stat_kredity: st.error("Nedostatek prostředků ve státní pokladně.")
+            if castka_dotace > stat_kredity:
+                st.error("Nedostatek prostředků ve státní pokladně.")
             else:
                 firma_prijemce = next((f for f in firmy if f["nazev_firmy"] == vybrana_dotace_firma), None)
                 if firma_prijemce:
                     requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers, json={"kredity": stat_kredity - castka_dotace})
                     r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{firma_prijemce['ceo_jmeno']}", headers=headers).json()
-                    if r_ceo: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{firma_prijemce['ceo_jmeno']}", headers=headers, json={"kredity": r_ceo[0]['kredity'] + castka_dotace})
+                    if r_ceo:
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{firma_prijemce['ceo_jmeno']}", headers=headers, json={"kredity": r_ceo[0]['kredity'] + castka_dotace})
                     requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": firma_prijemce["id"], "typ_transakce": "PRIJEM", "titul": f"Státní dotace: {ucel_dotace}", "castka": castka_dotace, "auditovano": True})
                     st.rerun()
 
@@ -380,6 +401,7 @@ with tab_stat:
                             
                             requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers, json={"kredity": stat_kredity + vymere_penale})
                             requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": p['firma_id'], "typ_transakce": "VYDAJ", "titul": f"PENÁLE OD FÚ: {zprava}", "castka": vymere_penale, "auditovano": True})
+                        
                         requests.patch(f"{SUPABASE_URL}/rest/v1/danova_priznani?id=eq.{p['id']}", headers=headers, json={"stav": "ZAMITNUTO_PENALE"})
                         st.error(f"Inspektor: {zprava} (Strženo {vymere_penale} M-K)")
                     
