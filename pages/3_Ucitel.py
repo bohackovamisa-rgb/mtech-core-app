@@ -17,6 +17,8 @@ st.markdown("""
     .status-err { color: #f87171; font-weight: 700; background: rgba(239, 68, 68, 0.1); padding: 4px 8px; border-radius: 6px; }
     .asset-link { color: #00B4D8; font-weight: bold; text-decoration: none; }
     .asset-link:hover { text-decoration: underline; color: #0077B6; }
+    details { background: rgba(255,255,255,0.05); padding: 10px; border-radius: 5px; margin-top: 10px; }
+    summary { font-weight: bold; cursor: pointer; color: #00B4D8; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -49,7 +51,7 @@ firma = next(f for f in firmy if f["nazev_firmy"] == vybrana_firma_nazev)
 f_id = firma["id"]
 
 tab_legal, tab_aktiva, tab_hr, tab_finance, tab_questy, tab_stat, tab_banka, tab_krize = st.tabs([
-    "1. Spis", "2. Vize", "3. HR", "4. E-shop", "5. Úřad práce a XP", "6. Státní pokladna a Daně", "7. Banka a Ceník", "8. Krizové řízení"
+    "1. Spis", "2. Vize a AI", "3. HR", "4. E-shop a Zákazníci", "5. Úřad práce a XP", "6. Státní pokladna a Daně", "7. Banka a Ceník", "8. Krizové řízení"
 ])
 
 with tab_legal:
@@ -71,16 +73,17 @@ with tab_legal:
                 requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{f_id}", headers=headers, json={"stave_licence": "ZAMITNUTO", "duvod_zamitnuti": duvod})
                 st.rerun()
 
+# ==========================================
+# ZÁLOŽKA 2: VIZE + SHARK TANK
+# ==========================================
 with tab_aktiva:
     canvas = requests.get(f"{SUPABASE_URL}/rest/v1/lean_canvas?firma_id=eq.{f_id}", headers=headers).json()
-    reporty = requests.get(f"{SUPABASE_URL}/rest/v1/firemni_reporty?firma_id=eq.{f_id}&order=datum_odevzdani.desc", headers=headers).json()
     
     col_a1, col_a2 = st.columns(2)
     with col_a1:
         st.markdown("#### Digitální aktiva")
         if firma.get('logo_url'): st.markdown(f"<a href='{firma['logo_url']}' class='asset-link' target='_blank'>Firemní Logo</a>", unsafe_allow_html=True)
         if firma.get('web_url'): st.markdown(f"<a href='{firma['web_url']}' class='asset-link' target='_blank'>Webové stránky</a>", unsafe_allow_html=True)
-        if firma.get('promo_url'): st.markdown(f"<a href='{firma['promo_url']}' class='asset-link' target='_blank'>Prezentace</a>", unsafe_allow_html=True)
     with col_a2:
         st.markdown("#### Strategie")
         if canvas:
@@ -91,11 +94,32 @@ with tab_aktiva:
             st.info("Firma zatím nedodala Lean Canvas.")
     
     st.write("---")
-    st.markdown("#### Vykázané reporty")
-    if reporty:
-        for r in reporty: st.markdown(f"<a href='{r['odkaz_soubor']}' class='asset-link' target='_blank'>Zobrazit: {r['nazev_reportu']} ({r['typ_reportu']})</a>", unsafe_allow_html=True)
+    st.markdown("#### 🦈 Historie AI Shark Tank (Pitching)")
+    st.caption("Náhled toho, jak se firma prezentovala před umělou inteligencí.")
+    
+    res_pitches = requests.get(f"{SUPABASE_URL}/rest/v1/ai_pitches?firma_id=eq.{f_id}&order=datum.desc", headers=headers).json()
+    if res_pitches:
+        for p in res_pitches:
+            stav = "SCHVÁLENO" if p['schvaleno_investovano'] else "ZAMÍTNUTO"
+            barva = "status-ok" if p['schvaleno_investovano'] else "status-err"
+            st.markdown(f"""
+            <div class='card-box'>
+                <h5>Projekt: {p['nazev_pitchu']} <span class='{barva}' style='float: right;'>{stav}</span></h5>
+                <p><b>Požadováno:</b> {p['zadana_castka']} M-K za {p['nabizene_akcie']} ks akcií</p>
+                <p style="background: rgba(0,0,0,0.2); padding: 10px; border-left: 3px solid #00B4D8;">
+                    <b>Pitch žáků:</b><br>
+                    <i>"{p['popis_projektu']}"</i>
+                </p>
+                <details>
+                    <summary>Rozbalit verdikt AI investorů</summary>
+                    <p>{p['hodnoceni_ostry']}</p>
+                    <p>{p['hodnoceni_vizionarka']}</p>
+                    <p>{p['hodnoceni_rychly']}</p>
+                </details>
+            </div>
+            """, unsafe_allow_html=True)
     else:
-        st.info("Firma zatím neodevzdala žádný report.")
+        st.info("Firma zatím před investory nevystoupila.")
 
 with tab_hr:
     st.markdown("#### Mzdový a personální audit")
@@ -106,6 +130,9 @@ with tab_hr:
     else: 
         st.info("Firma zatím neeviduje žádné zaměstnance.")
 
+# ==========================================
+# ZÁLOŽKA 4: E-SHOP + ZÁKAZNICKÁ PODPORA
+# ==========================================
 with tab_finance:
     st.markdown("#### Schvalování produktů pro Tržiště")
     kalkulace = requests.get(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?firma_id=eq.{f_id}", headers=headers).json()
@@ -121,18 +148,42 @@ with tab_finance:
         st.info("Žádné kalkulace ke schválení.")
 
     st.write("---")
-    st.markdown("#### Účetní audit a kniha transakcí")
-    ucto = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{f_id}&order=datum.desc", headers=headers).json()
-    if ucto:
-        neauditovane = [u for u in ucto if not u['auditovano']]
-        if neauditovane:
-            if st.button("Provést hromadný audit (Schválit transakce)"):
-                for u in neauditovane: requests.patch(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?id=eq.{u['id']}", headers=headers, json={"auditovano": True})
-                st.rerun()
-        df_show = pd.DataFrame(ucto)[['datum', 'typ_transakce', 'titul', 'castka', 'auditovano']]
-        st.dataframe(df_show, use_container_width=True)
+    st.markdown("#### 📧 AI Zákaznická podpora (Reklamace)")
+    st.caption("Zde vidíte, jak žáci komunikují se zákazníky a řeší stížnosti.")
+    
+    reklamace_list = requests.get(f"{SUPABASE_URL}/rest/v1/ai_reklamace?firma_id=eq.{f_id}&order=datum.desc", headers=headers).json()
+    if reklamace_list:
+        for r in reklamace_list:
+            stav = "VYŘEŠENO" if r['vysledek'] in ['SCHVALENO', 'ZAMITNUTO_POKUTA'] else "NEODPOVĚZENO"
+            barva = "status-ok" if r['vysledek'] == 'SCHVALENO' else ("status-err" if r['vysledek'] == 'ZAMITNUTO_POKUTA' else "status-wait")
+            
+            st.markdown(f"""
+            <div class='card-box'>
+                <h5>Stěžovatel: {r['zakaznik_jmeno']} <span class='{barva}' style='float: right;'>{stav}</span></h5>
+                <p><b>Stížnost:</b> <i>"{r['text_stiznosti']}"</i></p>
+                <p style="background: rgba(0,0,0,0.2); padding: 10px; border-left: 3px solid {'#10b981' if r['vysledek'] == 'SCHVALENO' else '#f43f5e'};">
+                    <b>Odpověď firmy:</b><br>
+                    {r.get('odpoved_firmy') if r.get('odpoved_firmy') else '<i>Zatím bez odpovědi.</i>'}
+                </p>
+                <p><b>Verdikt AI a dopad:</b> {r.get('hodnoceni_ai', 'Čeká se na reakci firmy')}</p>
+            </div>
+            """, unsafe_allow_html=True)
     else:
-        st.info("Kniha transakcí je zatím prázdná.")
+        st.info("Firma zatím neměla žádné reklamace.")
+
+    st.write("---")
+    with st.expander("Účetní audit a kniha transakcí (Zobrazit)"):
+        ucto = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{f_id}&order=datum.desc", headers=headers).json()
+        if ucto:
+            neauditovane = [u for u in ucto if not u['auditovano']]
+            if neauditovane:
+                if st.button("Provést hromadný audit (Schválit transakce)"):
+                    for u in neauditovane: requests.patch(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?id=eq.{u['id']}", headers=headers, json={"auditovano": True})
+                    st.rerun()
+            df_show = pd.DataFrame(ucto)[['datum', 'typ_transakce', 'titul', 'castka', 'auditovano']]
+            st.dataframe(df_show, use_container_width=True)
+        else:
+            st.info("Kniha transakcí je zatím prázdná.")
 
 with tab_questy:
     st.subheader("Správa úkolů a přidělování XP bodů")
@@ -327,9 +378,6 @@ with tab_banka:
                         st.rerun()
         else: st.info("Centrální banka neeviduje žádné čekající žádosti o úvěr.")
 
-# ==========================================
-# 8. KRIZOVÉ ŘÍZENÍ S DYNAMICKÝM NASTAVENÍM
-# ==========================================
 with tab_krize:
     st.subheader("Krizové řízení a Řízení intenzity krizí")
     st.caption("Plošné krizové akce. Zde můžete libovolně nastavit procentuální nebo finanční sílu jednotlivých dopadů!")
