@@ -408,26 +408,31 @@ with col_cb2:
             with st.spinner("Generuji bleskovou zprávu na Wall Street..."):
                 if gemini_key:
                     try:
-                        # ZMĚNA 1: Přesnější název nejnovějšího modelu
-                        g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={gemini_key}"
-                        
                         prompt = f"""Jsi finanční reportér. Ve škole je aktivní krize: {akt_nastaveni.get('aktivni_krize', 'Zadna')}.
                         Napiš stručný, úderný článek (1 věta titulek, 2 věty text), který komentuje náladu na trhu. Nedávej konkrétní investiční rady.
                         Odpověz VÝHRADNĚ jako čistý JSON objekt: {{"titulek": "...", "text_zpravy": "..."}}"""
                         
-                        p_load = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"response_mime_type": "application/json"}}
-                        res_ai = requests.post(g_url, json=p_load, timeout=10).json()
+                        p_load = {"contents": [{"parts": [{"text": prompt}]}]}
                         
-                        # ZMĚNA 2: Automatické záchranné lano (Fallback na 'gemini-pro')
-                        if 'error' in res_ai:
-                            g_url_fallback = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={gemini_key}"
-                            res_ai = requests.post(g_url_fallback, json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=10).json()
-                            
-                        if 'error' in res_ai:
-                            st.error(f"Chyba u Google AI: {res_ai['error']['message']}")
+                        # NEPRŮSTŘELNÁ SMYČKA: Zkusí všechny dostupné Google modely
+                        dostupne_modely = ["gemini-1.5-flash", "gemini-1.0-pro", "gemini-1.5-pro"]
+                        uspesna_odpoved = None
+                        chyba_msg = ""
+                        
+                        for model in dostupne_modely:
+                            g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
+                            res = requests.post(g_url, json=p_load, timeout=10).json()
+                            if 'error' not in res:
+                                uspesna_odpoved = res
+                                break
+                            else:
+                                chyba_msg = res['error']['message']
+                                
+                        if not uspesna_odpoved:
+                            st.error(f"Google AI odmítlo všechny modely. Poslední chyba: {chyba_msg}")
                         else:
-                            # Očištění textu pro jistotu (gemini-pro občas posílá formátování navíc)
-                            raw_text = res_ai['candidates'][0]['content']['parts'][0]['text']
+                            # Očištění textu pro jistotu
+                            raw_text = uspesna_odpoved['candidates'][0]['content']['parts'][0]['text']
                             clean_text = raw_text.replace("```json", "").replace("```", "").strip()
                             data_ai = json.loads(clean_text)
                             
