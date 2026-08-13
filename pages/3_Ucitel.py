@@ -399,7 +399,7 @@ with tab_banka:
                 st.success("Ekonomika byla úspěšně uložena!")
                 st.rerun()
 
-    with col_cb2:
+with col_cb2:
         st.markdown("#### 📰 Ovlivňování nálady na trhu (AI News)")
         st.caption("Kliknutím vygenerujete zprávu z trhu, kterou uvidí všechny firmy. Zpráva vznikne na základě aktuálních krizí a dění.")
         gemini_key = st.secrets.get("GEMINI_API_KEY", "")
@@ -409,15 +409,30 @@ with tab_banka:
                 if gemini_key:
                     try:
                         g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+                        # Zmírněný prompt bez zakázaných "finančních rad"
                         prompt = f"""Jsi finanční reportér. Ve škole je aktivní krize: {akt_nastaveni.get('aktivni_krize', 'Zadna')}.
-                        Napiš stručný, úderný článek na Wall Street (1 věta titulek, 2 věty text), který to komentuje a radí, zda mají investoři nakupovat nebo prodávat akcie.
-                        Odpověz VÝHRADNĚ ve formátu JSON: {{"titulek": "...", "text_zpravy": "..."}}"""
-                        res_ai = requests.post(g_url, json={"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"response_mime_type": "application/json"}}, timeout=10).json()
-                        data_ai = json.loads(res_ai['candidates'][0]['content']['parts'][0]['text'])
-                        requests.post(f"{SUPABASE_URL}/rest/v1/burza_zpravy", headers=headers, json={"titulek": data_ai['titulek'], "text_zpravy": data_ai['text_zpravy']})
-                        st.rerun()
-                    except Exception:
-                        st.error("Nepodařilo se zprávu vygenerovat.")
+                        Napiš stručný, úderný článek (1 věta titulek, 2 věty text), který komentuje náladu na trhu. Nedávej konkrétní investiční rady.
+                        Odpověz VÝHRADNĚ jako čistý JSON objekt: {{"titulek": "...", "text_zpravy": "..."}}"""
+                        
+                        p_load = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"response_mime_type": "application/json"}}
+                        res_ai = requests.post(g_url, json=p_load, timeout=10).json()
+                        
+                        # Pokus o přečtení odpovědi
+                        if 'error' in res_ai:
+                            st.error(f"Chyba u Google AI: {res_ai['error']['message']}")
+                        else:
+                            data_ai = json.loads(res_ai['candidates'][0]['content']['parts'][0]['text'])
+                            
+                            # Uložení do databáze
+                            res_db = requests.post(f"{SUPABASE_URL}/rest/v1/burza_zpravy", headers=headers, json={"titulek": data_ai['titulek'], "text_zpravy": data_ai['text_zpravy']})
+                            
+                            if res_db.status_code in [200, 201]:
+                                st.success("Zpráva úspěšně vydána na trh!")
+                                st.rerun()
+                            else:
+                                st.error(f"Chyba při ukládání do DB. Byla vytvořena tabulka burza_zpravy? Detail: {res_db.text}")
+                    except Exception as e:
+                        st.error(f"Kritická chyba v kódu: {str(e)}")
 
         st.write("---")
         st.markdown("#### Žádosti o podnikatelský úvěr")
@@ -441,7 +456,6 @@ with tab_banka:
                         requests.patch(f"{SUPABASE_URL}/rest/v1/bankovni_uvery?id=eq.{u['id']}", headers=headers, json={"stav": "ZAMITNUTO"})
                         st.rerun()
         else: st.info("Centrální banka neeviduje žádné čekající žádosti o úvěr.")
-
 # ==========================================
 # ZÁLOŽKA 8: KRIZOVÉ ŘÍZENÍ
 # ==========================================
