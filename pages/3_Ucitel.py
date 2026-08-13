@@ -643,23 +643,22 @@ with tab_krize:
 # ==========================================
 with tab_hodnoceni:
     st.subheader("Celkový přehled a automatické hodnocení")
-    st.caption("AI asistent, který vám ušetří desítky hodin administrativy. Zde vidíte zdraví firem a aktivitu jednotlivých žáků.")
+    st.caption("AI asistent, který analyzuje aktivitu, účetnictví, odpracované hodiny ve výrobě i týmové hodnocení.")
 
     # --- 1. FIREMNÍ SEMAFOR ---
-    st.markdown("#### 🚦 Firemní Semafor (Index zdraví a Týmy)")
+    st.markdown("#### Firemní Semafor (Index zdraví a Týmy)")
     
     semafor_data = []
-    
     all_canvas = requests.get(f"{SUPABASE_URL}/rest/v1/lean_canvas?select=firma_id", headers=headers).json()
     all_produkty = requests.get(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?select=firma_id", headers=headers).json()
     all_dane = requests.get(f"{SUPABASE_URL}/rest/v1/danova_priznani?select=firma_id,stav", headers=headers).json()
     
     for f in firmy:
         f_id_v = f['id']
-        rejstrik = "✅" if f['stave_licence'] == 'SCHVALENO' else ("❌ Zrušeno" if f['stave_licence'] == 'UKONCENO' else "⏳ Čeká")
-        canvas_znak = "✅" if any(c['firma_id'] == f_id_v for c in all_canvas) else "❌"
-        produkty_znak = "✅" if any(p['firma_id'] == f_id_v for p in all_produkty) else "❌"
-        dane_znak = "✅" if any(d['firma_id'] == f_id_v for d in all_dane) else "❌"
+        rejstrik = "SCHVALENO" if f['stave_licence'] == 'SCHVALENO' else ("UKONCENO" if f['stave_licence'] == 'UKONCENO' else "CEKA")
+        canvas_znak = "ANO" if any(c['firma_id'] == f_id_v for c in all_canvas) else "NE"
+        produkty_znak = "ANO" if any(p['firma_id'] == f_id_v for p in all_produkty) else "NE"
+        dane_znak = "ANO" if any(d['firma_id'] == f_id_v for d in all_dane) else "NE"
         
         r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers).json()
         finance = r_ceo[0]['kredity'] if r_ceo else 0
@@ -671,8 +670,7 @@ with tab_hodnoceni:
         
         res_zam = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{f_id_v}", headers=headers).json()
         if res_zam:
-            for z in res_zam:
-                clenove.append(f"{z['jmeno_zamestnance']} (HR)")
+            for z in res_zam: clenove.append(f"{z['jmeno_zamestnance']} (HR)")
                 
         seznam_clenu = ", ".join(clenove) if clenove else "Bez členů"
         
@@ -694,7 +692,7 @@ with tab_hodnoceni:
     st.write("---")
 
     # --- 2. ŽEBŘÍČEK ŽÁKŮ ---
-    st.markdown("#### 🎓 Aktivita žáků a návrh známek")
+    st.markdown("#### Aktivita žáků a návrh známek")
     zaci = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak&order=kredity.desc", headers=headers).json()
     
     if zaci:
@@ -702,7 +700,6 @@ with tab_hodnoceni:
         for z in zaci:
             xp_celkem = z.get('xp_it', 0) + z.get('xp_marketing', 0) + z.get('xp_byznys', 0)
             majetek = z.get('kredity', 0)
-            
             skore = (xp_celkem * 2) + majetek
             
             if skore >= 400: znamka = "1 (Výborný)"
@@ -720,44 +717,58 @@ with tab_hodnoceni:
             })
         st.dataframe(pd.DataFrame(zaci_data), use_container_width=True)
         
-        # --- 3. TÝMOVÉ A INDIVIDUÁLNÍ AI HODNOCENÍ ---
+        # --- 3. KOMPLEXNÍ AI HODNOCENÍ TÝMU ---
         st.write("---")
-        st.markdown(f"#### 🤖 AI Týmové hodnocení do Bakalářů (Firma: {firma['nazev_firmy']})")
-        st.caption("AI vygeneruje hodnocení pouze pro žáky z aktuálně vybrané firmy.")
+        st.markdown(f"#### AI Týmové hodnocení do Bakalářů (Firma: {firma['nazev_firmy']})")
+        st.caption("AI vygeneruje posudek pro žáky z vybrané firmy na základě jejich rolí, odpracovaných hodin ve výrobě i hodnocení od kolektivu.")
         
         if st.button(f"Vygenerovat posudky pro celý tým {firma['nazev_firmy']}", type="primary"):
-            with st.spinner(f"AI analyzuje výsledky týmu {firma['nazev_firmy']}..."):
+            with st.spinner(f"AI analyzuje výsledky, deníky práce a týmové recenze firmy {firma['nazev_firmy']}..."):
                 clenove_k_hodnoceni = []
-                # Vedení
                 if firma.get('ceo_jmeno'): clenove_k_hodnoceni.append({"jmeno": firma['ceo_jmeno'], "role": "CEO"})
                 if firma.get('cfo_jmeno'): clenove_k_hodnoceni.append({"jmeno": firma['cfo_jmeno'], "role": "CFO"})
                 if firma.get('cto_jmeno'): clenove_k_hodnoceni.append({"jmeno": firma['cto_jmeno'], "role": "CTO"})
                 
-                # Zaměstnanci z HR
                 res_z_hod = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{f_id}", headers=headers).json()
                 if res_z_hod:
-                    for zh in res_z_hod:
-                        clenove_k_hodnoceni.append({"jmeno": zh['jmeno_zamestnance'], "role": zh.get('pozice', 'Zaměstnanec')})
+                    for zh in res_z_hod: clenove_k_hodnoceni.append({"jmeno": zh['jmeno_zamestnance'], "role": zh.get('pozice', 'Zaměstnanec')})
                 
                 if not clenove_k_hodnoceni:
                     st.warning("Tato firma zatím nemá žádné členy.")
                 else:
                     seznam_pro_ai = []
                     for clen in clenove_k_hodnoceni:
+                        # Načtení dat o žákovi
                         r_zak = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{clen['jmeno']}", headers=headers).json()
-                        if r_zak:
-                            z_d = r_zak[0]
-                            xp_c = z_d.get('xp_it', 0) + z_d.get('xp_marketing', 0) + z_d.get('xp_byznys', 0)
-                            seznam_pro_ai.append(f"Žák: {clen['jmeno']}, Role: {clen['role']} ve firmě {firma['nazev_firmy']}, Získané XP: {xp_c}, Majetek: {z_d.get('kredity',0)} MK.")
+                        z_d = r_zak[0] if r_zak else {}
+                        xp_c = z_d.get('xp_it', 0) + z_d.get('xp_marketing', 0) + z_d.get('xp_byznys', 0)
+                        
+                        # Načtení deníku práce (výroba/manuální práce)
+                        res_dp = requests.get(f"{SUPABASE_URL}/rest/v1/denik_prace?jmeno_zaka=eq.{clen['jmeno']}", headers=headers).json()
+                        celkem_hodin = sum(item.get('hodiny', 0) for item in res_dp) if res_dp else 0
+                        popisy_prace = "; ".join([item.get('popis_prace', '') for item in res_dp]) if res_dp else "Žádné zápisy v deníku práce."
+                        
+                        # Načtení týmového hodnocení (peer review)
+                        res_peer = requests.get(f"{SUPABASE_URL}/rest/v1/peer_review?hodnoceny=eq.{clen['jmeno']}", headers=headers).json()
+                        prumer_peer = (sum(p.get('body', 5) for p in res_peer) / len(res_peer)) if res_peer else 5.0
+                        komentare_peer = "; ".join([p.get('komentar', '') for p in res_peer if p.get('komentar')]) if res_peer else "Bez komentářů od týmu."
+                        
+                        seznam_pro_ai.append(
+                            f"Žák: {clen['jmeno']}, Role: {clen['role']} ve firmě {firma['nazev_firmy']}.\n"
+                            f"  - Financování: {z_d.get('kredity',0)} MK, XP body: {xp_c}.\n"
+                            f"  - Výroba/Manuální práce: Odpracováno {celkem_hodin} hodin. Záznamy: {popisy_prace}\n"
+                            f"  - Hodnocení od spolužáků v týmu: {prumer_peer:.1f}/5. Poznámky od kolegů: {komentare_peer}\n"
+                        )
                     
                     text_zaku = "\n".join(seznam_pro_ai)
                     
-                    prompt = f"""Jsi učitel ekonomiky a praxe. Napiš formální slovní hodnocení do Bakalářů pro žáky z jednoho firemního týmu.
-                    Zhodnoť u každého jeho roli, nasbírané body (XP) a vydělané peníze. Hodnocení ať má 2-3 věty na žáka.
+                    prompt = f"""Jsi učitel ekonomiky a praktického vyučování. Napiš formální slovní hodnocení do školního systému pro žáky z jednoho firemního týmu.
+                    Ber v úvahu nejen finanční výsledky a XP body, ale hlavně jejich odpracované hodiny ve výrobě/dílně a hodnocení, které jim udělili vlastní spoluhráči v týmu.
                     
-                    DATA TÝMU:
+                    PODKLADY O ŽÁCÍCH:
                     {text_zaku}
                     
+                    Napiš výstižný posudek (2-4 věty na žáka), který objektivně zhodnotí jeho reálný přínos pro firmu.
                     Odpověz VÝHRADNĚ ve formátu JSON jako pole objektů. Příklad:
                     [ {{"jmeno": "Jméno Žáka", "hodnoceni": "Text posudku..."}} ]"""
                     
@@ -775,27 +786,19 @@ with tab_hodnoceni:
                             for model in dostupne_modely:
                                 g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
                                 res_ai = requests.post(g_url, json=p_load, timeout=30).json()
-                                if 'error' not in res_ai: uspesna_odpoved = res_ai; break
+                                if 'error' not in res_ai:
+                                    uspesna_odpoved = res_ai
+                                    break
                             
                             if uspesna_odpoved:
                                 raw_text = uspesna_odpoved['candidates'][0]['content']['parts'][0]['text']
                                 clean_text = raw_text.replace("```json", "").replace("```", "").strip()
                                 data_ai = json.loads(clean_text)
-                                st.success(f"Hodnocení pro tým {firma['nazev_firmy']} vygenerováno!")
+                                st.success(f"Komplexní hodnocení pro tým {firma['nazev_firmy']} bylo úspěšně vygenerováno.")
                                 st.dataframe(pd.DataFrame(data_ai), use_container_width=True)
                             else:
-                                st.error("Chyba při generování (API Googlu neodpovědělo včas).")
+                                st.error("Chyba při komunikaci s AI.")
                         except Exception as e:
                             st.error(f"Kritická chyba: {e}")
-
-        # Ponechání možnosti ohodnotit jednotlivce (např. freelancery bez firmy)
-        with st.expander("Nebo vygenerovat hodnocení pro jednoho konkrétního žáka / freelancera"):
-            col_ai1, col_ai2 = st.columns([1, 2])
-            with col_ai1:
-                vybrany_zak_indiv = st.selectbox("Vyberte žáka:", [z['jmeno'] for z in zaci], key="indiv_zak")
-            
-            if st.button("Generovat posudek pro jednotlivce"):
-                # Pro jednoduchost se zde provede rychlý prompt na vybraného žáka
-                st.info("Zkuste využít generování po týmech výše, je to efektivnější! Pokud žák nemá firmu, můžete to v budoucnu generovat zde.")
     else:
         st.info("V systému zatím nejsou zaregistrováni žádní žáci.")
