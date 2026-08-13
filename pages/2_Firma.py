@@ -627,68 +627,120 @@ with tab_burza:
                             st.rerun()
                         else: st.error("Nedostatek prostředků na vyplacení dividend.")
 # ==========================================
-# DENÍK PRÁCE A TÝMOVÉ HODNOCENÍ
+# DENÍK PRÁCE A TÝMOVÉ HODNOCENÍ (DLE ROLÍ)
 # ==========================================
 st.write("---")
-st.subheader("Deník práce a Hodnocení týmu")
+st.subheader("Deník práce a Týmové hodnocení")
 
-tab_vykaz, tab_peer = st.tabs(["1. Zapsat odpracovanou práci", "2. Hodnocení kolegů v týmu"])
+# Zjištění přesné role přihlášeného žáka
+moje_jmeno = st.session_state.get("uzivatel", "")
+moje_role_ve_firme = "ZAMESTNANEC"
 
+if moje_firma:
+    if moje_firma.get('ceo_jmeno') == moje_jmeno:
+        moje_role_ve_firme = "CEO"
+    elif moje_firma.get('cfo_jmeno') == moje_jmeno:
+        moje_role_ve_firme = "CFO"
+    elif moje_firma.get('cto_jmeno') == moje_jmeno:
+        moje_role_ve_firme = "CTO"
+
+# Dynamické záložky podle toho, zda jde o vedení firmy nebo běžného pracovníka
+if moje_role_ve_firme in ["CEO", "CFO", "CTO"]:
+    tab_vykaz, tab_kontrola_vedeni, tab_peer = st.tabs([
+        "1. Můj výkaz práce", 
+        "2. Kontrola odpracovaných hodin zaměstnanců (Vedení)", 
+        "3. Hodnocení kolektivu"
+    ])
+else:
+    tab_vykaz, tab_peer = st.tabs([
+        "1. Můj výkaz práce (Výroba)", 
+        "2. Hodnocení kolektivu"
+    ])
+    tab_kontrola_vedeni = None
+
+# 1. ZÁLOŽKA: VYKPISOVÁNÍ HODIN (Pro všechny žáky)
 with tab_vykaz:
-    st.markdown("#### Výkaz fyzické a manuální práce")
-    st.caption("Zde zapisujte činnosti, které děláte mimo aplikaci (výroba, tisk, balení, úklid dílny, schůzky).")
+    st.markdown("#### Výkaz mé odvedené práce (Manuální práce / Výroba / Schůzky)")
+    st.caption(f"Přihlášený žák: **{moje_jmeno}** | Firma: **{moje_firma['nazev_firmy'] if moje_firma else 'Bez firmy'}**")
     
-    with st.form("form_denik_prace"):
-        dp_popis = st.text_area("Popis odvedené práce:")
+    with st.form("form_denik_prace_safe"):
+        dp_popis = st.text_area("Popis odvedené práce (např. 2h tisk 3D modelů, balení produktů, úklid dílny):")
         dp_hodiny = st.number_input("Počet odpracovaných hodin:", min_value=0.5, max_value=12.0, value=1.0, step=0.5)
-        if st.form_submit_button("Uložit zápis do deníku"):
-            if dp_popis:
+        
+        if st.form_submit_button("Uložit zápis do výkazu"):
+            if dp_popis.strip():
+                f_id_to_save = moje_firma['id'] if moje_firma else None
                 requests.post(
                     f"{SUPABASE_URL}/rest/v1/denik_prace",
                     headers=headers,
                     json={
-                        "jmeno_zaka": st.session_state.uzivatel,
-                        "firma_id": moje_firma['id'] if moje_firma else None,
-                        "popis_prace": dp_popis,
+                        "jmeno_zaka": moje_jmeno,
+                        "firma_id": f_id_to_save,
+                        "popis_prace": dp_popis.strip(),
                         "hodiny": dp_hodiny
                     }
                 )
-                st.success("Záznam byl úspěšně uložen do vašeho výkazu.")
+                st.success("Záznam byl úspěšně uvožen do vašeho výkazu práce.")
                 st.rerun()
             else:
                 st.error("Vyplňte popis práce.")
 
-    st.markdown("##### Vaše odebrané zápisy v tomto měsíci")
+    st.markdown("##### Vaše zapsané hodiny")
     res_moje_prace = requests.get(
-        f"{SUPABASE_URL}/rest/v1/denik_prace?jmeno_zaka=eq.{st.session_state.uzivatel}&order=datum.desc",
+        f"{SUPABASE_URL}/rest/v1/denik_prace?jmeno_zaka=eq.{moje_jmeno}&order=datum.desc",
         headers=headers
     ).json()
-    if res_moje_prace:
-        df_prace = pd.DataFrame(res_moje_prace)[['datum', 'popis_prace', 'hodiny']]
-        st.dataframe(df_prace, use_container_width=True)
+    
+    # Bezpečná kontrola proti ValueError
+    if isinstance(res_moje_prace, list) and len(res_moje_prace) > 0:
+        df_prace = pd.DataFrame(res_moje_prace)
+        kolecka = [c for c in ['datum', 'popis_prace', 'hodiny'] if c in df_prace.columns]
+        st.dataframe(df_prace[kolecka], use_container_width=True)
     else:
-        st.info("Zatím nemáte žádné zapsané hodiny.")
+        st.info("Zatím nemáte v deníku práce žádné zapsané hodiny.")
 
+# 2. ZÁLOŽKA: KONTROLA PRO VEDENÍ FIRMY (Vidí jen CEO / CFO / CTO)
+if tab_kontrola_vedeni:
+    with tab_kontrola_vedeni:
+        st.markdown(f"#### Přehled odpracovaných hodin zaměstnanců firmy {moje_firma['nazev_firmy']}")
+        st.caption("Jako vedení firmy zde vidíte výkazy práce všech vašich dělníků a zaměstnanců.")
+        
+        res_tým_prace = requests.get(
+            f"{SUPABASE_URL}/rest/v1/denik_prace?firma_id=eq.{moje_firma['id']}&order=datum.desc",
+            headers=headers
+        ).json()
+        
+        if isinstance(res_tým_prace, list) and len(res_tým_prace) > 0:
+            df_tym = pd.DataFrame(res_tým_prace)
+            kolecka_tym = [c for c in ['datum', 'jmeno_zaka', 'popis_prace', 'hodiny'] if c in df_tym.columns]
+            st.dataframe(df_tym[kolecka_tym], use_container_width=True)
+            
+            celkem_hodin_firma = sum(item.get('hodiny', 0) for item in res_tým_prace)
+            st.markdown(f"**Celkem odpracováno ve výrobě/dílně pro vaši firmu:** `{celkem_hodin_firma} hodin`")
+        else:
+            st.info("Vaši zaměstnanci zatím nezapsali žádnou odpracovanou práci.")
+
+# 3. ZÁLOŽKA: VZÁJEMNÉ HODNOCENÍ KOLEKTIVU
 with tab_peer:
     st.markdown("#### Vzájemné hodnocení spoluhráčů")
     st.caption("Ohodnoťte přínos a pracovitost ostatních členů vašeho týmu.")
     
     if moje_firma:
-        # Získání kolegů ve firmě (vyjma sebe sama)
         vsechni_clenove = []
         if moje_firma.get('ceo_jmeno'): vsechni_clenove.append(moje_firma['ceo_jmeno'])
         if moje_firma.get('cfo_jmeno'): vsechni_clenove.append(moje_firma['cfo_jmeno'])
         if moje_firma.get('cto_jmeno'): vsechni_clenove.append(moje_firma['cto_jmeno'])
         
         res_z = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{moje_firma['id']}", headers=headers).json()
-        if res_z:
+        if isinstance(res_z, list):
             for z in res_z:
-                vsechni_clenove.append(z['jmeno_zamestnance'])
+                if z.get('jmeno_zamestnance'):
+                    vsechni_clenove.append(z['jmeno_zamestnance'])
                 
-        kolegovi = [c for c in list(set(vsechni_clenove)) if c != st.session_state.uzivatel]
+        kolegovi = [c for c in list(set(vsechni_clenove)) if c != moje_jmeno]
         
         if kolegovi:
-            with st.form("form_peer_review"):
+            with st.form("form_peer_review_safe"):
                 vybrany_kolega = st.selectbox("Vyberte kolegu k ohodnocení:", kolegovi)
                 body_hodnoceni = st.slider("Hodnocení pracovitosti a přínosu (1 = Neaktivní, 5 = Vynikající):", 1, 5, 5)
                 slovni_komentar = st.text_area("Stručný komentář k jeho práci:")
@@ -698,11 +750,11 @@ with tab_peer:
                         f"{SUPABASE_URL}/rest/v1/peer_review",
                         headers=headers,
                         json={
-                            "hodnotitel": st.session_state.uzivatel,
+                            "hodnotitel": moje_jmeno,
                             "hodnoceny": vybrany_kolega,
                             "firma_id": moje_firma['id'],
                             "body": body_hodnoceni,
-                            "komentar": slovni_komentar
+                            "komentar": slovni_komentar.strip()
                         }
                     )
                     st.success(f"Hodnocení pro žáka {vybrany_kolega} bylo uloženo.")
