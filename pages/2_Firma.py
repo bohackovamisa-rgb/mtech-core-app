@@ -18,7 +18,7 @@ st.markdown("""
     .header-todo { background: linear-gradient(45deg, #475569, #334155); }
     .header-ip { background: linear-gradient(45deg, #f59e0b, #d97706); }
     .header-done { background: linear-gradient(45deg, #10b981, #059669); }
-    .kanban-card { background-color: #0f172a; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #0ea5e9; }
+    .kanban-card { background-color: #0f172a; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #0ea5e9; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
     .kanban-card h5 { margin: 0 0 8px 0; color: #f8fafc; font-size: 15px; }
     .kanban-badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: bold; background: rgba(14, 165, 233, 0.15); color: #38bdf8; margin-top: 8px;}
     
@@ -95,22 +95,28 @@ tab_zalozeni, tab_brand, tab_vyvoj, tab_hr, tab_kalkulace, tab_ucto = st.tabs([
 ])
 
 # ==========================================
-# TAB 1: ZALOŽENÍ (LEGAL) - KOMPLETNÍ FORMULÁŘE
+# TAB 1: ZALOŽENÍ (LEGAL)
 # ==========================================
 with tab_zalozeni:
     st.subheader("Registrační spis firmy – Úřední tiskopisy")
     if moje_firma:
         st.success(f"EVIDOVANÝ REGISTRAČNÍ SPIS STARTUPU: {moje_firma['nazev_firmy']} (Stav: {moje_firma['stave_licence']})")
-        if st.button("Pivot / Upravit úřední údaje", icon=":material/edit:"):
-            st.session_state.edit_spis = True
-            st.rerun()
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            if moje_firma['stave_licence'] == "ZAMITNUTO" and st.button("🔄 Znovupodat k auditu"):
+                requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{moje_firma['id']}", headers=headers, json={"stave_licence": "CEKA_NA_SCHVALENI"})
+                st.rerun()
+        with col_btn2:
+            if st.button("✏️ Pivot / Upravit úřední údaje"):
+                st.session_state.edit_spis = True
+                st.rerun()
 
     if not moje_firma or st.session_state.get("edit_spis", False):
-        u_notar, u_zivnost, u_financak, u_cssz, u_rejstrik = st.tabs(["📜 Notářství", "📋 JRF (Živnosti)", "⚖️ FÚ (Daně)", "🏥 ČSSZ", "🛡️ Rejstřík"])
+        u_notar, u_zivnost, u_financak, u_cssz, u_rejstrik = st.tabs(["📜 Notářství", "📋 JRF", "⚖️ Daně", "🏥 ČSSZ", "🛡️ Rejstřík"])
         if "reg_data" not in st.session_state: st.session_state.reg_data = {}
 
         with u_notar:
-            st.session_state.reg_data["nazev_firmy"] = st.text_input("1.1 Obchodní firma (včetně koncovky s.r.o.):", value=st.session_state.reg_data.get("nazev_firmy", moje_firma['nazev_firmy'] if moje_firma else ""))
+            st.session_state.reg_data["nazev_firmy"] = st.text_input("1.1 Obchodní firma:", value=st.session_state.reg_data.get("nazev_firmy", moje_firma['nazev_firmy'] if moje_firma else ""))
             st.session_state.reg_data["skolni_kod"] = st.text_input("1.2 Licenční kód školy:", value=st.session_state.reg_data.get("skolni_kod", moje_firma['skolni_kod'] if moje_firma else "")).upper().strip()
             col_n1, col_n2 = st.columns(2)
             with col_n1:
@@ -141,7 +147,7 @@ with tab_zalozeni:
             st.session_state.reg_data["bozp_souhlas"] = st.checkbox("5.1 Prohlašujeme, že máme hotový bezpečnostní onboarding (BOZP).", value=st.session_state.reg_data.get("bozp_souhlas", True))
             st.session_state.reg_data["kodex_souhlas"] = st.checkbox("5.2 Přijímáme Etický kodex.", value=st.session_state.reg_data.get("kodex_souhlas", True))
             
-            if st.button("🚀 ODESLAT REGISTRAČNÍ SPIS ÚŘADU", icon=":material/send:"):
+            if st.button("🚀 ODESLAT REGISTRAČNÍ SPIS ÚŘADU"):
                 d = st.session_state.reg_data
                 if d.get("nazev_firmy") and d.get("skolni_kod") and d.get("cfo") and d.get("cto"):
                     res_lic = requests.get(f"{SUPABASE_URL}/rest/v1/licencovane_skoly?licencni_kod=eq.{d.get('skolni_kod')}", headers=headers)
@@ -168,12 +174,11 @@ with tab_brand:
         
         with tab_aktiva:
             st.markdown("### Firemní aktiva (Digital Assets)")
-            st.caption("Firma bez tváře neexistuje. Vytvořte reálné logo (např. v Canvě), firemní web (např. Webnode/Wix) a prezentační leták. Sem vložte pouze veřejné odkazy na tyto výstupy.")
             with st.form("form_brand"):
                 b_logo = st.text_input("🔗 Odkaz na LOGO (Canva, Google Drive):", value=moje_firma.get('logo_url','') or "")
                 b_web = st.text_input("🔗 Odkaz na WEBOVÉ STRÁNKY:", value=moje_firma.get('web_url','') or "")
                 b_promo = st.text_input("🔗 Odkaz na PROMO LETÁK / PITCH DECK:", value=moje_firma.get('promo_url','') or "")
-                if st.form_submit_button("Aktualizovat Brand Kit", icon=":material/save:"):
+                if st.form_submit_button("💾 Aktualizovat Brand Kit"):
                     requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{moje_firma['id']}", headers=headers, json={"logo_url": b_logo, "web_url": b_web, "promo_url": b_promo})
                     st.success("Aktiva uložena!")
                     st.rerun()
@@ -198,7 +203,7 @@ with tab_brand:
                 col_c5, col_c6 = st.columns(2)
                 with col_c5: costs = st.text_area("5. Náklady", value=exist_canvas.get("nakladova_struktura","") if exist_canvas else "")
                 with col_c6: rev = st.text_area("6. Příjmy", value=exist_canvas.get("prijmove_toky","") if exist_canvas else "")
-                if st.form_submit_button("Uložit Lean Canvas"):
+                if st.form_submit_button("💾 Uložit Lean Canvas"):
                     c_payload = {"firma_id": moje_firma["id"], "problem": prob, "reseni": sol, "cilova_skupina": target, "unikatni_hodnota": val, "nakladova_struktura": costs, "prijmove_toky": rev}
                     if exist_canvas: requests.patch(f"{SUPABASE_URL}/rest/v1/lean_canvas?id=eq.{exist_canvas['id']}", headers=headers, json=c_payload)
                     else: requests.post(f"{SUPABASE_URL}/rest/v1/lean_canvas", headers=headers, json=c_payload)
@@ -215,13 +220,12 @@ with tab_vyvoj:
         ag_kanban, ag_porady, ag_reporty = st.tabs(["📋 Agilní Kanban", "👥 Zápisy z porad", "📁 Odevzdávárna Reportů"])
         
         with ag_kanban:
-            st.caption("Neodklikávejte úkoly naprázdno. Zde řídíte výrobu prototypu nebo stavbu služby.")
             with st.form("form_novy_ukol"):
                 col_u1, col_u2, col_u3 = st.columns(3)
                 with col_u1: u_nazev = st.text_input("Nový úkol:")
                 with col_u2: u_osoba = st.text_input("Zodpovídá:", value=uzivatel)
                 with col_u3: u_termin = st.date_input("Deadline:", value=datetime.date.today() + datetime.timedelta(days=7))
-                if st.form_submit_button("Přidat do Backlogu", icon=":material/add_task:"):
+                if st.form_submit_button("➕ Přidat do Backlogu"):
                     requests.post(f"{SUPABASE_URL}/rest/v1/projektove_ukoly", headers=headers, json={"firma_id": moje_firma["id"], "nazev_ukolu": u_nazev, "zodpovedna_osoba": u_osoba, "termin": str(u_termin), "stav": "TO_DO"})
                     st.rerun()
             
@@ -231,30 +235,29 @@ with tab_vyvoj:
                 st.markdown("<div class='kanban-col-header header-todo'>📌 K VYŘEŠENÍ</div>", unsafe_allow_html=True)
                 for u in [x for x in ukoly if x['stav'] == 'TO_DO']:
                     st.markdown(f"<div class='kanban-card'><h5>{u['nazev_ukolu']}</h5><p><b>{u['zodpovedna_osoba']}</b> ({u['termin']})</p></div>", unsafe_allow_html=True)
-                    if st.button("Do procesu", key=f"btn_ip_{u['id']}"):
+                    if st.button("▶️ Do procesu", key=f"btn_ip_{u['id']}"):
                         requests.patch(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?id=eq.{u['id']}", headers=headers, json={"stav": "IN_PROGRESS"})
                         st.rerun()
             with col_ip:
                 st.markdown("<div class='kanban-col-header header-ip'>⏳ V PROCESU</div>", unsafe_allow_html=True)
                 for u in [x for x in ukoly if x['stav'] == 'IN_PROGRESS']:
                     st.markdown(f"<div class='kanban-card' style='border-color:#f59e0b;'><h5>{u['nazev_ukolu']}</h5><p><b>{u['zodpovedna_osoba']}</b></p></div>", unsafe_allow_html=True)
-                    if st.button("Dokončit", key=f"btn_done_{u['id']}"):
+                    if st.button("✅ Dokončit", key=f"btn_done_{u['id']}"):
                         requests.patch(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?id=eq.{u['id']}", headers=headers, json={"stav": "DONE"})
                         st.rerun()
             with col_done:
                 st.markdown("<div class='kanban-col-header header-done'>✅ HOTOVO</div>", unsafe_allow_html=True)
                 for u in [x for x in ukoly if x['stav'] == 'DONE']:
                     st.markdown(f"<div class='kanban-card' style='border-color:#10b981;'><h5>{u['nazev_ukolu']}</h5><p><b>{u['zodpovedna_osoba']}</b></p></div>", unsafe_allow_html=True)
-                    if st.button("Smazat", key=f"btn_del_{u['id']}"):
+                    if st.button("🗑️ Smazat", key=f"btn_del_{u['id']}"):
                         requests.delete(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?id=eq.{u['id']}", headers=headers)
                         st.rerun()
 
         with ag_porady:
-            st.caption("Pravidelné syncy managementu a členů týmu.")
             with st.form("form_porada"):
                 projednano = st.text_area("Projednaná Agenda:")
                 ukoly_zapis = st.text_area("Akční kroky (Kdo, co, do kdy):")
-                if st.form_submit_button("Uložit Log z porady", icon=":material/post_add:"):
+                if st.form_submit_button("📝 Uložit Log z porady"):
                     requests.post(f"{SUPABASE_URL}/rest/v1/zapisy_porady", headers=headers, json={"firma_id": moje_firma["id"], "projednane_body": projednano, "ukoly_a_odpovednost": ukoly_zapis})
                     st.rerun()
             res_p_hist = requests.get(f"{SUPABASE_URL}/rest/v1/zapisy_porady?firma_id=eq.{moje_firma['id']}&order=datum.desc", headers=headers)
@@ -264,25 +267,23 @@ with tab_vyvoj:
 
         with ag_reporty:
             st.markdown("### 📁 Odevzdávání povinných zpráv a reportů")
-            st.caption("Zde odevzdáváte vyučujícímu (Kontrolnímu úřadu) měsíční zprávy, fotky prototypů nebo závěrečné prezentace.")
             with st.form("form_report"):
-                r_typ = st.selectbox("Typ odevzdávaného dokumentu:", ["Měsíční report (Trakce)", "Fotodokumentace / Video prototypu", "Zpráva o stavu vývoje (Roadmapa)", "Závěrečná prezentace / Obhajoba"])
+                r_typ = st.selectbox("Typ odevzdávaného dokumentu:", ["Měsíční report (Trakce)", "Fotodokumentace / Video prototypu", "Zpráva o stavu vývoje", "Závěrečná prezentace"])
                 r_nazev = st.text_input("Název dokumentu:")
                 r_odkaz = st.text_input("🔗 Odkaz na soubor (Google Drive, OneDrive, YouTube, PDF link):")
-                if st.form_submit_button("Odevzdat report úřadu", icon=":material/cloud_upload:"):
+                if st.form_submit_button("📤 Odevzdat report úřadu"):
                     if r_nazev and r_odkaz:
                         requests.post(f"{SUPABASE_URL}/rest/v1/firemni_reporty", headers=headers, json={"firma_id": moje_firma["id"], "typ_reportu": r_typ, "nazev_reportu": r_nazev, "odkaz_soubor": r_odkaz})
-                        st.success("Report byl úspěšně odevzdán!")
+                        st.success("Report odevzdán!")
                         st.rerun()
                     else:
-                        st.warning("Musíte vyplnit název a vložit platný odkaz na soubor.")
+                        st.warning("Vyplňte název a odkaz.")
             
             res_reporty = requests.get(f"{SUPABASE_URL}/rest/v1/firemni_reporty?firma_id=eq.{moje_firma['id']}&order=datum_odevzdani.desc", headers=headers)
             if res_reporty.status_code == 200 and res_reporty.json():
                 st.markdown("#### Historie odevzdaných dokumentů:")
                 for r in res_reporty.json():
-                    st.markdown(f"📄 **{r['typ_reportu']}:** {r['nazev_reportu']} ➔ <a href='{r['odkaz_soubor']}' target='_blank' class='asset-link'>Otevřít dokument</a> <small>({r['datum_odevzdani'][:10]})</small>", unsafe_allow_html=True)
-
+                    st.markdown(f"📄 **{r['typ_reportu']}:** {r['nazev_reportu']} ➔ <a href='{r['odkaz_soubor']}' target='_blank' class='asset-link'>Otevřít dokument</a>", unsafe_allow_html=True)
 
 # ==========================================
 # TAB 4: HR & TÝM
@@ -295,23 +296,22 @@ with tab_hr:
         hr_nabor, hr_mzdy, hr_peer = st.tabs(["🤝 Nábor & Pracovní smlouvy", "💸 Výplatní pásky", "⭐ 360° Kulturní Fit"])
         
         with hr_nabor:
-            st.caption("Při náboru MUSÍTE potvrdit uzavření smlouvy a proškolení BOZP.")
             with st.form("form_novy_zamestnanec"):
                 col_z1, col_z2 = st.columns(2)
                 with col_z1:
                     z_jmeno = st.text_input("Nová posila (Jméno):")
                     z_pozice = st.text_input("Role (např. Dev, Operátor):")
                 with col_z2:
-                    z_smlouva = st.selectbox("Typ kontraktu:", ["Pracovní smlouva (HPP)", "Dohoda o provedení práce (DPP)", "Dohoda o pracovní činnosti (DPČ)"])
+                    z_smlouva = st.selectbox("Typ kontraktu:", ["Pracovní smlouva (HPP)", "DPP", "DPČ"])
                     z_sazba = st.number_input("Hodinový rate (M-K / hod):", min_value=10, value=50)
-                z_podpis = st.checkbox("Smlouva byla fyzicky/digitálně podepsána oběma stranami.")
-                z_bozp = st.checkbox("Zaměstnanec prošel prokazatelným školením BOZP a PO.")
-                if st.form_submit_button("Onboardovat nováčka", icon=":material/badge:"):
+                z_podpis = st.checkbox("Smlouva podepsána oběma stranami.")
+                z_bozp = st.checkbox("Zaměstnanec prošel školením BOZP a PO.")
+                if st.form_submit_button("🪪 Onboardovat nováčka"):
                     if z_jmeno and z_pozice and z_podpis and z_bozp:
                         requests.post(f"{SUPABASE_URL}/rest/v1/zamestnanci", headers=headers, json={"firma_id": moje_firma["id"], "jmeno_zamestnance": z_jmeno, "pozice": z_pozice, "typ_smlouva": z_smlouva, "hodinova_sazba": z_sazba, "odpracovane_hodiny": 0, "vyplaceno_celkem": 0, "hodnoceni_skore": 100})
                         st.rerun()
                     else:
-                        st.error("Pro nábor musíte vyplnit jméno, roli a potvrdit PODPIS a BOZP!")
+                        st.error("Vyplňte jméno, roli a potvrďte PODPIS a BOZP!")
 
         with hr_mzdy:
             res_z = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{moje_firma['id']}&select=*", headers=headers)
@@ -325,10 +325,9 @@ with tab_hr:
                     dan = hruba * 0.15
                     cista = hruba - dan
                     st.markdown(f"Hrubá mzda: `{hruba:.2f} M-K` | Daň (15 %): `{dan:.2f} M-K` | **Čistá k výplatě: `{cista:.2f} M-K`**")
-                    if st.button("Odeslat výplatu (Zatížit Cash-flow)", icon=":material/payments:"):
+                    if st.form_submit_button("💸 Odeslat výplatu (Zatížit Cash-flow)"):
                         requests.patch(f"{SUPABASE_URL}/rest/v1/zamestnanci?id=eq.{vybrany_z['id']}", headers=headers, json={"odpracovane_hodiny": vybrany_z["odpracovane_hodiny"] + hodiny, "vyplaceno_celkem": vybrany_z["vyplaceno_celkem"] + cista})
                         requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "VYDAJ", "titul": f"Výplata: {vybrany_z['jmeno_zamestnance']}", "castka": cista, "auditovano": False})
-                        st.success("Mzda odeslána!")
                         st.rerun()
 
         with hr_peer:
@@ -338,7 +337,7 @@ with tab_hr:
                 if z_peer_obj:
                     bod_aktivita = st.slider("Tah na branku v %:", min_value=10, max_value=100, value=90)
                     bod_spoluprace = st.slider("Culture Fit v %:", min_value=10, max_value=100, value=85)
-                    if st.button("Odeslat 360° Feedback", icon=":material/rate_review:"):
+                    if st.button("⭐ Odeslat 360° Feedback"):
                         requests.patch(f"{SUPABASE_URL}/rest/v1/zamestnanci?id=eq.{z_peer_obj['id']}", headers=headers, json={"hodnoceni_skore": (bod_aktivita + bod_spoluprace) / 2.0})
                         st.rerun()
 
@@ -360,7 +359,7 @@ with tab_kalkulace:
             k_cena = z_dane + v_dan
             
             st.markdown(f"**M-TECH odvod:** `{v_dan:.2f} M-K` | **Retail Cena:** `{k_cena:.2f} M-Kreditů`")
-            if st.form_submit_button("Odeslat pricing k validaci", icon=":material/send:"):
+            if st.form_submit_button("📤 Odeslat pricing k validaci"):
                 requests.post(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy", headers=headers, json={"firma_id": moje_firma["id"], "nazev_produktu": prod_nazev, "prime_naklady": p_naklady, "rezie_skoly": rezie, "mtech_dan_procento": dan_pct, "marze_zisk": marze, "konecna_cena": k_cena, "schvaleno_uradem": False})
                 st.rerun()
 
@@ -372,7 +371,7 @@ with tab_ucto:
             with col_t1: typ = st.selectbox("Typ transakce:", ["PRIJEM", "VYDAJ"])
             with col_t2: titul = st.text_input("Důvod:", value="Nákup komponent")
             with col_t3: castka = st.number_input("Částka v M-Kreditech:", min_value=1.0, value=50.0)
-            if st.form_submit_button("Zaevidovat do Cash-flow", icon=":material/add_circle:"):
+            if st.form_submit_button("➕ Zaevidovat do Cash-flow"):
                 t_str = "PRIJEM" if "PRIJEM" in typ else "VYDAJ"
                 requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": t_str, "titul": titul, "castka": castka, "auditovano": False})
                 st.rerun()
