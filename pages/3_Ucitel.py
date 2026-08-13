@@ -119,7 +119,7 @@ with tab_banka:
     st.info("Sekce Centrální banky a Ceníku...")
 
 # ==========================================
-# KRIZOVÉ ŘÍZENÍ A GEOPOLITICKÉ ZÁSAHY
+# KRIZOVÉ ŘÍZENÍ A REALISTICKÉ GEOPOLITICKÉ ZÁSAHY
 # ==========================================
 with tab_krize:
     st.subheader("Krizové řízení a Makroekonomické zásahy")
@@ -196,29 +196,29 @@ with tab_krize:
 
     with col_k2:
         st.markdown("#### 2. Mimořádné a Geopolitické krize")
-        st.caption("Globální otřesy, válečné konflikty a obchodní embargo s okamžitým dopadem.")
+        st.caption("Globální otřesy, válečné konflikty a mezinárodní sankce s okamžitým dopadem.")
         
-        # Geopolitika 1: Celní válka
-        if st.button("Vyhlásit: CELNÍ VÁLKA & PROTEKCIONISMUS"):
+        # Geopolitika 1: Všeobecné sankce
+        if st.button("Vyhlásit: MEZINÁRODNÍ SANKCE A OBCHODNÍ BLOKÁDA"):
             nastaveni_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers).json()
             akt_dan = float(nastaveni_res[0].get('mtech_dan_pct', 15.0)) if nastaveni_res else 15.0
-            stoupnuta_dan = akt_dan + 15.0
+            stoupnuta_dan = akt_dan + 10.0
             
             requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={
-                "aktivni_krize": "CELNI_VALKA",
-                "krize_popis": f"Obchodní celní válka! Stát zavedl dovozní cla a zvýšil M-TECH daň pro e-shop na {stoupnuta_dan} %. Výroba i export zdražují.",
+                "aktivni_krize": "SANKCE",
+                "krize_popis": f"V důsledku geopolitického konfliktu byly zavedeny mezinárodní sankce! Zahraniční licence i dovozové náklady zdražily. M-TECH daň byla dočasně zvýšena na {stoupnuta_dan} %.",
                 "mtech_dan_pct": stoupnuta_dan
             })
-            st.success(f"Celní válka vyhlášena! M-TECH daň byla automaticky zvýšena na {stoupnuta_dan} %.")
+            st.success("Sankce vyhlášeny! Daňová zátěž automaticky stoupla.")
             st.rerun()
 
-        # Geopolitika 2: Embargo a sankce
-        if st.button("Vyhlásit: STRATEGICKÉ EMBARGO A SANKCE (Zákaz čipů)"):
+        # Geopolitika 2: Surovinové embargo
+        if st.button("Vyhlásit: SUROVINOVÉ EMBARGO (Výpadek materiálu)"):
             requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={
-                "aktivni_krize": "EMBARGO",
-                "krize_popis": "Mezinárodní embargo na elektronické součástky a čipy! Nákup vývojových desek a senzorů ze skladu je přerušen. HW startupy musí změnit zaměření (Pivot)."
+                "aktivni_krize": "SUROVINY",
+                "krize_popis": "Globální embargo na klíčové suroviny! Ceny materiálu ve školním skladu stouply o 50 %. Výrobní firmy musí přepočítat kalkulace."
             })
-            st.success("Embargo na komponenty bylo vyhlášeno!")
+            st.success("Surovinové embargo bylo vyhlášeno!")
             st.rerun()
 
         # Geopolitika 3: Měnová devalvace
@@ -235,7 +235,7 @@ with tab_krize:
             st.success(f"Měnový šok spuštěn! Kurz M-Kreditu byl změněn na {novy_kurz} Kč.")
             st.rerun()
 
-        # Ostatní systémové krize
+        # Systémová krize: Kyberútok
         if st.button("Vyhlásit: KYBERNETICKÝ RANSOMWARE ÚTOK"):
             requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={"aktivni_krize": "KYBER", "krize_popis": "Masivní kybernetický útok! Firmám bylo strženo 15 % kapitálu jako výkupné pro hackery."})
             for f in firmy:
@@ -248,6 +248,7 @@ with tab_krize:
             st.success("Kyberútok zasáhl všechny firmy!")
             st.rerun()
 
+        # Systémová krize: Energetická krize
         if st.button("Vyhlásit: ENERGETICKÁ KRIZE (Blackout)"):
             requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={"aktivni_krize": "ENERGIE", "krize_popis": "Výpadek sítě a zdražení energií! Každé firmě bylo strženo 100 M-K jako záloha na elektřinu."})
             for f in firmy:
@@ -259,6 +260,7 @@ with tab_krize:
             st.success("Energetická krize aplikována!")
             st.rerun()
 
+        # Systémová krize: Krach na burze
         if st.button("Vyhlásit: KRACH NA BURZE (Panika)"):
             requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={"aktivni_krize": "BURZA", "krize_popis": "Panika na akciových trzích! Veškerá nabídka akcií byla stažena."})
             requests.patch(f"{SUPABASE_URL}/rest/v1/burza_nabidky?aktivni=eq.true", headers=headers, json={"aktivni": False})
