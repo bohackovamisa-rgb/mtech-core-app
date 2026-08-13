@@ -32,20 +32,16 @@ except Exception:
     st.error("Chybí konfigurace v Secrets!")
     st.stop()
 
-# Bezpečnostní inicializace stavu
+# --- BEZPEČNOSTNÍ INICIALIZACE STAVU ---
 if "prihlasen" not in st.session_state: st.session_state.prihlasen = False
 if "role" not in st.session_state: st.session_state.role = None
 if "kredity" not in st.session_state: st.session_state.kredity = 0
 if "uzivatel" not in st.session_state: st.session_state.uzivatel = None
 
-# Definice podstránek
-zaci_page = st.Page("pages/1_Zaci.py", title="Moje peněženka", icon="💳")
-firma_page = st.Page("pages/2_Firma.py", title="Firemní Hub", icon="🏢")
-ucitel_page = st.Page("pages/3_Ucitel.py", title="Kontrolní úřad", icon="⚖️")
-trh_page = st.Page("pages/4_Trh.py", title="Tržiště produktů", icon="🛒") # Připraveno na Tržiště
-
-if not st.session_state.prihlasen:
-    # --- HERO LANDING PAGE ---
+# ==========================================
+# DEFINICE PŘIHLAŠOVACÍ OBRAZOVKY
+# ==========================================
+def login_screen():
     st.markdown("""
         <div class="hero-card">
             <h1 style="margin:0; font-size: 3em;">M-TECH <span class='highlight'>CORE</span> 🚀</h1>
@@ -55,47 +51,23 @@ if not st.session_state.prihlasen:
         </div>
     """, unsafe_allow_html=True)
 
-    # --- PŘEDSTAVENÍ SYSTÉMU ---
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.markdown("""
-            <div class="feature-box">
-                <h4 style="color:#f8fafc; margin-top:0;">🎓 Pro Žáky</h4>
-                <p style="font-size: 0.9em; color: #cbd5e1;">Získávají M-Kredity za práci na projektech, nakupují na tržišti a učí se finanční gramotnosti.</p>
-            </div>
-        """, unsafe_allow_html=True)
+        st.markdown("<div class='feature-box'><h4 style='color:#f8fafc; margin-top:0;'>🎓 Pro Žáky</h4><p style='font-size: 0.9em; color: #cbd5e1;'>Získávají M-Kredity za práci na projektech a učí se finanční gramotnosti.</p></div>", unsafe_allow_html=True)
     with col2:
-        st.markdown("""
-            <div class="feature-box">
-                <h4 style="color:#f8fafc; margin-top:0;">🚀 Pro Startupy</h4>
-                <p style="font-size: 0.9em; color: #cbd5e1;">Založení s.r.o., Lean Canvas, Agilní vývoj (Scrum), HR a evidence Cash-flow v jednom Hubu.</p>
-            </div>
-        """, unsafe_allow_html=True)
+        st.markdown("<div class='feature-box'><h4 style='color:#f8fafc; margin-top:0;'>🚀 Pro Startupy</h4><p style='font-size: 0.9em; color: #cbd5e1;'>Založení s.r.o., Lean Canvas, Agilní vývoj (Scrum), HR a evidence Cash-flow.</p></div>", unsafe_allow_html=True)
     with col3:
-        st.markdown("""
-            <div class="feature-box">
-                <h4 style="color:#f8fafc; margin-top:0;">⚖️ Pro Školy</h4>
-                <p style="font-size: 0.9em; color: #cbd5e1;">Kontrolní úřad pro učitele s kompletním dohledem nad audity, byrokracií a hodnocením (360° feedback).</p>
-            </div>
-        """, unsafe_allow_html=True)
+        st.markdown("<div class='feature-box'><h4 style='color:#f8fafc; margin-top:0;'>⚖️ Pro Školy</h4><p style='font-size: 0.9em; color: #cbd5e1;'>Kontrolní úřad s kompletním dohledem nad audity, byrokracií a hodnocením.</p></div>", unsafe_allow_html=True)
 
     st.write("---")
 
-    # --- ZÁLOŽKY PRO PŘÍSTUP / OBJEDNÁVKU ---
-    tab_login, tab_user_reg, tab_school_licence = st.tabs([
-        "🔒 Přihlášení", 
-        "🤝 Registrace uživatele", 
-        "🏫 Objednávka pro školy"
-    ])
+    tab_login, tab_user_reg, tab_school_licence = st.tabs(["🔒 Přihlášení", "🤝 Registrace uživatele", "🏫 Objednávka pro školy"])
     
-    # 1. PŘIHLÁŠENÍ
     with tab_login:
         with st.form("login_form"):
             jmeno = st.text_input("Přihlašovací jméno (Startup/Jméno):")
             heslo = st.text_input("Heslo:", type="password")
-            submit = st.form_submit_button("Vstoupit do M-TECH CORE")
-            
-            if submit:
+            if st.form_submit_button("Vstoupit do M-TECH CORE"):
                 if jmeno and heslo:
                     try:
                         res = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{jmeno}&heslo=eq.{heslo}&select=*", headers=headers)
@@ -103,7 +75,7 @@ if not st.session_state.prihlasen:
                         if isinstance(data, list) and len(data) > 0:
                             uzivatel = data[0]
                             st.session_state.prihlasen = True
-                            st.session_state.role = str(uzivatel.get("role", "ZAK")).upper() # Sjednotíme role na velká písmena
+                            st.session_state.role = str(uzivatel.get("role", "ZAK")).upper()
                             st.session_state.kredity = uzivatel.get("kredity", 0)
                             st.session_state.uzivatel = uzivatel["jmeno"]
                             st.rerun()
@@ -114,7 +86,6 @@ if not st.session_state.prihlasen:
                 else:
                     st.warning("Vyplňte jméno a heslo.")
 
-    # 2. REGISTRACE S KÓDEM ŠKOLY
     with tab_user_reg:
         st.info("Máte licenční kód z vašeho Akcelerátoru (školy)? Zadejte jej níže.")
         with st.form("user_reg_form"):
@@ -122,14 +93,10 @@ if not st.session_state.prihlasen:
             reg_jmeno = st.text_input("Nové uživatelské jméno (Název firmy nebo příjmení):")
             reg_heslo = st.text_input("Heslo:", type="password")
             reg_role = st.selectbox("Typ účtu:", ["ZAK", "FIRMA", "UCITEL"])
-            reg_submit = st.form_submit_button("Vytvořit účet")
-            
-            if reg_submit:
+            if st.form_submit_button("Vytvořit účet"):
                 if skolni_kod and reg_jmeno and reg_heslo:
                     lic_res = requests.get(f"{SUPABASE_URL}/rest/v1/licencovane_skoly?licencni_kod=eq.{skolni_kod}&zaplaceno=eq.true", headers=headers)
-                    lic_data = lic_res.json()
-                    
-                    if not lic_data:
+                    if not lic_res.json():
                         st.error("Neplatný nebo dosud neaktivní licenční kód!")
                     else:
                         check_res = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{reg_jmeno}", headers=headers)
@@ -137,89 +104,72 @@ if not st.session_state.prihlasen:
                             st.error("Uživatelské jméno je již obsazené!")
                         else:
                             start_kredity = 100 if reg_role == "ZAK" else 300
-                            novy_u = {
-                                "jmeno": reg_jmeno,
-                                "heslo": reg_heslo,
-                                "role": reg_role,
-                                "kredity": start_kredity,
-                                "skolni_kod": skolni_kod
-                            }
-                            post_u = requests.post(f"{SUPABASE_URL}/rest/v1/uzivatele", headers=headers, json=novy_u)
-                            if post_u.status_code in [200, 201]:
-                                st.success("Účet úspěšně vytvořen! Nyní se můžete přihlásit.")
-                            else:
-                                st.error("Chyba při registrace.")
+                            requests.post(f"{SUPABASE_URL}/rest/v1/uzivatele", headers=headers, json={"jmeno": reg_jmeno, "heslo": reg_heslo, "role": reg_role, "kredity": start_kredity, "skolni_kod": skolni_kod})
+                            st.success("Účet úspěšně vytvořen! Nyní se můžete přihlásit.")
                 else:
                     st.warning("Vyplňte všechny údaje!")
 
-    # 3. LICENCE PRO ŠKOLY
     with tab_school_licence:
         st.subheader("Poptávka licencování pro školy")
-        st.caption("Licenční balíčky (Level 1, 2, 3) upravujeme na míru podle velikosti školy.")
-        
         with st.form("school_form"):
             nazev_skoly = st.text_input("Název školy / organizace:")
             email = st.text_input("Kontaktní e-mail zástupce:")
             pocet_firem = st.number_input("Odhadovaný počet zapojených startupů:", min_value=1, value=5)
             pocet_zaku = st.number_input("Odhadovaný počet žáků:", min_value=10, value=100)
-            poznamka = st.text_area("Doplňující dotazy nebo požadavky:")
-            
-            submit_licence = st.form_submit_button("Odeslat nezávaznou poptávku")
-            
-            if submit_licence:
+            if st.form_submit_button("Odeslat nezávaznou poptávku"):
                 if nazev_skoly and email:
                     generovany_kod = "SKOLA-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-                    payload = {
-                        "nazev_skoly": nazev_skoly,
-                        "kontaktni_email": email,
-                        "licencni_kod": generovany_kod,
-                        "max_firem": pocet_firem,
-                        "max_zaku": pocet_zaku,
-                        "zaplaceno": False,
-                        "uroven_projektu": 2
-                    }
-                    res_lic = requests.post(f"{SUPABASE_URL}/rest/v1/licencovane_skoly", headers=headers, json=payload)
-                    
-                    if res_lic.status_code in [200, 201]:
-                        st.success(f"Děkujeme! Poptávka byla zaznamenána pod kódem **{generovany_kod}**.")
-                        st.info("Na zadaný e-mail vás budeme kontaktovat s nabídkou. Po schválení kód aktivujeme.")
-                    else:
-                        st.error("Chyba při odesílání poptávky.")
+                    requests.post(f"{SUPABASE_URL}/rest/v1/licencovane_skoly", headers=headers, json={"nazev_skoly": nazev_skoly, "kontaktni_email": email, "licencni_kod": generovany_kod, "max_firem": pocet_firem, "max_zaku": pocet_zaku, "zaplaceno": False, "uroven_projektu": 2})
+                    st.success(f"Poptávka byla zaznamenána pod kódem **{generovany_kod}**.")
                 else:
                     st.warning("Vyplňte prosím název školy i e-mail.")
 
-# ==================================================
-# ZOBRAZENÍ MENU PO PŘIHLÁŠENÍ (NAVIGATION)
-# ==================================================
+# ==========================================
+# DEFINICE ODHLÁŠENÍ A STRÁNEK
+# ==========================================
+def logout():
+    st.session_state.prihlasen = False
+    st.session_state.role = None
+    st.session_state.uzivatel = None
+    st.rerun()
+
+# Definování jednotlivých stránek jako objektů st.Page
+login_page = st.Page(login_screen, title="Úvod a Přihlášení", icon="🏠")
+logout_page = st.Page(logout, title="Odhlásit se", icon="🚪")
+
+# Načítání souborů z tvojí složky 'pages/'
+zaci_page = st.Page("pages/1_Zaci.py", title="Moje peněženka", icon="💳")
+firma_page = st.Page("pages/2_Firma.py", title="Firemní Hub", icon="🏢")
+ucitel_page = st.Page("pages/3_Ucitel.py", title="Kontrolní úřad", icon="⚖️")
+
+# ==========================================
+# SMĚROVÁNÍ (ROUTING) - KDO VIDÍ CO
+# ==========================================
+if not st.session_state.prihlasen:
+    # Pokud není přihlášen, vynuť zobrazení pouze Login obrazovky (Schová postranní panel)
+    pg = st.navigation([login_page])
 else:
+    # Zjisti roli a ukaž jen to, co dotyčný smí vidět
     role = st.session_state.role
     pages_to_show = []
     
-    # Přidělení práv k záložkám podle role
-    if role == "ZAK":
-        pages_to_show = [zaci_page, trh_page]
-    elif role == "FIRMA":
-        pages_to_show = [firma_page, zaci_page, trh_page] # Firma je i žák, může nakupovat
-    elif role == "UCITEL":
-        pages_to_show = [ucitel_page, trh_page]
-    elif role == "ADMIN":
-        pages_to_show = [zaci_page, firma_page, ucitel_page, trh_page]
-        
-    pg = st.navigation(pages_to_show)
-    pg.run()
+    if role == "ZAK": pages_to_show = [zaci_page]
+    elif role == "FIRMA": pages_to_show = [firma_page, zaci_page]
+    elif role == "UCITEL": pages_to_show = [ucitel_page]
+    elif role == "ADMIN": pages_to_show = [zaci_page, firma_page, ucitel_page]
     
-    # Postranní panel (Sidebar)
+    # Přidej tlačítko "Odhlásit" nakonec menu pro všechny
+    pages_to_show.append(logout_page)
+    
+    pg = st.navigation(pages_to_show)
+
+pg.run()
+
+# Doplňující informace v postranním panelu dole
+if st.session_state.prihlasen:
     with st.sidebar:
-        st.markdown("### M-TECH CORE")
         st.divider()
         st.markdown(f"👤 Uživatel: **{st.session_state.uzivatel}**")
-        st.caption(f"Role v systému: **{role}**")
-        if role in ["ZAK", "FIRMA"]:
+        st.caption(f"Role: **{st.session_state.role}**")
+        if st.session_state.role in ["ZAK", "FIRMA"]:
             st.markdown(f"💰 Zůstatek: **{st.session_state.kredity} M-K**")
-        
-        st.write("")
-        if st.button("🚪 Odhlásit se", use_container_width=True):
-            st.session_state.prihlasen = False
-            st.session_state.role = None
-            st.session_state.uzivatel = None
-            st.rerun()
