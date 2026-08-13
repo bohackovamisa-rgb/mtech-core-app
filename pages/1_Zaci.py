@@ -1,6 +1,5 @@
 import streamlit as st
 import requests
-import pandas as pd
 
 st.set_page_config(page_title="Moje peněženka", page_icon=":material/wallet:", layout="wide")
 
@@ -16,6 +15,7 @@ st.markdown("""
     .card-box { background-color: #1e293b; padding: 20px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 15px; }
     .transaction-plus { color: #10b981; font-weight: bold; }
     .transaction-minus { color: #f43f5e; font-weight: bold; }
+    .quest-card { border-left: 4px solid #f59e0b; padding: 15px; background: #0f172a; border-radius: 8px; margin-bottom: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -41,7 +41,7 @@ if res_u.status_code == 200 and res_u.json():
 else:
     aktualni_kredity = st.session_state.get("kredity", 0)
 
-st.title("Moje Peněženka")
+st.title("Moje Peněženka & Úřad práce")
 
 # Velká bankovní karta
 st.markdown(f"""
@@ -52,80 +52,88 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-col1, col2 = st.columns([1, 1.5])
+# ROZDĚLENÍ NA DVĚ ZÁLOŽKY
+tab_banka, tab_questy = st.tabs(["Banka a Převody", "Úřad práce (Brigády)"])
 
-with col1:
-    st.subheader("Přímá platba (P2P)")
-    st.caption("Pošlete M-Kredity jiné firmě (např. za B2B službu) nebo jinému žákovi (freelancerovi).")
-    
-    # Načtení všech možných příjemců
-    res_vse = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?select=jmeno,role", headers=headers)
-    všichni = [u['jmeno'] for u in res_vse.json() if u['jmeno'] != uzivatel] if res_vse.status_code == 200 else []
-    
-    with st.form("platba_form"):
-        prijemce = st.selectbox("Komu posíláte platbu:", všichni)
-        castka = st.number_input("Částka (M-K):", min_value=1.0, value=10.0, step=1.0)
-        ucel = st.text_input("Zpráva pro příjemce (Účel platby):", placeholder="Např. Faktura za logo")
+# ====== ZÁLOŽKA BANKA (Tvůj kód) ======
+with tab_banka:
+    col1, col2 = st.columns([1, 1.5])
+    with col1:
+        st.subheader("Přímá platba (P2P)")
+        st.caption("Pošlete M-Kredity jiné firmě nebo žákovi.")
+        res_vse = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?select=jmeno,role", headers=headers)
+        všichni = [u['jmeno'] for u in res_vse.json() if u['jmeno'] != uzivatel] if res_vse.status_code == 200 else []
         
-        if st.form_submit_button("Odeslat peníze", icon=":material/send_money:"):
-            if castka > aktualni_kredity:
-                st.error("Nedostatek prostředků na účtu!")
-            elif prijemce:
-                # 1. Strhnout peníze odesílateli
-                novy_zustatek_odesilatel = aktualni_kredity - castka
-                requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers, json={"kredity": novy_zustatek_odesilatel})
-                
-                # 2. Přidat peníze příjemci
-                res_prijemce = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{prijemce}", headers=headers).json()
-                if res_prijemce:
-                    kredity_prijemce = res_prijemce[0]['kredity'] + castka
-                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{prijemce}", headers=headers, json={"kredity": kredity_prijemce})
-                
-                # 3. Zapsat do historie převodů
-                requests.post(f"{SUPABASE_URL}/rest/v1/bankovni_prevody", headers=headers, json={
-                    "odesilatel": uzivatel, "prijemce": prijemce, "castka": castka, "ucel": ucel
-                })
-                
-                st.session_state.kredity = novy_zustatek_odesilatel
-                st.success(f"Platba {castka} M-K byla úspěšně odeslána uživateli {prijemce}.")
-                st.rerun()
+        with st.form("platba_form"):
+            prijemce = st.selectbox("Komu posíláte platbu:", všichni)
+            castka = st.number_input("Částka (M-K):", min_value=1.0, value=10.0, step=1.0)
+            ucel = st.text_input("Zpráva pro příjemce (Účel platby):")
+            
+            if st.form_submit_button("Odeslat peníze", icon=":material/send_money:"):
+                if castka > aktualni_kredity:
+                    st.error("Nedostatek prostředků na účtu!")
+                elif prijemce:
+                    novy_zustatek_odesilatel = aktualni_kredity - castka
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers, json={"kredity": novy_zustatek_odesilatel})
+                    res_prijemce = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{prijemce}", headers=headers).json()
+                    if res_prijemce:
+                        kredity_prijemce = res_prijemce[0]['kredity'] + castka
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{prijemce}", headers=headers, json={"kredity": kredity_prijemce})
+                    requests.post(f"{SUPABASE_URL}/rest/v1/bankovni_prevody", headers=headers, json={
+                        "odesilatel": uzivatel, "prijemce": prijemce, "castka": castka, "ucel": ucel
+                    })
+                    st.session_state.kredity = novy_zustatek_odesilatel
+                    st.success(f"Platba {castka} M-K odeslána.")
+                    st.rerun()
 
-with col2:
-    st.subheader("Historie transakcí")
-    st.caption("Zde vidíte všechny své příchozí a odchozí přímé platby.")
+    with col2:
+        st.subheader("Historie transakcí")
+        res_trans = requests.get(f"{SUPABASE_URL}/rest/v1/bankovni_prevody?or=(odesilatel.eq.{uzivatel},prijemce.eq.{uzivatel})&order=datum.desc", headers=headers)
+        transakce = res_trans.json() if res_trans.status_code == 200 else []
+        
+        if transakce:
+            for t in transakce[:10]:
+                datum = t['datum'][:10]
+                if t['odesilatel'] == uzivatel:
+                    st.markdown(f"<div class='card-box' style='padding: 10px 15px;'><div style='display:flex; justify-content:space-between; align-items:center;'><div><small style='color:#94a3b8;'>{datum} | Pro: <b>{t['prijemce']}</b></small><br><span>{t['ucel']}</span></div><div class='transaction-minus'>- {t['castka']} M-K</div></div></div>", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"<div class='card-box' style='padding: 10px 15px; border-left: 4px solid #10b981;'><div style='display:flex; justify-content:space-between; align-items:center;'><div><small style='color:#94a3b8;'>{datum} | Od: <b>{t['odesilatel']}</b></small><br><span>{t['ucel']}</span></div><div class='transaction-plus'>+ {t['castka']} M-K</div></div></div>", unsafe_allow_html=True)
+        else:
+            st.info("Zatím nemáte žádné přímé bankovní převody.")
+
+# ====== ZÁLOŽKA QUESTY ======
+with tab_questy:
+    st.subheader("Nástěnka úkolů a brigád")
+    st.caption("Zde můžete najít úkoly od Kontrolního úřadu (Učitele). Splňte je a získejte odměnu.")
     
-    # Načtení historie převodů, kde figuruje tento uživatel
-    res_trans = requests.get(f"{SUPABASE_URL}/rest/v1/bankovni_prevody?or=(odesilatel.eq.{uzivatel},prijemce.eq.{uzivatel})&order=datum.desc", headers=headers)
-    transakce = res_trans.json() if res_trans.status_code == 200 else []
+    res_questy = requests.get(f"{SUPABASE_URL}/rest/v1/questy?order=datum_zadani.desc", headers=headers)
+    questy = res_questy.json() if res_questy.status_code == 200 else []
     
-    if transakce:
-        for t in transakce[:10]: # Zobrazí posledních 10
-            datum = t['datum'][:10]
-            if t['odesilatel'] == uzivatel:
-                # Odchozí platba
-                st.markdown(f"""
-                    <div class='card-box' style='padding: 10px 15px;'>
-                        <div style='display:flex; justify-content:space-between; align-items:center;'>
-                            <div>
-                                <small style='color:#94a3b8;'>{datum} | Pro: <b>{t['prijemce']}</b></small><br>
-                                <span>{t['ucel']}</span>
-                            </div>
-                            <div class='transaction-minus'>- {t['castka']} M-K</div>
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
-            else:
-                # Příchozí platba
-                st.markdown(f"""
-                    <div class='card-box' style='padding: 10px 15px; border-left: 4px solid #10b981;'>
-                        <div style='display:flex; justify-content:space-between; align-items:center;'>
-                            <div>
-                                <small style='color:#94a3b8;'>{datum} | Od: <b>{t['odesilatel']}</b></small><br>
-                                <span>{t['ucel']}</span>
-                            </div>
-                            <div class='transaction-plus'>+ {t['castka']} M-K</div>
-                        </div>
-                    </div>
-                """, unsafe_allow_html=True)
+    if not questy:
+        st.info("Zatím nejsou vypsány žádné úkoly.")
     else:
-        st.info("Zatím nemáte žádné přímé bankovní převody.")
+        q_volne = [q for q in questy if q['stav'] == 'VOLNY']
+        q_moje = [q for q in questy if q['resitel'] == uzivatel and q['stav'] in ['V_PROCESU', 'K_KONTROLE']]
+        
+        col_q1, col_q2 = st.columns(2)
+        with col_q1:
+            st.markdown("#### Volné brigády (K přijetí)")
+            for q in q_volne:
+                st.markdown(f"<div class='quest-card'><h4>{q['nazev']}</h4><p>{q['popis']}</p><p><b>Odměna:</b> <span class='transaction-plus'>{q['odmena']} M-K</span></p></div>", unsafe_allow_html=True)
+                if st.button("Přijmout úkol", key=f"q_{q['id']}", icon=":material/task:"):
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/questy?id=eq.{q['id']}", headers=headers, json={"stav": "V_PROCESU", "resitel": uzivatel})
+                    st.rerun()
+                    
+        with col_q2:
+            st.markdown("#### Moje rozpracované úkoly")
+            for q in q_moje:
+                if q['stav'] == 'V_PROCESU':
+                    st.markdown(f"<div class='quest-card' style='border-color:#0ea5e9;'><h4>{q['nazev']}</h4><p>Stav: <b>Řešíte vy</b></p></div>", unsafe_allow_html=True)
+                    with st.form(f"f_q_{q['id']}"):
+                        odkaz = st.text_input("🔗 Odkaz na hotovou práci (Drive, Dokument atd.):")
+                        if st.form_submit_button("Odevzdat ke kontrole"):
+                            requests.patch(f"{SUPABASE_URL}/rest/v1/questy?id=eq.{q['id']}", headers=headers, json={"stav": "K_KONTROLE", "odkaz_vystup": odkaz})
+                            st.success("Odevzdáno! Čeká na schválení učitelem.")
+                            st.rerun()
+                elif q['stav'] == 'K_KONTROLE':
+                    st.markdown(f"<div class='quest-card' style='border-color:#34d399;'><h4>{q['nazev']}</h4><p>Stav: <b>Čeká na kontrolu učitelem ⏳</b></p></div>", unsafe_allow_html=True)
