@@ -56,7 +56,7 @@ tab_legal, tab_aktiva, tab_hr, tab_finance, tab_questy, tab_stat, tab_banka, tab
 ])
 
 # ==========================================
-# ZÁLOŽKA 1: SPIS (S MOŽNOSTÍ ZMĚNY ROLÍ)
+# ZÁLOŽKA 1: SPIS
 # ==========================================
 with tab_legal:
     col_l1, col_l2 = st.columns(2)
@@ -81,26 +81,33 @@ with tab_legal:
         </div>
         """, unsafe_allow_html=True)
         
-        # ZMĚNA ROLÍ UČITELEM
-        with st.expander("Jmenovat / Změnit vedení firmy (CEO, CFO, CTO)"):
+        # --- ZDŮRAZNĚNÁ ROLOVACÍ NABÍDKA PRO ZMĚNU ROLÍ ---
+        with st.expander("👉 Jmenovat / Změnit vedení firmy (CEO, CFO, CTO)"):
             zaci_vse = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak", headers=headers).json()
             seznam_jmen_zaku = [z['jmeno'] for z in zaci_vse] if isinstance(zaci_vse, list) else []
             
-            with st.form("form_zmena_roli"):
-                novy_ceo = st.selectbox("CEO (Generální ředitel):", seznam_jmen_zaku, index=seznam_jmen_zaku.index(firma['ceo_jmeno']) if firma.get('ceo_jmeno') in seznam_jmen_zaku else 0)
-                novy_cfo = st.selectbox("CFO (Finanční ředitel):", ["-- Neobsazeno --"] + seznam_jmen_zaku, index=seznam_jmen_zaku.index(firma['cfo_jmeno'])+1 if firma.get('cfo_jmeno') in seznam_jmen_zaku else 0)
-                novy_cto = st.selectbox("CTO (Technický ředitel):", ["-- Neobsazeno --"] + seznam_jmen_zaku, index=seznam_jmen_zaku.index(firma['cto_jmeno'])+1 if firma.get('cto_jmeno') in seznam_jmen_zaku else 0)
-                
-                if st.form_submit_button("Uložit nové složení vedení"):
-                    cfo_val = None if novy_cfo == "-- Neobsazeno --" else novy_cfo
-                    cto_val = None if novy_cto == "-- Neobsazeno --" else novy_cto
-                    requests.patch(
-                        f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{f_id}",
-                        headers=headers,
-                        json={"ceo_jmeno": novy_ceo, "cfo_jmeno": cfo_val, "cto_jmeno": cto_val}
-                    )
-                    st.success("Složení vedení bylo změněno!")
-                    st.rerun()
+            if not seznam_jmen_zaku:
+                st.info("V systému zatím nejsou žádní registrováni žáci.")
+            else:
+                with st.form("form_zmena_roli"):
+                    idx_ceo = seznam_jmen_zaku.index(firma['ceo_jmeno']) if firma.get('ceo_jmeno') in seznam_jmen_zaku else 0
+                    idx_cfo = seznam_jmen_zaku.index(firma['cfo_jmeno'])+1 if firma.get('cfo_jmeno') in seznam_jmen_zaku else 0
+                    idx_cto = seznam_jmen_zaku.index(firma['cto_jmeno'])+1 if firma.get('cto_jmeno') in seznam_jmen_zaku else 0
+
+                    novy_ceo = st.selectbox("CEO (Generální ředitel):", seznam_jmen_zaku, index=idx_ceo)
+                    novy_cfo = st.selectbox("CFO (Finanční ředitel):", ["-- Neobsazeno --"] + seznam_jmen_zaku, index=idx_cfo)
+                    novy_cto = st.selectbox("CTO (Technický ředitel):", ["-- Neobsazeno --"] + seznam_jmen_zaku, index=idx_cto)
+                    
+                    if st.form_submit_button("Uložit nové složení vedení"):
+                        cfo_val = None if novy_cfo == "-- Neobsazeno --" else novy_cfo
+                        cto_val = None if novy_cto == "-- Neobsazeno --" else novy_cto
+                        requests.patch(
+                            f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{f_id}",
+                            headers=headers,
+                            json={"ceo_jmeno": novy_ceo, "cfo_jmeno": cfo_val, "cto_jmeno": cto_val}
+                        )
+                        st.success("Složení vedení bylo úspěšně změněno!")
+                        st.rerun()
         
     with col_l2:
         stav_tridy = 'status-ok' if firma['stave_licence'] == 'SCHVALENO' else 'status-wait'
