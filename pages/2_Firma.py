@@ -626,3 +626,88 @@ with tab_burza:
                             requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "VYDAJ", "titul": "Výplata dividend", "castka": castka_rozdelit, "auditovano": True})
                             st.rerun()
                         else: st.error("Nedostatek prostředků na vyplacení dividend.")
+# ==========================================
+# DENÍK PRÁCE A TÝMOVÉ HODNOCENÍ
+# ==========================================
+st.write("---")
+st.subheader("Deník práce a Hodnocení týmu")
+
+tab_vykaz, tab_peer = st.tabs(["1. Zapsat odpracovanou práci", "2. Hodnocení kolegů v týmu"])
+
+with tab_vykaz:
+    st.markdown("#### Výkaz fyzické a manuální práce")
+    st.caption("Zde zapisujte činnosti, které děláte mimo aplikaci (výroba, tisk, balení, úklid dílny, schůzky).")
+    
+    with st.form("form_denik_prace"):
+        dp_popis = st.text_area("Popis odvedené práce:")
+        dp_hodiny = st.number_input("Počet odpracovaných hodin:", min_value=0.5, max_value=12.0, value=1.0, step=0.5)
+        if st.form_submit_button("Uložit zápis do deníku"):
+            if dp_popis:
+                requests.post(
+                    f"{SUPABASE_URL}/rest/v1/denik_prace",
+                    headers=headers,
+                    json={
+                        "jmeno_zaka": st.session_state.uzivatel,
+                        "firma_id": moje_firma['id'] if moje_firma else None,
+                        "popis_prace": dp_popis,
+                        "hodiny": dp_hodiny
+                    }
+                )
+                st.success("Záznam byl úspěšně uložen do vašeho výkazu.")
+                st.rerun()
+            else:
+                st.error("Vyplňte popis práce.")
+
+    st.markdown("##### Vaše odebrané zápisy v tomto měsíci")
+    res_moje_prace = requests.get(
+        f"{SUPABASE_URL}/rest/v1/denik_prace?jmeno_zaka=eq.{st.session_state.uzivatel}&order=datum.desc",
+        headers=headers
+    ).json()
+    if res_moje_prace:
+        df_prace = pd.DataFrame(res_moje_prace)[['datum', 'popis_prace', 'hodiny']]
+        st.dataframe(df_prace, use_container_width=True)
+    else:
+        st.info("Zatím nemáte žádné zapsané hodiny.")
+
+with tab_peer:
+    st.markdown("#### Vzájemné hodnocení spoluhráčů")
+    st.caption("Ohodnoťte přínos a pracovitost ostatních členů vašeho týmu.")
+    
+    if moje_firma:
+        # Získání kolegů ve firmě (vyjma sebe sama)
+        vsechni_clenove = []
+        if moje_firma.get('ceo_jmeno'): vsechni_clenove.append(moje_firma['ceo_jmeno'])
+        if moje_firma.get('cfo_jmeno'): vsechni_clenove.append(moje_firma['cfo_jmeno'])
+        if moje_firma.get('cto_jmeno'): vsechni_clenove.append(moje_firma['cto_jmeno'])
+        
+        res_z = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{moje_firma['id']}", headers=headers).json()
+        if res_z:
+            for z in res_z:
+                vsechni_clenove.append(z['jmeno_zamestnance'])
+                
+        kolegovi = [c for c in list(set(vsechni_clenove)) if c != st.session_state.uzivatel]
+        
+        if kolegovi:
+            with st.form("form_peer_review"):
+                vybrany_kolega = st.selectbox("Vyberte kolegu k ohodnocení:", kolegovi)
+                body_hodnoceni = st.slider("Hodnocení pracovitosti a přínosu (1 = Neaktivní, 5 = Vynikající):", 1, 5, 5)
+                slovni_komentar = st.text_area("Stručný komentář k jeho práci:")
+                
+                if st.form_submit_button("Odeslat hodnocení kolegy"):
+                    requests.post(
+                        f"{SUPABASE_URL}/rest/v1/peer_review",
+                        headers=headers,
+                        json={
+                            "hodnotitel": st.session_state.uzivatel,
+                            "hodnoceny": vybrany_kolega,
+                            "firma_id": moje_firma['id'],
+                            "body": body_hodnoceni,
+                            "komentar": slovni_komentar
+                        }
+                    )
+                    st.success(f"Hodnocení pro žáka {vybrany_kolega} bylo uloženo.")
+                    st.rerun()
+        else:
+            st.info("Ve firmě jste zatím sami, nemáte koho hodnotit.")
+    else:
+        st.info("Hodnocení týmu je dostupné pouze pro členy schválených firem.")
