@@ -93,8 +93,8 @@ with tab_zalozeni:
         if moje_firma['stave_licence'] == 'UKONCENO':
             st.error("🚨 TATO FIRMA BYLA OFICIÁLNĚ VYMAZÁNA Z REJSTŘÍKU A UKONČILA SVOU ČINNOST. 🚨")
             
-        doc = f"# ZAKLADATELSKÁ LISTINA\nFirma: {moje_firma['nazev_firmy']}\nKód: {moje_firma['skolni_kod']}\n\n1. Statutární orgán\nCEO: {moje_firma['ceo_jmeno']}\nCFO: {moje_firma['cfo_jmeno']}\nCTO: {moje_firma['cto_jmeno']}\n\n2. Základní kapitál\nKapitál: {moje_firma['pocatecni_kapital']} M-K\nPředmět: {moje_firma['podnikatelsky_zamer']}\n"
-        st.download_button(label="Stáhnout Zakladatelskou Listinu", data=doc, file_name=f"Spis_{moje_firma['nazev_firmy']}.md", mime="text/markdown")
+        doc = f"ZAKLADATELSKÁ LISTINA\n======================\nFirma: {moje_firma['nazev_firmy']}\nKód: {moje_firma['skolni_kod']}\n\n1. Statutární orgán\nCEO: {moje_firma['ceo_jmeno']}\nCFO: {moje_firma['cfo_jmeno']}\nCTO: {moje_firma['cto_jmeno']}\n\n2. Základní kapitál\nKapitál: {moje_firma['pocatecni_kapital']} M-K\nPředmět: {moje_firma['podnikatelsky_zamer']}\n"
+        st.download_button(label="Stáhnout Zakladatelskou listinu", data=doc, file_name=f"Zakladatelska_listina_{moje_firma['nazev_firmy']}.txt", mime="text/plain")
         if st.button("Editovat dokumentaci"):
             st.session_state.edit_spis = True
             st.rerun()
