@@ -34,6 +34,7 @@ except Exception:
     st.error("Chybí konfigurace databáze.")
     st.stop()
 
+# Načtení profilu učitele/admina
 res_ucitel = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{st.session_state.uzivatel}", headers=headers).json()
 skolni_kod_ucitele = res_ucitel[0].get("skolni_kod", "") if res_ucitel else ""
 
@@ -191,7 +192,7 @@ with tab_stat:
                     st.rerun()
 
 # ==========================================
-# ZÁLOŽKA: CENTRÁLNÍ BANKA A MAKROEKONOMIKA
+# ZÁLOŽKA: CENTRÁLNÍ BANKA A MAKROEKONOMIKA (OPRAVENO)
 # ==========================================
 with tab_banka:
     st.subheader("Centrální Banka (Daně a Ceník)")
@@ -199,30 +200,51 @@ with tab_banka:
     
     with col_cb1:
         st.markdown("#### Nastavení ekonomiky školy")
-        if skolni_kod_ucitele:
-            nastaveni_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{skolni_kod_ucitele}", headers=headers).json()
-            if nastaveni_res:
-                akt_nastaveni = nastaveni_res[0]
-                with st.form("form_makro"):
-                    st.caption("Pravidla, ceník a daně platné pro celou školu/třídu.")
-                    n_zak = st.number_input("Startovací kredit pro ŽÁKA (M-K):", value=float(akt_nastaveni.get('start_kredit_zak', 100)))
-                    n_firma = st.number_input("Startovací kredit pro FIRMU (M-K):", value=float(akt_nastaveni.get('start_kredit_firma', 300)))
-                    
-                    st.markdown("##### Daňová politika")
-                    n_dan = st.number_input("M-TECH Daň pro e-shop (% z prodeje):", min_value=0.0, max_value=50.0, value=float(akt_nastaveni.get('mtech_dan_pct', 15.0)))
-                    n_dan_prijem = st.number_input("Daň z příjmu zaměstnanců (% ze mzdy):", min_value=0.0, max_value=50.0, value=float(akt_nastaveni.get('dan_prijem_pct', 15.0)))
-                    
-                    st.markdown("##### Centrální ceník služeb a materiálu")
-                    st.caption("Zde napište ceník, podle kterého budou firmy počítat své náklady na výrobky.")
-                    n_cenik = st.text_area("Ceník (zobrazí se firmám v aplikaci):", value=akt_nastaveni.get('globalni_cenik', ''), height=150)
-                    
-                    if st.form_submit_button("Uložit makroekonomická pravidla", icon=":material/settings:"):
-                        requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{skolni_kod_ucitele}", headers=headers, json={
-                            "start_kredit_zak": n_zak, "start_kredit_firma": n_firma, "globalni_cenik": n_cenik, "mtech_dan_pct": n_dan, "dan_prijem_pct": n_dan_prijem
-                        })
-                        st.success("Ekonomika aktualizována!")
-                        st.rerun()
-            else: st.warning("Škola nemá založen záznam v nastavení.")
+        
+        # Automatické určování kódu školy (Učitel -> Vybraná Firma -> Default)
+        target_skola = skolni_kod_ucitele or firma.get('skolni_kod', '') or 'SYSTEM'
+        
+        # Načtení dat z DB
+        nastaveni_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers).json()
+        
+        # Pokud nastavení pro tuto školu neexistuje, automaticky ho založíme
+        if not nastaveni_res:
+            default_data = {
+                "skolni_kod": target_skola,
+                "start_kredit_zak": 100,
+                "start_kredit_firma": 300,
+                "mtech_dan_pct": 15.0,
+                "dan_prijem_pct": 15.0,
+                "globalni_cenik": "PLA filament (1 kg): 150 M-K\nHodinová sazba (Junior IT): 40 M-K/h\nPronájem 3D tiskárny: 50 M-K/h\nKonzultace (Senior): 100 M-K/h"
+            }
+            requests.post(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni", headers=headers, json=default_data)
+            akt_nastaveni = default_data
+        else:
+            akt_nastaveni = nastaveni_res[0]
+
+        with st.form("form_makro"):
+            st.caption(f"Pravidla, ceník a daně pro školní kód: **{target_skola}**")
+            n_zak = st.number_input("Startovací kredit pro ŽÁKA (M-K):", value=float(akt_nastaveni.get('start_kredit_zak', 100)))
+            n_firma = st.number_input("Startovací kredit pro FIRMU (M-K):", value=float(akt_nastaveni.get('start_kredit_firma', 300)))
+            
+            st.markdown("##### Daňová politika")
+            n_dan = st.number_input("M-TECH Daň pro e-shop (% z prodeje):", min_value=0.0, max_value=50.0, value=float(akt_nastaveni.get('mtech_dan_pct', 15.0)))
+            n_dan_prijem = st.number_input("Daň z příjmu zaměstnanců (% ze mzdy):", min_value=0.0, max_value=50.0, value=float(akt_nastaveni.get('dan_prijem_pct', 15.0)))
+            
+            st.markdown("##### Centrální ceník služeb a materiálu")
+            st.caption("Zde napište ceník, podle kterého budou firmy počítat své náklady na výrobky.")
+            n_cenik = st.text_area("Ceník (zobrazí se firmám v aplikaci):", value=str(akt_nastaveni.get('globalni_cenik', '')), height=150)
+            
+            if st.form_submit_button("Uložit makroekonomická pravidla", icon=":material/settings:"):
+                requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={
+                    "start_kredit_zak": n_zak, 
+                    "start_kredit_firma": n_firma, 
+                    "globalni_cenik": n_cenik, 
+                    "mtech_dan_pct": n_dan, 
+                    "dan_prijem_pct": n_dan_prijem
+                })
+                st.success("Ekonomika byla úspěšně uložena!")
+                st.rerun()
 
     with col_cb2:
         st.markdown("#### Žádosti o podnikatelský úvěr")
