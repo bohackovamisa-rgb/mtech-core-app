@@ -75,13 +75,10 @@ tab_zalozeni, tab_brand, tab_vyvoj, tab_hr, tab_kalkulace, tab_ucto, tab_burza =
     "3. Agilní Vývoj",
     "4. Tým a HR",
     "5. Cenotvorba", 
-    "6. Účetnictví a Úvěry",
+    "6. Účetnictví (Materiál a Úvěry)",
     "7. Burza"
 ])
 
-# ==========================================
-# TAB 1 A 2 (Zůstávají beze změny)
-# ==========================================
 with tab_zalozeni:
     st.subheader("Registrační spis")
     if moje_firma:
@@ -139,7 +136,7 @@ with tab_zalozeni:
 with tab_brand:
     if not moje_firma: st.warning("Nejprve založte firmu.")
     else:
-        tab_aktiva, tab_lean = st.tabs(["Vizuální Identita", "Lean Canvas"])
+        tab_aktiva, tab_lean, tab_ai = st.tabs(["Vizuální Identita", "Lean Canvas", "AI Mentor"])
         with tab_aktiva:
             with st.form("form_brand"):
                 b_logo = st.text_input("Odkaz na LOGO:", value=moje_firma.get('logo_url','') or "")
@@ -159,10 +156,28 @@ with tab_brand:
                     if exist_canvas: requests.patch(f"{SUPABASE_URL}/rest/v1/lean_canvas?id=eq.{exist_canvas['id']}", headers=headers, json=c_payload)
                     else: requests.post(f"{SUPABASE_URL}/rest/v1/lean_canvas", headers=headers, json=c_payload)
                     st.rerun()
+        with tab_ai:
+            st.markdown("#### Diagnostika byznys modelu")
+            if st.button("Spustit AI Audit projektu", icon=":material/psychology:"):
+                score = 0
+                feedback = []
+                if moje_firma.get("logo_url") and moje_firma.get("web_url"):
+                    score += 25
+                    feedback.append("**Brand:** Máte připravené logo i funkční stránku.")
+                else: feedback.append("**Brand:** Chybí odkaz na webové stránky nebo logo.")
+                if exist_canvas and exist_canvas.get("problem") and exist_canvas.get("reseni"):
+                    score += 35
+                    feedback.append("**Lean Canvas:** Máte jasně definovaný problém a řešení.")
+                else: feedback.append("**Lean Canvas:** Nemáte dostatečně vyplněný model.")
+                res_k = requests.get(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?firma_id=eq.{moje_firma['id']}", headers=headers).json()
+                if res_k:
+                    score += 40
+                    feedback.append("**Finance:** Máte zpracovanou kalkulaci produktů.")
+                else: feedback.append("**Finance:** Zatím nemáte vytvořený produkt s kalkulací.")
+                
+                st.markdown(f"<div class='card-box'><h3>Skóre připravenosti: {score} %</h3></div>", unsafe_allow_html=True)
+                for item in feedback: st.markdown(f"- {item}")
 
-# ==========================================
-# TAB 3: AGILNÍ VÝVOJ
-# ==========================================
 with tab_vyvoj:
     if not moje_firma: st.warning("Nejprve založte firmu.")
     else:
@@ -220,9 +235,6 @@ with tab_vyvoj:
                         if res_ceo: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{dodavatel_firma['ceo_jmeno']}", headers=headers, json={"kredity": res_ceo[0]['kredity'] + o_cena})
                         st.rerun()
 
-# ==========================================
-# TAB 4: HR A MZDY (S AUTO DANÍ Z PŘÍJMU)
-# ==========================================
 with tab_hr:
     if not moje_firma: st.warning("Nejprve založte firmu.")
     else:
@@ -253,83 +265,84 @@ with tab_hr:
                 st.info(f"Hrubá mzda: {hruba:.2f} M-K | Daň státu: {dan_castka:.2f} M-K | Čistá mzda: {cista:.2f} M-K")
                 
                 if st.button(f"Odeslat výplatu a odvést daň", icon=":material/payments:"):
-                    # 1. Zapsat výplatu zaměstnanci do HR systému
                     requests.patch(f"{SUPABASE_URL}/rest/v1/zamestnanci?id=eq.{vybrany_z['id']}", headers=headers, json={"vyplaceno_celkem": vybrany_z["vyplaceno_celkem"] + cista})
-                    
-                    # 2. Strhnout celou hrubou mzdu z účtu firmy (CEO)
                     res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers).json()
                     kredity_ceo = res_ceo[0]['kredity'] if res_ceo else 0
                     if hruba > kredity_ceo:
                         st.error("Nedostatek peněz na firemním účtu (CEO)!")
                     else:
                         requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"kredity": kredity_ceo - hruba})
-                        
-                        # 3. Připsat čistou mzdu zaměstnanci
                         res_zam_ucet = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_z['jmeno_zamestnance']}", headers=headers).json()
                         if res_zam_ucet: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_z['jmeno_zamestnance']}", headers=headers, json={"kredity": res_zam_ucet[0]['kredity'] + cista})
-                        
-                        # 4. Odvést daň státu
                         res_stat = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers).json()
                         if res_stat: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers, json={"kredity": res_stat[0]['kredity'] + dan_castka})
-                        
-                        # 5. Účetnictví firmy
                         requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "VYDAJ", "titul": f"Mzdové náklady: {vybrany_z['jmeno_zamestnance']}", "castka": hruba, "auditovano": False})
                         st.rerun()
 
-# ==========================================
-# TAB 5: CENOTVORBA (Uzamčená M-TECH daň a viditelný Ceník)
-# ==========================================
 with tab_kalkulace:
     if not moje_firma: st.warning("Nejprve založte firmu.")
     else:
         col_c_left, col_c_right = st.columns([1.5, 1])
-        
         with col_c_right:
             st.markdown("#### Globální ceník školy")
             st.info(akt_cenik.replace('\n', '  \n') if akt_cenik else "Zatím nenastaveno.")
-                
         with col_c_left:
             st.subheader("Kalkulační list produktu")
             st.caption(f"Sazba M-TECH Daně stanovená Centrální bankou: **{akt_dan_mtech} %**")
-            
             with st.form("form_kalkulace"):
                 prod_nazev = st.text_input("Název produktu pro E-shop:")
                 popis = st.text_area("Popis produktu:")
                 obrazek = st.text_input("Odkaz na obrázek:")
-                
                 col_k1, col_k2 = st.columns(2)
                 with col_k1: p_naklady = st.number_input("Přímé náklady dle ceníku (M-K):", min_value=0.0, value=35.0)
                 with col_k2: marze = st.number_input("Zisková marže (M-K):", min_value=0.0, value=50.0)
-                
                 k_cena = (p_naklady + marze) * (1 + (akt_dan_mtech / 100.0))
-                
                 st.markdown(f"**Koncová cena pro E-shop:** `{k_cena:.2f} M-Kreditů`")
                 if st.form_submit_button("Odeslat ke schválení", icon=":material/send:"):
                     requests.post(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy", headers=headers, json={"firma_id": moje_firma["id"], "nazev_produktu": prod_nazev, "popis": popis, "obrazek_url": obrazek, "prime_naklady": p_naklady, "marze_zisk": marze, "mtech_dan_procento": akt_dan_mtech, "konecna_cena": k_cena, "schvaleno_uradem": False})
                     st.rerun()
 
 # ==========================================
-# TAB 6 A 7: ÚČETNICTVÍ A BURZA (Zůstávají beze změny)
+# TAB 6: ÚČETNICTVÍ, NÁKUP MATERIÁLU A ÚVĚRY
 # ==========================================
 with tab_ucto:
     if not moje_firma: st.warning("Nejprve založte firmu.")
     else:
         col_u1, col_u2 = st.columns(2)
+        
         with col_u1:
-            st.subheader("Cash-flow deník")
-            with st.form("form_transakce"):
-                typ = st.selectbox("Typ:", ["PRIJEM", "VYDAJ"])
-                castka = st.number_input("Částka (M-K):", min_value=1.0)
-                titul = st.text_input("Důvod:")
-                if st.form_submit_button("Zaevidovat", icon=":material/account_balance_wallet:"):
-                    requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": typ, "titul": titul, "castka": castka, "auditovano": False})
-                    st.rerun()
+            st.subheader("🛒 Nákup materiálu a služeb od Školy")
+            st.caption("Berete si ze školy filament, dřevo nebo služby? Zde za ně zaplatíte Státu.")
+            with st.form("form_nakup_materialu"):
+                titul_nakupu = st.text_input("Předmět nákupu (např. 2x Hodina 3D tisku, 1x Filament):")
+                castka_nakup = st.number_input("Celková cena dle Ceníku (M-K):", min_value=1.0, value=10.0)
+                
+                if st.form_submit_button("Zaplatit škole za materiál", icon=":material/shopping_cart:"):
+                    res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers).json()
+                    kredity_ceo = res_ceo[0]['kredity'] if res_ceo else 0
+                    if castka_nakup > kredity_ceo:
+                        st.error("Na firemním účtu (CEO) není dostatek kreditů!")
+                    else:
+                        # 1. Strhnout CEO peníze
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"kredity": kredity_ceo - castka_nakup})
+                        # 2. Poslat peníze Státu (aby se vrátily do oběhu)
+                        res_stat = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers).json()
+                        if res_stat:
+                            requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers, json={"kredity": res_stat[0]['kredity'] + castka_nakup})
+                        # 3. Zapsat výdaj do účetnictví firmy
+                        requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "VYDAJ", "titul": f"Nákup od školy: {titul_nakupu}", "castka": castka_nakup, "auditovano": False})
+                        st.success(f"Nákup za {castka_nakup} M-K byl úspěšně zaplacen Státu.")
+                        st.rerun()
+            
+            st.write("---")
+            st.markdown("#### Cash-flow a transakce")
             res_kniha = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{moje_firma['id']}&order=datum.desc", headers=headers)
             if res_kniha.status_code == 200 and len(res_kniha.json()) > 0:
                 st.dataframe(pd.DataFrame(res_kniha.json())[['datum', 'typ_transakce', 'titul', 'castka']], use_container_width=True)
                 
         with col_u2:
             st.subheader("Financování a Bankovní úvěry")
+            st.caption("Nemáte peníze na nákup materiálu? Zažádejte u Centrální banky o úvěr.")
             with st.form("form_uver"):
                 u_castka = st.number_input("Požadovaná částka (M-K):", min_value=50, value=500)
                 u_ucel = st.text_input("Účel půjčky (např. Nákup materiálu):")
