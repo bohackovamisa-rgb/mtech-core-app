@@ -664,7 +664,6 @@ with tab_hodnoceni:
         r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers).json()
         finance = r_ceo[0]['kredity'] if r_ceo else 0
         
-        # PŘIDÁNO: Získání všech členů týmu
         clenove = []
         if f.get('ceo_jmeno'): clenove.append(f"{f['ceo_jmeno']} (CEO)")
         if f.get('cfo_jmeno'): clenove.append(f"{f['cfo_jmeno']} (CFO)")
@@ -721,89 +720,73 @@ with tab_hodnoceni:
             })
         st.dataframe(pd.DataFrame(zaci_data), use_container_width=True)
         
-        # --- 3. AI SLOVNÍ HODNOCENÍ (OPRAVENO) ---
+        # --- 3. HROMADNÉ AI SLOVNÍ HODNOCENÍ ---
         st.write("---")
-        st.markdown("#### 🤖 AI Generátor slovního hodnocení do Bakalářů")
-        st.caption("Vyberte žáka. AI posoudí jeho data z celé hry a vygeneruje na míru psaný, profesionální posudek.")
+        st.markdown("#### 🤖 Hromadný AI Generátor posudků do Bakalářů")
+        st.caption("Jedním kliknutím analyzuje data celé třídy naráz a připraví tabulku hotových slovních hodnocení pro všechny žáky.")
         
-        col_ai1, col_ai2 = st.columns([1, 2])
-        with col_ai1:
-            vybrany_zak_jmeno = st.selectbox("Vyberte žáka pro hodnocení:", [z['jmeno'] for z in zaci])
-        
-        if st.button("Vygenerovat slovní hodnocení pro tohoto žáka", type="primary"):
-            vybrany_zak = next((z for z in zaci if z['jmeno'] == vybrany_zak_jmeno), None)
-            if vybrany_zak:
-                with st.spinner(f"Analyzuji byznysová data žáka {vybrany_zak_jmeno} a píšu posudek..."):
-                    firma_zaka = "Žádná (Freelancer na volné noze)"
+        if st.button("Hromadně vygenerovat hodnocení pro VŠECHNY žáky", type="primary"):
+            with st.spinner("AI studuje výsledky celé třídy a sepisuje posudky (může to trvat pár desítek vteřin)..."):
+                seznam_pro_ai = []
+                for z in zaci:
+                    # Rychlé zjištění role
+                    firma_zaka = "Žádná (Freelancer)"
                     pozice = "Nezávislý pracovník"
-                    
                     for f in firmy:
-                        if f['ceo_jmeno'] == vybrany_zak_jmeno:
-                            firma_zaka = f['nazev_firmy']; pozice = "CEO (Ředitel)"; break
-                        elif f.get('cfo_jmeno') == vybrany_zak_jmeno:
-                            firma_zaka = f['nazev_firmy']; pozice = "CFO (Finanční ředitel)"; break
-                        elif f.get('cto_jmeno') == vybrany_zak_jmeno:
-                            firma_zaka = f['nazev_firmy']; pozice = "CTO (Technický ředitel)"; break
+                        if f['ceo_jmeno'] == z['jmeno']: firma_zaka = f['nazev_firmy']; pozice = "CEO"; break
+                        elif f.get('cfo_jmeno') == z['jmeno']: firma_zaka = f['nazev_firmy']; pozice = "CFO"; break
+                        elif f.get('cto_jmeno') == z['jmeno']: firma_zaka = f['nazev_firmy']; pozice = "CTO"; break
                     
-                    if firma_zaka == "Žádná (Freelancer na volné noze)":
-                        vsechna_hr = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?jmeno_zamestnance=eq.{vybrany_zak_jmeno}", headers=headers).json()
-                        if vsechna_hr:
-                            pozice = vsechna_hr[0].get('pozice', 'Zaměstnanec')
-                            f_info = next((f for f in firmy if f['id'] == vsechna_hr[0]['firma_id']), None)
-                            if f_info: firma_zaka = f_info['nazev_firmy']
-                            
-                    xp_c = vybrany_zak.get('xp_it', 0) + vybrany_zak.get('xp_marketing', 0) + vybrany_zak.get('xp_byznys', 0)
+                    if firma_zaka == "Žádná (Freelancer)":
+                        v_hr = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?jmeno_zamestnance=eq.{z['jmeno']}", headers=headers).json()
+                        if v_hr:
+                            pozice = v_hr[0].get('pozice', 'Zaměstnanec')
+                            f_inf = next((f for f in firmy if f['id'] == v_hr[0]['firma_id']), None)
+                            if f_inf: firma_zaka = f_inf['nazev_firmy']
                     
-                    prompt = f"""Jsi učitel ekonomiky a praxe. Píšeš formální, ale povzbuzující slovní hodnocení pro žáka na konec pololetí/roku.
-                    Jméno žáka: {vybrany_zak_jmeno}
-                    Role ve školním byznys simulátoru M-TECH: {pozice} ve firmě {firma_zaka}.
-                    Získané XP body (za plnění školních úkolů): {xp_c}.
-                    Aktuální finanční úspěch (majetek): {vybrany_zak.get('kredity', 0)} M-Kreditů.
-                    
-                    ÚKOL: Napiš profesionální hodnocení (cca 3-4 věty) z pohledu učitele. Zhodnoť jeho aktivitu a nasazení. Pokud má málo XP nebo peněz, povzbuď ho k větší aktivitě. Pokud má hodně, chval ho za byznysový talent.
-                    Odpověz POUZE čistým textem, bez jakéhokoliv Markdownu, hvězdiček nebo JSONu, aby se to dalo přímo zkopírovat do školního systému."""
-                    
-                    gemini_key = st.secrets.get("GEMINI_API_KEY", "")
-                    if gemini_key:
-                        try:
-                            # PŘIDÁNO: Dynamický vyhledávač funkčních modelů proti chybám Googlu
-                            list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={gemini_key}"
-                            models_data = requests.get(list_url, timeout=30).json()
-                            
-                            dostupne_modely = []
-                            if "models" in models_data:
-                                for m in models_data["models"]:
-                                    if "generateContent" in m.get("supportedGenerationMethods", []):
-                                        nazev = m["name"].replace("models/", "")
-                                        if "flash" in nazev and "vision" not in nazev and "audio" not in nazev:
-                                            dostupne_modely.insert(0, nazev)
-                                        else:
-                                            dostupne_modely.append(nazev)
-                            
-                            if not dostupne_modely:
-                                dostupne_modely = ["gemini-1.5-flash", "gemini-1.5-pro"]
+                    xp_c = z.get('xp_it', 0) + z.get('xp_marketing', 0) + z.get('xp_byznys', 0)
+                    seznam_pro_ai.append(f"Žák: {z['jmeno']}, Role: {pozice} ve firmě {firma_zaka}, XP body: {xp_c}, Peníze: {z.get('kredity',0)} MK.")
+                
+                text_zaku = "\n".join(seznam_pro_ai)
+                
+                prompt = f"""Jsi učitel ekonomiky a praxe. Napiš formální slovní hodnocení na konec roku pro VŠECHNY žáky ze seznamu níže.
+                Zhodnoť jejich aktivitu, vydělané peníze a XP. Každé hodnocení ať má 2 věty. Pokud má málo bodů, povzbuď ho, pokud hodně, chval ho za talent.
+                
+                SEZNAM ŽÁKŮ:
+                {text_zaku}
+                
+                Odpověz VÝHRADNĚ ve formátu JSON jako pole objektů. Příklad:
+                [ {{"jmeno": "Karel Novák", "hodnoceni": "Karel ukázal skvělý tah na branku..."}}, {{"jmeno": "Eva", "hodnoceni": "Eva potřebuje..."}} ]"""
+                
+                gemini_key = st.secrets.get("GEMINI_API_KEY", "")
+                if gemini_key:
+                    try:
+                        list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={gemini_key}"
+                        models_data = requests.get(list_url, timeout=30).json()
+                        dostupne_modely = [m["name"].replace("models/", "") for m in models_data.get("models", []) if "generateContent" in m.get("supportedGenerationMethods", []) and "flash" in m["name"] and "vision" not in m["name"]]
+                        if not dostupne_modely: dostupne_modely = ["gemini-1.5-flash", "gemini-1.5-pro"]
 
-                            p_load = {"contents": [{"parts": [{"text": prompt}]}]}
-                            uspesna_odpoved = None
-                            chyba_msg = ""
+                        p_load = {"contents": [{"parts": [{"text": prompt}]}]}
+                        uspesna_odpoved = None
+                        
+                        for model in dostupne_modely:
+                            g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
+                            res_ai = requests.post(g_url, json=p_load, timeout=45).json()
+                            if 'error' not in res_ai: uspesna_odpoved = res_ai; break
+                        
+                        if uspesna_odpoved:
+                            raw_text = uspesna_odpoved['candidates'][0]['content']['parts'][0]['text']
+                            clean_text = raw_text.replace("```json", "").replace("```", "").strip()
+                            data_ai = json.loads(clean_text)
                             
-                            for model in dostupne_modely:
-                                g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
-                                res_ai = requests.post(g_url, json=p_load, timeout=30).json()
-                                if 'error' not in res_ai:
-                                    uspesna_odpoved = res_ai
-                                    break
-                                else:
-                                    chyba_msg = res_ai['error']['message']
-                            
-                            if not uspesna_odpoved:
-                                st.error(f"Googlu selhaly všechny modely! Chyba: {chyba_msg}")
-                            else:
-                                hodnotici_text = uspesna_odpoved['candidates'][0]['content']['parts'][0]['text']
-                                st.markdown(f"<div style='background:rgba(16, 185, 129, 0.1); border-left:4px solid #10b981; padding: 15px; font-style: italic; border-radius: 5px;'>{hodnotici_text}</div>", unsafe_allow_html=True)
-                        except Exception as e:
-                            st.error(f"Chyba při generování: {e}")
-                    else:
-                        st.error("Chybí klíč GEMINI_API_KEY")
+                            st.success("Hromadné generování dokončeno!")
+                            # Zobrazení ve formátu tabulky
+                            st.dataframe(pd.DataFrame(data_ai), use_container_width=True)
+                        else:
+                            st.error("Googlu se nepodařilo vygenerovat hodnocení (Chyba API).")
+                    except Exception as e:
+                        st.error(f"Chyba při hromadném generování: {e}")
+                else:
+                    st.error("Chybí klíč GEMINI_API_KEY")
     else:
         st.info("V systému zatím nejsou zaregistrováni žádní žáci.")
