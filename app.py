@@ -42,9 +42,11 @@ if "kredity" not in st.session_state:
 if "uzivatel" not in st.session_state:
     st.session_state.uzivatel = None
 
+# --- DEFINICE STRÁNEK VČETNĚ TRŽIŠTĚ ---
 zaci_page = st.Page("pages/1_Zaci.py", title="Moje peněženka", icon=":material/wallet:")
 firma_page = st.Page("pages/2_Firma.py", title="Firemní Dashboard", icon=":material/insights:")
 ucitel_page = st.Page("pages/3_Ucitel.py", title="Kontrolní úřad", icon=":material/account_balance:")
+trh_page = st.Page("pages/4_Trh.py", title="Tržiště produktů", icon=":material/shopping_cart:")
 
 if not st.session_state.prihlasen:
     # --- HERO LANDING PAGE A LOGIN ---
@@ -133,18 +135,18 @@ if not st.session_state.prihlasen:
                     st.warning("Vyplňte prosím název školy i e-mail.")
 
 # ==================================================
-# ZOBRAZENÍ MENU PO PŘIHLÁŠENÍ 
+# ZOBRAZENÍ MENU PO PŘIHLÁŠENÍ (S TRŽIŠTĚM)
 # ==================================================
 else:
-    # 1. Zobrazení správné stránky podle role
+    # 1. Zobrazení správné stránky podle role (Zde je přidáno `trh_page`)
     if st.session_state.role == "zak":
-        pg = st.navigation([zaci_page])
+        pg = st.navigation([zaci_page, trh_page])
     elif st.session_state.role == "firma":
-        pg = st.navigation([firma_page])
+        pg = st.navigation([firma_page, zaci_page, trh_page])
     elif st.session_state.role == "ucitel":
-        pg = st.navigation([ucitel_page])
+        pg = st.navigation([ucitel_page, trh_page])
     elif st.session_state.role == "admin":
-        pg = st.navigation([zaci_page, firma_page, ucitel_page])
+        pg = st.navigation([zaci_page, firma_page, ucitel_page, trh_page])
     
     pg.run()
     
