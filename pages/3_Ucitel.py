@@ -148,9 +148,38 @@ with tab_krize:
                     st.success(f"Příspěvek {stimulus_castka} M-K byl úspěšně připsán všem žákům!")
                     st.rerun()
 
+        with st.expander("Zátah Finančního úřadu (Účetnictví)"):
+            st.caption("Zkontroluje účetnictví firem. Pokud má firma transakce bez auditního razítka, dostane pokutu 30 M-K.")
+            if st.button("Spustit finanční kontrolu"):
+                pokutovane = 0
+                for f in firmy:
+                    neauditovane = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{f['id']}&auditovano=eq.false", headers=headers).json()
+                    if neauditovane:
+                        pokutovane += 1
+                        r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers).json()
+                        if r_ceo:
+                            requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers, json={"kredity": max(0, r_ceo[0]['kredity'] - 30)})
+                            requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": f["id"], "typ_transakce": "VYDAJ", "titul": "POKUTA FÚ: Neauditované transakce", "castka": 30, "auditovano": True})
+                st.warning(f"Finanční kontrola hotova! Pokutováno {pokutovane} firem za zanedbané účetnictví.")
+                st.rerun()
+
+        with st.expander("Státní dotační program: Digitalizace (EU Fondy)"):
+            st.caption("Firmy, které mají připravený Brand Kit (vyplněný odkaz na firemní web), obdrží jednorázovou dotaci 100 M-K.")
+            if st.button("Vyhodnotit a vyplatit EU dotace"):
+                pocet_dotovanych = 0
+                for f in firmy:
+                    if f.get('web_url') and str(f['web_url']).strip() != "":
+                        pocet_dotovanych += 1
+                        r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers).json()
+                        if r_ceo:
+                            requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers, json={"kredity": r_ceo[0]['kredity'] + 100})
+                            requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": f["id"], "typ_transakce": "PRIJEM", "titul": "EU Dotace: Digitalizace byznysu", "castka": 100, "auditovano": True})
+                st.success(f"Dotace za digitalizaci úspěšně vyplacena {pocet_dotovanych} inovativním firmám!")
+                st.rerun()
+
         with st.expander("Hloubková Daňová a BOZP inspekce"):
-            st.caption("Provede kontrolu firem. Udělí pokutu 50 M-K firmám, které nemají v pořádku zakladatelský spis.")
-            if st.button("Spustit celostátní inspekci"):
+            st.caption("Provede kontrolu firem. Udělí pokutu 50 M-K firmám, které nemají v pořádku a schválený zakladatelský spis.")
+            if st.button("Spustit BOZP a právní inspekci"):
                 pokutovane = 0
                 for f in firmy:
                     if f['stave_licence'] != 'SCHVALENO':
@@ -159,14 +188,15 @@ with tab_krize:
                         if r_ceo:
                             requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers, json={"kredity": max(0, r_ceo[0]['kredity'] - 50)})
                             requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": f["id"], "typ_transakce": "VYDAJ", "titul": "POKUTA: Neschválený spis / BOZP", "castka": 50, "auditovano": True})
-                st.warning(f"Inspekce dokončena! Pokutováno {pokutovane} neschválených firem.")
+                st.warning(f"Inspekce dokončena! Pokutováno {pokutovane} nelegálních firem.")
                 st.rerun()
 
     with col_k2:
         st.markdown("#### 2. Mimořádné krizové události")
+        st.caption("Kliknutím na krizi se okamžitě projeví ztráty a plošná upozornění v ekosystému.")
         
         if st.button("Vyhlásit: KYBERNETICKÝ RANSOMWARE ÚTOK"):
-            requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={"aktivni_krize": "KYBER", "krize_popis": "Masivní kybernetický útok! Firmám bylo strženo 15 % kapitálu jako výkupné."})
+            requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={"aktivni_krize": "KYBER", "krize_popis": "Masivní kybernetický útok! Firmám bylo strženo 15 % kapitálu jako výkupné pro hackery."})
             for f in firmy:
                 r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers).json()
                 if r_ceo:
@@ -174,7 +204,24 @@ with tab_krize:
                     ztrata = kredity * 0.15
                     requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers, json={"kredity": kredity - ztrata})
                     requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": f["id"], "typ_transakce": "VYDAJ", "titul": "VÝKUPNÉ: Ransomware", "castka": ztrata, "auditovano": True})
-            st.success("Krize aktivována!")
+            st.success("Kyberútok úspěšně zasáhl všechny firmy!")
+            st.rerun()
+
+        if st.button("Vyhlásit: ENERGETICKÁ KRIZE (Blackout)"):
+            requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={"aktivni_krize": "ENERGIE", "krize_popis": "Výpadek sítě a skokové zdražení energií! Každé firmě bylo strženo 100 M-K jako mimořádná záloha na elektřinu."})
+            for f in firmy:
+                r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers).json()
+                if r_ceo:
+                    kredity = r_ceo[0]['kredity']
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers, json={"kredity": max(0, kredity - 100)})
+                    requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": f["id"], "typ_transakce": "VYDAJ", "titul": "MIMOŘÁDNÝ VÝDAJ: Nedoplatek za energie", "castka": 100, "auditovano": True})
+            st.success("Energetická krize a zdražení aplikováno!")
+            st.rerun()
+
+        if st.button("Vyhlásit: KRACH NA BURZE (Panika)"):
+            requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={"aktivni_krize": "BURZA", "krize_popis": "Panika na akciových trzích! Veškerá probíhající IPO (nabídky akcií) byla investory stažena a zrušena."})
+            requests.patch(f"{SUPABASE_URL}/rest/v1/burza_nabidky?aktivni=eq.true", headers=headers, json={"aktivni": False})
+            st.success("Krach na burze spuštěn! IPO nabídky byly plošně staženy.")
             st.rerun()
 
         if st.button("Vyhlásit: HYPERINFLACE SUROVIN"):
