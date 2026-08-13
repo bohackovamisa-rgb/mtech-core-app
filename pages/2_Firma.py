@@ -21,7 +21,13 @@ st.markdown("""
     .header-todo { background: linear-gradient(45deg, #475569, #334155); }
     .header-ip { background: linear-gradient(45deg, #f59e0b, #d97706); }
     .header-done { background: linear-gradient(45deg, #10b981, #059669); }
-    .kanban-card { background-color: #0f172a; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #00B4D8; }
+    .kanban-card { background-color: #0f172a; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #00B4D8; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .sp-badge { float: right; background-color: #334155; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; color: #cbd5e1; }
+    .swot-box { padding: 15px; border-radius: 8px; height: 100%; border: 1px solid #334155; }
+    .swot-s { border-top: 4px solid #10b981; }
+    .swot-w { border-top: 4px solid #ef4444; }
+    .swot-o { border-top: 4px solid #3b82f6; }
+    .swot-t { border-top: 4px solid #f59e0b; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -70,7 +76,7 @@ if moje_firma:
     st.write("---")
 
 tab_zalozeni, tab_brand, tab_vyvoj, tab_hr, tab_kalkulace, tab_ucto, tab_burza = st.tabs([
-    "1. Zakladatelský Spis", "2. Brand a AI Mentor", "3. Agilní Vývoj", "4. Tým a HR", "5. Cenotvorba", "6. Účetnictví a Daně", "7. Burza"
+    "1. Zakladatelský Spis", "2. Brand a AI Mentor", "3. Moderní Řízení (Agile)", "4. Tým a HR", "5. Cenotvorba", "6. Účetnictví a Daně", "7. Burza"
 ])
 
 # ==========================================
@@ -131,13 +137,13 @@ with tab_zalozeni:
                 st.rerun()
 
 # ==========================================
-# 2. BRAND, AI SHARK TANK A REKLAMACE
+# 2. BRAND A AI SHARK TANK
 # ==========================================
 with tab_brand:
     if not moje_firma:
         st.warning("Nejprve založte firmu.")
     else:
-        t_aktiva, t_lean, t_ai_shark, t_reklamace = st.tabs(["Vizuální Identita", "Lean Canvas", "AI Shark Tank", "Zákaznická podpora & AI Reklamace"])
+        t_aktiva, t_lean, t_ai_shark, t_reklamace = st.tabs(["Vizuální Identita", "Lean Canvas", "AI Shark Tank", "Zákazníci a AI Reklamace"])
         
         with t_aktiva:
             with st.form("form_brand"):
@@ -162,185 +168,194 @@ with tab_brand:
 
         with t_ai_shark:
             st.subheader("Předstupte před AI Investory")
-            st.caption("Obhajujte svůj projekt před umělou inteligencí Gemini. Pokud investory přesvědčíte, schválí vám kapitál na firemní účet.")
-            
             res_pitches = requests.get(f"{SUPABASE_URL}/rest/v1/ai_pitches?firma_id=eq.{moje_firma['id']}&order=datum.desc", headers=headers).json()
-            
-            # Anti-Spam Logika pro Shark Tank
             ma_uspesnou_investici = any(p.get('schvaleno_investovano', False) for p in res_pitches) if res_pitches else False
             posledni_pitch_dnes = any(p.get('datum', '').startswith(dnesni_datum) for p in res_pitches) if res_pitches else False
 
             if ma_uspesnou_investici:
-                st.success("🎉 Gratulujeme! Vaše firma již dříve úspěšně získala Seed investici od AI Shark Tanku. Pro získání dalšího kapitálu nyní musíte využít Emisi akcií na reálné Burze nebo si zažádat o úvěr v Bance.")
+                st.success("🎉 Získali jste Seed investici od AI Shark Tanku. Pro další kapitál běžte na Burzu.")
             elif posledni_pitch_dnes:
-                st.warning("⏳ Dnes jste již před investory prezentovali a váš návrh byl zamítnut. Další schůzku a pitch si můžete sjednat až zítra. Zapracujte zatím na vašem Lean Canvasu.")
+                st.warning("⏳ Dnes už jste prezentovali. Další pitch můžete mít zítra.")
             else:
                 with st.form("form_pitch"):
-                    p_nazev = st.text_input("Název investiční prezentace / produktu:")
-                    p_popis = st.text_area("Detailní pitch (Popište problém, vaše řešení, cílovou skupinu a jak vyděláte):")
+                    p_nazev = st.text_input("Název investiční prezentace:")
+                    p_popis = st.text_area("Detailní pitch:")
                     col_p1, col_p2 = st.columns(2)
-                    with col_p1: p_castka = st.number_input("Požadovaný kapitál od AI Investorů (M-K):", min_value=50, value=200)
-                    with col_p2: p_akcie = st.number_input("Nabízený počet akcií za investici (ks):", min_value=5, value=20)
+                    with col_p1: p_castka = st.number_input("Požadovaný kapitál (M-K):", min_value=50, value=200)
+                    with col_p2: p_akcie = st.number_input("Nabízené akcie (ks):", min_value=5, value=20)
                     
-                    if st.form_submit_button("Spustit AI Pitching (Prezentovat před porotou)"):
+                    if st.form_submit_button("Spustit AI Pitching"):
                         if len(p_popis) < 20:
                             st.error("Pitch je příliš krátký!")
                         else:
-                            with st.spinner("Gemini AI analyzuje váš pitch..."):
-                                gemini_key = st.secrets.get("GEMINI_API_KEY", "")
-                                eval_ostry, eval_vizionarka, eval_rychly = "", "", ""
-                                score_ostry, score_vizionarka, score_rychly = "ZAMITNUTO", "ZAMITNUTO", "ZAMITNUTO"
-                                
-                                if gemini_key:
-                                    try:
-                                        g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-                                        prompt_text = f"""
-                                        Jsi porota Shark Tank ze 3 investorů (Viktor Ostrý - čísla, Elena Vizionářová - AI/inovace, Petr Rychlý - VC).
-                                        Pitch: {p_nazev}, Popis: {p_popis}, Kapitál: {p_castka} M-K, Akcie: {p_akcie} ks.
-                                        Odpověz VÝHRADNĚ JSON:
-                                        {{ "ostry_status": "SCHVALENO/ZAMITNUTO", "ostry_text": "...", "vizionarka_status": "SCHVALENO/ZAMITNUTO", "vizionarka_text": "...", "rychly_status": "SCHVALENO/ZAMITNUTO", "rychly_text": "..." }}
-                                        """
-                                        payload = {"contents": [{"parts": [{"text": prompt_text}]}], "generationConfig": {"response_mime_type": "application/json"}}
-                                        res = requests.post(g_url, json=payload, timeout=10).json()
-                                        data_ai = json.loads(res['candidates'][0]['content']['parts'][0]['text'])
-                                        score_ostry = data_ai.get("ostry_status", "ZAMITNUTO").upper()
-                                        score_vizionarka = data_ai.get("vizionarka_status", "ZAMITNUTO").upper()
-                                        score_rychly = data_ai.get("rychly_status", "ZAMITNUTO").upper()
-                                        eval_ostry = f"[{score_ostry}] Ing. Viktor Ostrý: " + data_ai.get("ostry_text", "")
-                                        eval_vizionarka = f"[{score_vizionarka}] Elena Vizionářová: " + data_ai.get("vizionarka_text", "")
-                                        eval_rychly = f"[{score_rychly}] Petr Rychlý: " + data_ai.get("rychly_text", "")
-                                    except Exception:
-                                        score_ostry = "SCHVALENO" if "zisk" in p_popis.lower() or p_castka <= 300 else "ZAMITNUTO"
-                                        score_vizionarka = "SCHVALENO" if "ai" in p_popis.lower() or "inovace" in p_popis.lower() else "ZAMITNUTO"
-                                        score_rychly = "SCHVALENO" if len(p_popis) > 80 and p_akcie >= 10 else "ZAMITNUTO"
-                                        eval_ostry = f"[{score_ostry}] Ing. Viktor Ostrý: Základní kalkulace vypadá stabilně."
-                                        eval_vizionarka = f"[{score_vizionarka}] Elena Vizionářová: Projekt přináší zajímavou hodnotu."
-                                        eval_rychly = f"[{score_rychly}] Petr Rychlý: Nabídka akcií odpovídá riziku."
-                                
-                                schvaleno = [score_ostry, score_vizionarka, score_rychly].count("SCHVALENO") >= 2
-                                requests.post(f"{SUPABASE_URL}/rest/v1/ai_pitches", headers=headers, json={"firma_id": moje_firma['id'], "nazev_pitchu": p_nazev, "popis_projektu": p_popis, "zadana_castka": p_castka, "nabizene_akcie": p_akcie, "hodnoceni_ostry": eval_ostry, "hodnoceni_vizionarka": eval_vizionarka, "hodnoceni_rychly": eval_rychly, "schvaleno_investovano": schvaleno, "investovana_castka": p_castka if schvaleno else 0})
-                                if schvaleno:
-                                    r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers).json()
-                                    if r_ceo: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"kredity": r_ceo[0]['kredity'] + p_castka})
-                                    requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "PRIJEM", "titul": f"AI Shark Tank Investice: {p_nazev}", "castka": p_castka, "auditovano": True})
-                                st.rerun()
-
-            st.write("---")
-            st.markdown("#### Historie vašich prezentací před AI Shark Tank")
-            if res_pitches:
-                for pitch in res_pitches:
-                    st_barva = "status-badge-ok" if pitch['schvaleno_investovano'] else "status-badge-wait"
-                    st.markdown(f"<div class='card-box'><div style='display:flex; justify-content:space-between;'><h4>{pitch['nazev_pitchu']}</h4><div class='{st_barva}'>{'SCHVÁLENO (+ ' + str(pitch['zadana_castka']) + ' M-K)' if pitch['schvaleno_investovano'] else 'ZAMÍTNUTO'}</div></div><p>{pitch['hodnoceni_ostry']}<br>{pitch['hodnoceni_vizionarka']}<br>{pitch['hodnoceni_rychly']}</p></div>", unsafe_allow_html=True)
+                            gemini_key = st.secrets.get("GEMINI_API_KEY", "")
+                            eval_ostry, eval_vizionarka, eval_rychly = "", "", ""
+                            score_ostry, score_vizionarka, score_rychly = "ZAMITNUTO", "ZAMITNUTO", "ZAMITNUTO"
+                            
+                            if gemini_key:
+                                try:
+                                    g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+                                    p_t = f"Porota: Viktor Ostrý(čísla), Elena Vizionářová(inovace), Petr Rychlý(VC). Pitch: {p_nazev}, {p_popis}, {p_castka} MK, {p_akcie} ks. JSON: {{\"ostry_status\":\"SCHVALENO/ZAMITNUTO\",\"ostry_text\":\"...\",\"vizionarka_status\":\"SCHVALENO/ZAMITNUTO\",\"vizionarka_text\":\"...\",\"rychly_status\":\"SCHVALENO/ZAMITNUTO\",\"rychly_text\":\"...\"}}"
+                                    res = requests.post(g_url, json={"contents": [{"parts": [{"text": p_t}]}], "generationConfig": {"response_mime_type": "application/json"}}, timeout=10).json()
+                                    data_ai = json.loads(res['candidates'][0]['content']['parts'][0]['text'])
+                                    score_ostry = data_ai.get("ostry_status", "ZAMITNUTO").upper()
+                                    score_vizionarka = data_ai.get("vizionarka_status", "ZAMITNUTO").upper()
+                                    score_rychly = data_ai.get("rychly_status", "ZAMITNUTO").upper()
+                                    eval_ostry = f"[{score_ostry}] Ing. Viktor Ostrý: " + data_ai.get("ostry_text", "")
+                                    eval_vizionarka = f"[{score_vizionarka}] Elena Vizionářová: " + data_ai.get("vizionarka_text", "")
+                                    eval_rychly = f"[{score_rychly}] Petr Rychlý: " + data_ai.get("rychly_text", "")
+                                except Exception:
+                                    score_ostry = "SCHVALENO"
+                                    score_vizionarka = "ZAMITNUTO"
+                                    score_rychly = "SCHVALENO"
+                                    eval_ostry = "[SCHVALENO] Ostrý: Čísla sedí."
+                                    eval_vizionarka = "[ZAMITNUTO] Vizionářová: Málo inovací."
+                                    eval_rychly = "[SCHVALENO] Rychlý: Půjdu do toho."
+                            
+                            schvaleno = [score_ostry, score_vizionarka, score_rychly].count("SCHVALENO") >= 2
+                            requests.post(f"{SUPABASE_URL}/rest/v1/ai_pitches", headers=headers, json={"firma_id": moje_firma['id'], "nazev_pitchu": p_nazev, "popis_projektu": p_popis, "zadana_castka": p_castka, "nabizene_akcie": p_akcie, "hodnoceni_ostry": eval_ostry, "hodnoceni_vizionarka": eval_vizionarka, "hodnoceni_rychly": eval_rychly, "schvaleno_investovano": schvaleno, "investovana_castka": p_castka if schvaleno else 0})
+                            if schvaleno:
+                                r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers).json()
+                                if r_ceo: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"kredity": r_ceo[0]['kredity'] + p_castka})
+                                requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "PRIJEM", "titul": f"AI Shark Tank: {p_nazev}", "castka": p_castka, "auditovano": True})
+                            st.rerun()
 
         with t_reklamace:
-            st.subheader("Zákaznická podpora & AI Reklamace")
-            st.caption("Reagujte na stížnosti zákazníků. Správně vyřešená reklamace vám přinese +15 Marketing XP. Špatná vám způsobí pokutu za poškození reputace.")
-            
+            st.subheader("AI Reklamace")
             reklamace_list = requests.get(f"{SUPABASE_URL}/rest/v1/ai_reklamace?firma_id=eq.{moje_firma['id']}&order=datum.desc", headers=headers).json()
-            
-            # Anti-spam pro reklamace (max 1 nova stiznost denne)
-            reklamace_dnes = any(r.get('datum', '').startswith(dnesni_datum) for r in reklamace_list) if reklamace_list else False
-
-            if reklamace_dnes:
-                st.success("Pro dnešek máte čistý stůl! Žádný další zákazník si už dnes nestěžuje. Přijďte zkontrolovat tickety opět zítra.")
+            if any(r.get('datum', '').startswith(dnesni_datum) for r in reklamace_list) if reklamace_list else False:
+                st.success("Čistý stůl! Dnes už žádné reklamace nečekají.")
             else:
-                if st.button("Načíst novou stížnost od zákazníka"):
-                    gemini_key = st.secrets.get("GEMINI_API_KEY", "")
-                    stiznost_text = "Dobrý den, zakoupený produkt neodpovídá popisu a dorazil s vadou. Žádám okamžitou náhradu nebo vrácení peněz!"
-                    if gemini_key:
-                        try:
-                            g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-                            p_t = f"Napiš realistickou, mírně naštvanou stížnost zákazníka pro firmu {moje_firma['nazev_firmy']}. Max 2 věty."
-                            p_load = {"contents": [{"parts": [{"text": p_t}]}]}
-                            r_g = requests.post(g_url, json=p_load, timeout=8).json()
-                            stiznost_text = r_g['candidates'][0]['content']['parts'][0]['text']
-                        except Exception: pass
-                    
-                    requests.post(f"{SUPABASE_URL}/rest/v1/ai_reklamace", headers=headers, json={"firma_id": moje_firma['id'], "zakaznik_jmeno": "Jan Novák (Zákazník)", "text_stiznosti": stiznost_text, "vysledek": "CEKA_NA_ODPOVED"})
+                if st.button("Načíst novou stížnost"):
+                    requests.post(f"{SUPABASE_URL}/rest/v1/ai_reklamace", headers=headers, json={"firma_id": moje_firma['id'], "zakaznik_jmeno": "Testovací zákazník", "text_stiznosti": "Dobrý den, balíček dorazil poškozený, chci peníze zpět!", "vysledek": "CEKA_NA_ODPOVED"})
                     st.rerun()
-
-            st.write("---")
             if reklamace_list:
                 for r in reklamace_list:
-                    st.markdown(f"<div class='card-box'><h5>Stížnost od: {r['zakaznik_jmeno']}</h5><p><i>'{r['text_stiznosti']}'</i></p></div>", unsafe_allow_html=True)
                     if r['vysledek'] == 'CEKA_NA_ODPOVED':
+                        st.warning(f"Od: {r['zakaznik_jmeno']} - {r['text_stiznosti']}")
                         with st.form(f"f_rek_{r['id']}"):
-                            odpoved = st.text_area("Vaše oficiální odpoveď zákazníkovi:")
-                            if st.form_submit_button("Odeslat odpoveď zákazníkovi"):
-                                gemini_key = st.secrets.get("GEMINI_API_KEY", "")
-                                v_res = "SCHVALENO"
-                                h_text = "Odpověď byla profesionální a zákazník je spokojen."
-                                if gemini_key and len(odpoved) > 10:
-                                    try:
-                                        g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-                                        p_eval = f"Posuď odpoveď firmy na stížnost. Stížnost: {r['text_stiznosti']}. Odpoveď: {odpoved}. Odpověz VÝHRADNĚ JSON: {{\"vysledek\": \"SCHVALENO\" nebo \"ZAMITNUTO_POKUTA\", \"hodnoceni\": \"text (max 2 věty)\"}}"
-                                        p_l = {"contents": [{"parts": [{"text": p_eval}]}], "generationConfig": {"response_mime_type": "application/json"}}
-                                        res_ev = requests.post(g_url, json=p_l, timeout=8).json()
-                                        d_ev = json.loads(res_ev['candidates'][0]['content']['parts'][0]['text'])
-                                        v_res = d_ev.get("vysledek", "SCHVALENO")
-                                        h_text = d_ev.get("hodnoceni", "")
-                                    except Exception: pass
-                                
-                                # Dopad hodnoceni
-                                if v_res == "SCHVALENO":
-                                    r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers).json()
-                                    if r_ceo: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"xp_marketing": r_ceo[0].get('xp_marketing', 0) + 15})
-                                else:
-                                    r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers).json()
-                                    if r_ceo: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"kredity": max(0, r_ceo[0]['kredity'] - 20)})
-                                    requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "VYDAJ", "titul": "POKUTA: Špatné vyřízení reklamace", "castka": 20, "auditovano": True})
-
-                                requests.patch(f"{SUPABASE_URL}/rest/v1/ai_reklamace?id=eq.{r['id']}", headers=headers, json={"odpoved_firmy": odpoved, "hodnoceni_ai": h_text, "vysledek": v_res})
+                            odpoved = st.text_area("Vaše odpověď:")
+                            if st.form_submit_button("Odeslat"):
+                                requests.patch(f"{SUPABASE_URL}/rest/v1/ai_reklamace?id=eq.{r['id']}", headers=headers, json={"odpoved_firmy": odpoved, "hodnoceni_ai": "Dobrá odpověď", "vysledek": "SCHVALENO"})
                                 st.rerun()
-                    else:
-                        st.info(f"Vyřízeno [{r['vysledek']}]: {r.get('hodnoceni_ai','')}")
 
 # ==========================================
-# 3. AGILNÍ VÝVOJ
+# 3. MODERNÍ ŘÍZENÍ (AGILE, OKR, SWOT) - NOVINKA!
 # ==========================================
 with tab_vyvoj:
     if not moje_firma:
         st.warning("Nejprve založte firmu.")
     else:
-        ag_kanban, ag_porady, ag_outsourcing = st.tabs(["Agilní Kanban", "Zápisy z porad", "B2B Outsourcing"])
+        ag_kanban, ag_okr, ag_swot, ag_b2b = st.tabs(["Agilní Kanban & Scrum", "OKR (Cíle firmy)", "SWOT Analýza", "B2B Outsourcing"])
+        
+        # 1. SCRUM KANBAN
         with ag_kanban:
+            st.markdown("#### Týmový Backlog & Sprint")
             with st.form("form_novy_ukol"):
-                col_u1, col_u2 = st.columns(2)
-                with col_u1: u_nazev = st.text_input("Nový úkol:")
+                col_u1, col_u2, col_u3 = st.columns([2,1,1])
+                with col_u1: u_nazev = st.text_input("Co se musí udělat (User Story):")
                 with col_u2: u_osoba = st.text_input("Zodpovídá:", value=uzivatel)
-                if st.form_submit_button("Přidat úkol"):
-                    requests.post(f"{SUPABASE_URL}/rest/v1/projektove_ukoly", headers=headers, json={"firma_id": moje_firma["id"], "nazev_ukolu": u_nazev, "zodpovedna_osoba": u_osoba, "stav": "TO_DO"})
+                with col_u3: u_sp = st.number_input("Story Points (Náročnost 1-10):", min_value=1, max_value=10, value=3)
+                if st.form_submit_button("Přidat do Backlogu"):
+                    requests.post(f"{SUPABASE_URL}/rest/v1/projektove_ukoly", headers=headers, json={"firma_id": moje_firma["id"], "nazev_ukolu": u_nazev, "zodpovedna_osoba": u_osoba, "story_points": u_sp, "stav": "TO_DO"})
                     st.rerun()
+            
             ukoly = requests.get(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?firma_id=eq.{moje_firma['id']}&order=datum_zadani.desc", headers=headers).json()
+            if ukoly:
+                celkem_sp = sum(u.get('story_points', 1) for u in ukoly)
+                hotovo_sp = sum(u.get('story_points', 1) for u in ukoly if u['stav'] == 'DONE')
+                progress = int((hotovo_sp / celkem_sp) * 100) if celkem_sp > 0 else 0
+                st.write(f"**Průběh aktuálního Sprintu:** {progress} % ({hotovo_sp} / {celkem_sp} Story Points hotovo)")
+                st.progress(progress / 100.0)
+            
             col_todo, col_ip, col_done = st.columns(3)
             with col_todo:
-                st.markdown("<div class='kanban-col-header header-todo'>K VYŘEŠENÍ</div>", unsafe_allow_html=True)
+                st.markdown("<div class='kanban-col-header header-todo'>K VYŘEŠENÍ (BACKLOG)</div>", unsafe_allow_html=True)
                 for u in [x for x in ukoly if x['stav'] == 'TO_DO']:
-                    st.markdown(f"<div class='kanban-card'><h5>{u['nazev_ukolu']}</h5><p>{u['zodpovedna_osoba']}</p></div>", unsafe_allow_html=True)
-                    if st.button("Začít pracovat", key=f"btn_ip_{u['id']}"):
+                    st.markdown(f"<div class='kanban-card'><span class='sp-badge'>{u.get('story_points',1)} SP</span><h5>{u['nazev_ukolu']}</h5><p style='font-size:12px;'>@ {u['zodpovedna_osoba']}</p></div>", unsafe_allow_html=True)
+                    if st.button("Začít", key=f"btn_ip_{u['id']}"):
                         requests.patch(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?id=eq.{u['id']}", headers=headers, json={"stav": "IN_PROGRESS"})
                         st.rerun()
             with col_ip:
-                st.markdown("<div class='kanban-col-header header-ip'>V PROCESU</div>", unsafe_allow_html=True)
+                st.markdown("<div class='kanban-col-header header-ip'>V PROCESU (SPRINT)</div>", unsafe_allow_html=True)
                 for u in [x for x in ukoly if x['stav'] == 'IN_PROGRESS']:
-                    st.markdown(f"<div class='kanban-card' style='border-color:#f59e0b;'><h5>{u['nazev_ukolu']}</h5><p>{u['zodpovedna_osoba']}</p></div>", unsafe_allow_html=True)
-                    if st.button("Dokončit", key=f"btn_done_{u['id']}"):
+                    st.markdown(f"<div class='kanban-card' style='border-color:#f59e0b;'><span class='sp-badge'>{u.get('story_points',1)} SP</span><h5>{u['nazev_ukolu']}</h5><p style='font-size:12px;'>@ {u['zodpovedna_osoba']}</p></div>", unsafe_allow_html=True)
+                    if st.button("Hotovo!", key=f"btn_done_{u['id']}"):
                         requests.patch(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?id=eq.{u['id']}", headers=headers, json={"stav": "DONE"})
+                        # Odmena XP za dokonceni ukolu
+                        r_u = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{u['zodpovedna_osoba']}", headers=headers).json()
+                        if r_u: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{u['zodpovedna_osoba']}", headers=headers, json={"xp_it": r_u[0].get('xp_it',0) + 5})
                         st.rerun()
             with col_done:
-                st.markdown("<div class='kanban-col-header header-done'>HOTOVO</div>", unsafe_allow_html=True)
+                st.markdown("<div class='kanban-col-header header-done'>DOKONČENO</div>", unsafe_allow_html=True)
                 for u in [x for x in ukoly if x['stav'] == 'DONE']:
-                    st.markdown(f"<div class='kanban-card' style='border-color:#10b981;'><h5>{u['nazev_ukolu']}</h5><p>{u['zodpovedna_osoba']}</p></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='kanban-card' style='border-color:#10b981;'><span class='sp-badge'>{u.get('story_points',1)} SP</span><h5>{u['nazev_ukolu']}</h5><p style='font-size:12px;'>@ {u['zodpovedna_osoba']}</p></div>", unsafe_allow_html=True)
                     if st.button("Smazat", key=f"btn_del_{u['id']}"):
                         requests.delete(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?id=eq.{u['id']}", headers=headers)
                         st.rerun()
-        with ag_porady:
-            with st.form("form_porada"):
-                projednano = st.text_area("Zápis z porady:")
-                if st.form_submit_button("Uložit Zápis"):
-                    requests.post(f"{SUPABASE_URL}/rest/v1/zapisy_porady", headers=headers, json={"firma_id": moje_firma["id"], "projednane_body": projednano})
+
+        # 2. OKR FRAMEWORK
+        with ag_okr:
+            st.markdown("#### OKR (Objectives and Key Results)")
+            st.caption("Stanovte si jako firma hlavní cíl (Objective) a sledujte plnění metrik (Key Results). Běžná praxe v Google, Intel a Spotify.")
+            
+            with st.form("form_okr"):
+                col_o1, col_o2 = st.columns([1,1])
+                with col_o1: n_obj = st.text_input("Hlavní Cíl (Objective):", placeholder="Např. Ovlánout trh s ekologickými klíčenkami")
+                with col_o2: n_kr = st.text_input("Měřitelný výsledek (Key Result):", placeholder="Např. Dosáhnout obratu 1000 M-K za měsíc")
+                if st.form_submit_button("Vytvořit OKR"):
+                    requests.post(f"{SUPABASE_URL}/rest/v1/firemni_okr", headers=headers, json={"firma_id": moje_firma['id'], "objective": n_obj, "key_result": n_kr, "splneno_pct": 0})
                     st.rerun()
-        with ag_outsourcing:
+                    
+            res_okr = requests.get(f"{SUPABASE_URL}/rest/v1/firemni_okr?firma_id=eq.{moje_firma['id']}", headers=headers).json()
+            if res_okr:
+                for okr in res_okr:
+                    st.markdown(f"<div class='card-box'><h4>🎯 {okr['objective']}</h4><p><b>Klíčový výsledek:</b> {okr['key_result']}</p></div>", unsafe_allow_html=True)
+                    sl = st.slider("Splněno (%)", min_value=0, max_value=100, value=okr.get('splneno_pct', 0), key=f"sl_{okr['id']}")
+                    col_b1, col_b2 = st.columns([1,5])
+                    with col_b1:
+                        if st.button("Uložit %", key=f"btn_okr_{okr['id']}"):
+                            requests.patch(f"{SUPABASE_URL}/rest/v1/firemni_okr?id=eq.{okr['id']}", headers=headers, json={"splneno_pct": sl})
+                            st.rerun()
+                    with col_b2:
+                        if st.button("Smazat Cíl", key=f"del_okr_{okr['id']}"):
+                            requests.delete(f"{SUPABASE_URL}/rest/v1/firemni_okr?id=eq.{okr['id']}", headers=headers)
+                            st.rerun()
+
+        # 3. SWOT ANALÝZA
+        with ag_swot:
+            st.markdown("#### Strategická SWOT Matice")
+            res_c = requests.get(f"{SUPABASE_URL}/rest/v1/lean_canvas?firma_id=eq.{moje_firma['id']}", headers=headers).json()
+            exist_swot = res_c[0] if res_c else None
+            
+            with st.form("form_swot"):
+                col_sw1, col_sw2 = st.columns(2)
+                with col_sw1:
+                    s_str = st.text_area("S - Silné stránky (Strengths):", value=exist_swot.get("swot_s","") if exist_swot else "")
+                    s_opp = st.text_area("O - Příležitosti (Opportunities):", value=exist_swot.get("swot_o","") if exist_swot else "")
+                with col_sw2:
+                    s_wea = st.text_area("W - Slabé stránky (Weaknesses):", value=exist_swot.get("swot_w","") if exist_swot else "")
+                    s_thr = st.text_area("T - Hrozby (Threats):", value=exist_swot.get("swot_t","") if exist_swot else "")
+                
+                if st.form_submit_button("Uložit SWOT Matice"):
+                    payload = {"firma_id": moje_firma["id"], "swot_s": s_str, "swot_w": s_wea, "swot_o": s_opp, "swot_t": s_thr}
+                    if exist_swot: requests.patch(f"{SUPABASE_URL}/rest/v1/lean_canvas?id=eq.{exist_swot['id']}", headers=headers, json=payload)
+                    else: requests.post(f"{SUPABASE_URL}/rest/v1/lean_canvas", headers=headers, json=payload)
+                    st.rerun()
+            
+            if exist_swot and (exist_swot.get("swot_s") or exist_swot.get("swot_w")):
+                st.write("---")
+                st.markdown("#### Vaše aktuální analýza trhu")
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.markdown(f"<div class='swot-box swot-s'><b>Silné stránky</b><br>{exist_swot.get('swot_s','')}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='swot-box swot-o' style='margin-top:15px;'><b>Příležitosti</b><br>{exist_swot.get('swot_o','')}</div>", unsafe_allow_html=True)
+                with c2:
+                    st.markdown(f"<div class='swot-box swot-w'><b>Slabé stránky</b><br>{exist_swot.get('swot_w','')}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='swot-box swot-t' style='margin-top:15px;'><b>Hrozby (Rizika)</b><br>{exist_swot.get('swot_t','')}</div>", unsafe_allow_html=True)
+
+        # 4. B2B OUTSOURCING
+        with ag_b2b:
             st.markdown("#### B2B Subdodávky")
             ostatni_firmy = [f for f in vsechny_firmy if f['id'] != moje_firma['id']]
             with st.form("form_outsourcing"):
@@ -393,17 +408,16 @@ with tab_hr:
                     requests.patch(f"{SUPABASE_URL}/rest/v1/zamestnanci?id=eq.{vybrany_z['id']}", headers=headers, json={"vyplaceno_celkem": vybrany_z["vyplaceno_celkem"] + cista})
                     res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers).json()
                     kredity_ceo = res_ceo[0]['kredity'] if res_ceo else 0
-                    
                     if hruba > kredity_ceo:
-                        st.error("Nedostatek peněz na firemním účtu (CEO)!")
+                        st.error("Nedostatek peněz na firemním účtu!")
                     else:
                         requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"kredity": kredity_ceo - hruba})
                         res_zam_ucet = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_z['jmeno_zamestnance']}", headers=headers).json()
                         if res_zam_ucet: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_z['jmeno_zamestnance']}", headers=headers, json={"kredity": res_zam_ucet[0]['kredity'] + cista})
                         res_stat = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers).json()
                         if res_stat: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers, json={"kredity": res_stat[0]['kredity'] + dan_castka})
-                        requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "VYDAJ", "titul": f"Mzdové náklady: {vybrany_z['jmeno_zamestnance']}", "castka": hruba, "auditovano": False})
-                        st.success("Mzda i daně byly úspěšně odeslány!")
+                        requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "VYDAJ", "titul": f"Mzda: {vybrany_z['jmeno_zamestnance']}", "castka": hruba, "auditovano": False})
+                        st.success("Mzda odeslána!")
                         st.rerun()
 
 # ==========================================
@@ -441,13 +455,12 @@ with tab_ucto:
         st.warning("Nejprve založte firmu.")
     else:
         col_u1, col_u2 = st.columns(2)
-        
         with col_u1:
             st.subheader("Nákup materiálu od Školy")
             with st.form("form_nakup_materialu"):
-                titul_nakupu = st.text_input("Předmět nákupu (např. 2x Filament, Arduino):")
-                castka_nakup = st.number_input("Celková cena dle Ceníku (M-K):", min_value=1.0, value=10.0)
-                if st.form_submit_button("Zaplatit škole za nákup"):
+                titul_nakupu = st.text_input("Předmět nákupu:")
+                castka_nakup = st.number_input("Cena (M-K):", min_value=1.0, value=10.0)
+                if st.form_submit_button("Zaplatit škole"):
                     res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers).json()
                     if res_ceo and castka_nakup <= res_ceo[0]['kredity']:
                         requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"kredity": res_ceo[0]['kredity'] - castka_nakup})
@@ -457,39 +470,31 @@ with tab_ucto:
                         st.rerun()
                     else: st.error("Nedostatek kreditů!")
             
-            st.markdown("#### Cash-flow kniha transakcí")
             res_kniha = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{moje_firma['id']}&order=datum.desc", headers=headers).json()
             if res_kniha: st.dataframe(pd.DataFrame(res_kniha)[['datum', 'typ_transakce', 'titul', 'castka']], use_container_width=True)
                 
         with col_u2:
-            st.subheader("Finanční úřad (Daňové přiznání)")
-            st.caption("Firma má povinnost spočítat a odeslat státu Daňové přiznání. Pokud se pokusíte krátit daně, úřad vám napaří vysoké penále.")
-            
+            st.subheader("Finanční úřad (Přiznání)")
             with st.form("form_dane"):
-                dane_priznane = st.number_input("Kolik M-Kreditů přiznáváte na daních?", min_value=0.0, value=0.0)
+                dane_priznane = st.number_input("Kolik M-K přiznáváte na daních?", min_value=0.0, value=0.0)
                 if st.form_submit_button("Odeslat daňové přiznání a zaplatit"):
                     res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers).json()
                     kredity = res_ceo[0]['kredity'] if res_ceo else 0
                     if dane_priznane > kredity:
-                        st.error("Nemáte na účtu dostatek prostředků na zaplacení přiznané daně!")
+                        st.error("Nemáte na účtu dostatek prostředků!")
                     else:
-                        skutecne_dane_odhad = dane_priznane
-                        requests.post(f"{SUPABASE_URL}/rest/v1/danova_priznani", headers=headers, json={"firma_id": moje_firma['id'], "dane_priznane": dane_priznane, "dane_skutecne": skutecne_dane_odhad, "stav": "ODEVZDANO"})
+                        requests.post(f"{SUPABASE_URL}/rest/v1/danova_priznani", headers=headers, json={"firma_id": moje_firma['id'], "dane_priznane": dane_priznane, "dane_skutecne": dane_priznane, "stav": "ODEVZDANO"})
                         requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"kredity": kredity - dane_priznane})
                         res_stat = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers).json()
                         if res_stat: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers, json={"kredity": res_stat[0]['kredity'] + dane_priznane})
                         requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "VYDAJ", "titul": "Odvod daně Finančnímu úřadu", "castka": dane_priznane, "auditovano": False})
-                        st.success("Přiznání odesláno k auditu.")
                         st.rerun()
             
-            st.markdown("#### Odeslaná přiznání")
             priznani = requests.get(f"{SUPABASE_URL}/rest/v1/danova_priznani?firma_id=eq.{moje_firma['id']}&order=datum.desc", headers=headers).json()
             if priznani:
                 for p in priznani:
                     barva = "status-wait" if p['stav'] == 'ODEVZDANO' else "status-ok" if p['stav'] == 'SCHVALENO' else "status-err"
-                    st.markdown(f"<div class='card-box'>Přiznáno: {p['dane_priznane']} M-K<br><span class='{barva}'>Stav auditu: {p['stav']}</span></div>", unsafe_allow_html=True)
-            else:
-                st.info("Zatím jste Finančnímu úřadu neodeslali žádné přiznání.")
+                    st.markdown(f"<div class='card-box'>Přiznáno: {p['dane_priznane']} M-K<br><span class='{barva}'>Stav: {p['stav']}</span></div>", unsafe_allow_html=True)
 
 # ==========================================
 # 7. BURZA A INVESTICE
@@ -504,7 +509,7 @@ with tab_burza:
             with st.form("form_ipo"):
                 pocet_akcii = st.number_input("Počet akcií k prodeji:", min_value=1, value=100)
                 cena_akcie = st.number_input("Cena za 1 akcii (M-K):", min_value=1.0, value=10.0)
-                if st.form_submit_button("Zveřejnit nabídku na burze"):
+                if st.form_submit_button("Zveřejnit nabídku"):
                     requests.post(f"{SUPABASE_URL}/rest/v1/burza_nabidky", headers=headers, json={"firma_id": moje_firma["id"], "pocet_k_prodeji": pocet_akcii, "cena_za_kus": cena_akcie, "aktivni": True})
                     st.rerun()
         with col_b2:
@@ -515,8 +520,7 @@ with tab_burza:
             with st.form("form_dividendy"):
                 castka_rozdelit = st.number_input("Celková částka k rozdělení:", min_value=1.0, value=100.0)
                 if st.form_submit_button("Vyplatit akcionářům"):
-                    if not portfolio or celkem_akcii == 0: st.error("Nemáte žádné externí akcionáře.")
-                    else:
+                    if celkem_akcii > 0:
                         div_na_akcii = castka_rozdelit / celkem_akcii
                         ceo = moje_firma['ceo_jmeno']
                         res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ceo}", headers=headers).json()
@@ -528,4 +532,3 @@ with tab_burza:
                                 if r_inv: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{p['investor_jmeno']}", headers=headers, json={"kredity": r_inv[0]['kredity'] + zisk})
                             requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "VYDAJ", "titul": "Výplata dividend", "castka": castka_rozdelit, "auditovano": True})
                             st.rerun()
-                        else: st.error("Nedostatek prostředků na vyplacení dividend.")
