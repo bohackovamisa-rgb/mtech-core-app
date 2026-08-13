@@ -118,16 +118,19 @@ with tab_stat:
 with tab_banka: 
     st.info("Sekce Centrální banky a Ceníku...")
 
+# ==========================================
+# KRIZOVÉ ŘÍZENÍ A GEOPOLITICKÉ ZÁSAHY
+# ==========================================
 with tab_krize:
     st.subheader("Krizové řízení a Makroekonomické zásahy")
-    st.caption("Plošné administrativní a krizové akce s okamžitým dopadem na celou školní ekonomiku.")
+    st.caption("Plošné administrativní, krizové a geopolitické akce s okamžitým dopadem na celou školní ekonomiku.")
     
     target_skola = skolni_kod_ucitele or firma.get('skolni_kod', '') or 'SYSTEM'
     
     col_k1, col_k2 = st.columns(2)
     
     with col_k1:
-        st.markdown("#### 1. Rutinní spravování trhu")
+        st.markdown("#### 1. Rutinní a regulační spravování trhu")
         
         with st.expander("Měsíční uzávěrka (Vyžadovat nájmy)"):
             st.caption("Všem žákům zruší zaplacení životních nákladů. Budou muset uhradit složenky ze své peněženky.")
@@ -164,7 +167,7 @@ with tab_krize:
                 st.rerun()
 
         with st.expander("Státní dotační program: Digitalizace (EU Fondy)"):
-            st.caption("Firmy, které mají připravený Brand Kit (vyplněný odkaz na firemní web), obdrží jednorázovou dotaci 100 M-K.")
+            st.caption("Firmy s připraveným Brand Kitem (vyplněný web) obdrží dotaci 100 M-K.")
             if st.button("Vyhodnotit a vyplatit EU dotace"):
                 pocet_dotovanych = 0
                 for f in firmy:
@@ -178,7 +181,7 @@ with tab_krize:
                 st.rerun()
 
         with st.expander("Hloubková Daňová a BOZP inspekce"):
-            st.caption("Provede kontrolu firem. Udělí pokutu 50 M-K firmám, které nemají v pořádku a schválený zakladatelský spis.")
+            st.caption("Provede kontrolu spisu firem. Udělí pokutu 50 M-K neschváleným firmám.")
             if st.button("Spustit BOZP a právní inspekci"):
                 pokutovane = 0
                 for f in firmy:
@@ -192,9 +195,47 @@ with tab_krize:
                 st.rerun()
 
     with col_k2:
-        st.markdown("#### 2. Mimořádné krizové události")
-        st.caption("Kliknutím na krizi se okamžitě projeví ztráty a plošná upozornění v ekosystému.")
+        st.markdown("#### 2. Mimořádné a Geopolitické krize")
+        st.caption("Globální otřesy, válečné konflikty a obchodní embargo s okamžitým dopadem.")
         
+        # Geopolitika 1: Celní válka
+        if st.button("Vyhlásit: CELNÍ VÁLKA & PROTEKCIONISMUS"):
+            nastaveni_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers).json()
+            akt_dan = float(nastaveni_res[0].get('mtech_dan_pct', 15.0)) if nastaveni_res else 15.0
+            stoupnuta_dan = akt_dan + 15.0
+            
+            requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={
+                "aktivni_krize": "CELNI_VALKA",
+                "krize_popis": f"Obchodní celní válka! Stát zavedl dovozní cla a zvýšil M-TECH daň pro e-shop na {stoupnuta_dan} %. Výroba i export zdražují.",
+                "mtech_dan_pct": stoupnuta_dan
+            })
+            st.success(f"Celní válka vyhlášena! M-TECH daň byla automaticky zvýšena na {stoupnuta_dan} %.")
+            st.rerun()
+
+        # Geopolitika 2: Embargo a sankce
+        if st.button("Vyhlásit: STRATEGICKÉ EMBARGO A SANKCE (Zákaz čipů)"):
+            requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={
+                "aktivni_krize": "EMBARGO",
+                "krize_popis": "Mezinárodní embargo na elektronické součástky a čipy! Nákup vývojových desek a senzorů ze skladu je přerušen. HW startupy musí změnit zaměření (Pivot)."
+            })
+            st.success("Embargo na komponenty bylo vyhlášeno!")
+            st.rerun()
+
+        # Geopolitika 3: Měnová devalvace
+        if st.button("Vyhlásit: MĚNOVÝ ŠOK & DEVALVACE KURZU"):
+            nastaveni_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers).json()
+            akt_kurz = float(nastaveni_res[0].get('kurz_kc', 10.0)) if nastaveni_res else 10.0
+            novy_kurz = akt_kurz * 2.0
+            
+            requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={
+                "aktivni_krize": "DEVALVACE",
+                "krize_popis": f"Propad hodnoty měny na trhu! Kurz se propadl na 1 M-K = {novy_kurz} Kč. Reálné životní náklady žáků a cena importu vzrostly na dvojnásobek.",
+                "kurz_kc": novy_kurz
+            })
+            st.success(f"Měnový šok spuštěn! Kurz M-Kreditu byl změněn na {novy_kurz} Kč.")
+            st.rerun()
+
+        # Ostatní systémové krize
         if st.button("Vyhlásit: KYBERNETICKÝ RANSOMWARE ÚTOK"):
             requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={"aktivni_krize": "KYBER", "krize_popis": "Masivní kybernetický útok! Firmám bylo strženo 15 % kapitálu jako výkupné pro hackery."})
             for f in firmy:
@@ -204,34 +245,24 @@ with tab_krize:
                     ztrata = kredity * 0.15
                     requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers, json={"kredity": kredity - ztrata})
                     requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": f["id"], "typ_transakce": "VYDAJ", "titul": "VÝKUPNÉ: Ransomware", "castka": ztrata, "auditovano": True})
-            st.success("Kyberútok úspěšně zasáhl všechny firmy!")
+            st.success("Kyberútok zasáhl všechny firmy!")
             st.rerun()
 
         if st.button("Vyhlásit: ENERGETICKÁ KRIZE (Blackout)"):
-            requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={"aktivni_krize": "ENERGIE", "krize_popis": "Výpadek sítě a skokové zdražení energií! Každé firmě bylo strženo 100 M-K jako mimořádná záloha na elektřinu."})
+            requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={"aktivni_krize": "ENERGIE", "krize_popis": "Výpadek sítě a zdražení energií! Každé firmě bylo strženo 100 M-K jako záloha na elektřinu."})
             for f in firmy:
                 r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers).json()
                 if r_ceo:
                     kredity = r_ceo[0]['kredity']
                     requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers, json={"kredity": max(0, kredity - 100)})
-                    requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": f["id"], "typ_transakce": "VYDAJ", "titul": "MIMOŘÁDNÝ VÝDAJ: Nedoplatek za energie", "castka": 100, "auditovano": True})
-            st.success("Energetická krize a zdražení aplikováno!")
+                    requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": f["id"], "typ_transakce": "VYDAJ", "titul": "MIMOŘÁDNÝ VÝDAJ: Záloha na energie", "castka": 100, "auditovano": True})
+            st.success("Energetická krize aplikována!")
             st.rerun()
 
         if st.button("Vyhlásit: KRACH NA BURZE (Panika)"):
-            requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={"aktivni_krize": "BURZA", "krize_popis": "Panika na akciových trzích! Veškerá probíhající IPO (nabídky akcií) byla investory stažena a zrušena."})
+            requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={"aktivni_krize": "BURZA", "krize_popis": "Panika na akciových trzích! Veškerá nabídka akcií byla stažena."})
             requests.patch(f"{SUPABASE_URL}/rest/v1/burza_nabidky?aktivni=eq.true", headers=headers, json={"aktivni": False})
-            st.success("Krach na burze spuštěn! IPO nabídky byly plošně staženy.")
-            st.rerun()
-
-        if st.button("Vyhlásit: HYPERINFLACE SUROVIN"):
-            requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={"aktivni_krize": "INFLACE", "krize_popis": "Nedostatek materiálů na trhu! Ceny surovin stouply o 50 %. Přecenění produktů nutné!"})
-            st.success("Inflace spuštěna!")
-            st.rerun()
-
-        if st.button("Vyhlásit: LOGISTICKÝ KOLAPS DODÁVEK"):
-            requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={"aktivni_krize": "LOGISTIKA", "krize_popis": "Kolaps dodavatelských řetězců! Nákup materiálu ze skladu je dočasně omezen."})
-            st.success("Logistický kolaps vyhlášen!")
+            st.success("Krach na burze spuštěn!")
             st.rerun()
             
         st.write("---")
