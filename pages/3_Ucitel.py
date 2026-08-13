@@ -57,7 +57,13 @@ ucto = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{f_
 st.write("---")
 
 tab_legal, tab_aktiva, tab_hr, tab_finance, tab_questy, tab_stat, tab_banka = st.tabs([
-    "Schvalování spisu", "Reporty a Vize", "HR a Management", "Audit a Cenotvorba", "Úřad práce", "Státní pokladna", "Centrální Banka a Pravidla"
+    "1. Spis a Rejstřík", 
+    "2. Vize a Reporty", 
+    "3. HR a Mzdy", 
+    "4. E-shop (Schvalování)", 
+    "5. Úřad práce (Questy)", 
+    "6. Státní pokladna (Dotace)", 
+    "7. Centrální Banka (Daně a Ceník)"
 ])
 
 with tab_legal:
@@ -91,19 +97,27 @@ with tab_aktiva:
             with st.expander("Detail Lean Canvasu"):
                 st.write("**Problém:**", canvas[0]['problem'])
                 st.write("**Řešení:**", canvas[0]['reseni'])
+        else:
+            st.info("Firma zatím nedodala Lean Canvas.")
+    
+    st.write("---")
+    st.markdown("#### Vykázané reporty")
     if reporty:
-        st.markdown("#### Vykázané reporty")
         for r in reporty: st.markdown(f"<a href='{r['odkaz_soubor']}' class='asset-link' target='_blank'>Zobrazit: {r['nazev_reportu']} ({r['typ_reportu']})</a>", unsafe_allow_html=True)
+    else:
+        st.info("Firma zatím neodevzdala žádný report.")
 
 with tab_hr:
     st.markdown("#### Mzdový a personální audit")
     if zamestnanci:
         df_zam = pd.DataFrame(zamestnanci)[['jmeno_zamestnance', 'pozice', 'hodinova_sazba', 'vyplaceno_celkem']]
         st.dataframe(df_zam, use_container_width=True)
-    else: st.caption("Firma neeviduje žádné zaměstnance.")
+    else: 
+        st.info("Firma zatím neeviduje žádné zaměstnance.")
 
 with tab_finance:
-    st.markdown("#### Schvalování prodejních cen pro Tržiště")
+    st.markdown("#### Schvalování produktů pro Tržiště")
+    st.caption("Zde se objeví produkty, které firma pošle ke schválení.")
     if kalkulace:
         for k in kalkulace:
             barva = "status-ok" if k['schvaleno_uradem'] else "status-wait"
@@ -112,6 +126,8 @@ with tab_finance:
                 if st.button(f"Schválit kalkulaci: {k['nazev_produktu']}", key=f"kalk_{k['id']}", icon=":material/verified:"):
                     requests.patch(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?id=eq.{k['id']}", headers=headers, json={"schvaleno_uradem": True})
                     st.rerun()
+    else:
+        st.info("Žádné kalkulace ke schválení.")
 
     st.write("---")
     st.markdown("#### Účetní audit a kniha transakcí")
@@ -123,6 +139,8 @@ with tab_finance:
                 st.rerun()
         df_show = pd.DataFrame(ucto)[['datum', 'typ_transakce', 'titul', 'castka', 'auditovano']]
         st.dataframe(df_show, use_container_width=True)
+    else:
+        st.info("Kniha transakcí je zatím prázdná.")
 
 with tab_questy:
     st.subheader("Správa úkolů a zadávání práce")
@@ -133,9 +151,11 @@ with tab_questy:
             q_popis = st.text_area("Rozsah práce:")
             q_odmena = st.number_input("Odměna (M-K):", min_value=1.0, value=20.0)
             if st.form_submit_button("Vypsat do Úřadu práce", icon=":material/campaign:"):
-                requests.post(f"{SUPABASE_URL}/rest/v1/questy", headers=headers, json={"nazev": q_nazev, "popis": q_popis, "odmena": q_odmena, "zadavatel": st.session_state.uzivatel, "stav": "VOLNY"})
-                st.rerun()
+                if q_nazev:
+                    requests.post(f"{SUPABASE_URL}/rest/v1/questy", headers=headers, json={"nazev": q_nazev, "popis": q_popis, "odmena": q_odmena, "zadavatel": st.session_state.uzivatel, "stav": "VOLNY"})
+                    st.rerun()
     with col_q2:
+        st.markdown("#### Práce ke kontrole")
         res_q_check = requests.get(f"{SUPABASE_URL}/rest/v1/questy?stav=eq.K_KONTROLE", headers=headers).json()
         if res_q_check:
             for q in res_q_check:
@@ -146,6 +166,8 @@ with tab_questy:
                     requests.patch(f"{SUPABASE_URL}/rest/v1/questy?id=eq.{q['id']}", headers=headers, json={"stav": "DOKONCENO"})
                     requests.post(f"{SUPABASE_URL}/rest/v1/bankovni_prevody", headers=headers, json={"odesilatel": "Stát", "prijemce": q['resitel'], "castka": q['odmena'], "ucel": f"Odměna za: {q['nazev']}"})
                     st.rerun()
+        else:
+            st.info("Žádné úkoly nečekají na schválení.")
 
 with tab_stat:
     st.subheader("Státní pokladna a Fond rozvoje")
@@ -172,7 +194,7 @@ with tab_stat:
 # ZÁLOŽKA: CENTRÁLNÍ BANKA A MAKROEKONOMIKA
 # ==========================================
 with tab_banka:
-    st.subheader("Centrální Banka a Makroekonomika")
+    st.subheader("Centrální Banka (Daně a Ceník)")
     col_cb1, col_cb2 = st.columns(2)
     
     with col_cb1:
@@ -183,14 +205,15 @@ with tab_banka:
                 akt_nastaveni = nastaveni_res[0]
                 with st.form("form_makro"):
                     st.caption("Pravidla, ceník a daně platné pro celou školu/třídu.")
-                    n_zak = st.number_input("Startovací kredit pro ŽÁKA (M-K):", value=akt_nastaveni.get('start_kredit_zak', 100))
-                    n_firma = st.number_input("Startovací kredit pro FIRMU (M-K):", value=akt_nastaveni.get('start_kredit_firma', 300))
+                    n_zak = st.number_input("Startovací kredit pro ŽÁKA (M-K):", value=float(akt_nastaveni.get('start_kredit_zak', 100)))
+                    n_firma = st.number_input("Startovací kredit pro FIRMU (M-K):", value=float(akt_nastaveni.get('start_kredit_firma', 300)))
                     
                     st.markdown("##### Daňová politika")
                     n_dan = st.number_input("M-TECH Daň pro e-shop (% z prodeje):", min_value=0.0, max_value=50.0, value=float(akt_nastaveni.get('mtech_dan_pct', 15.0)))
                     n_dan_prijem = st.number_input("Daň z příjmu zaměstnanců (% ze mzdy):", min_value=0.0, max_value=50.0, value=float(akt_nastaveni.get('dan_prijem_pct', 15.0)))
                     
                     st.markdown("##### Centrální ceník služeb a materiálu")
+                    st.caption("Zde napište ceník, podle kterého budou firmy počítat své náklady na výrobky.")
                     n_cenik = st.text_area("Ceník (zobrazí se firmám v aplikaci):", value=akt_nastaveni.get('globalni_cenik', ''), height=150)
                     
                     if st.form_submit_button("Uložit makroekonomická pravidla", icon=":material/settings:"):
