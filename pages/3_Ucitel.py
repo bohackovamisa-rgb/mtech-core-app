@@ -51,8 +51,9 @@ vybrana_firma_nazev = st.selectbox("Vyberte startup k auditu:", [f["nazev_firmy"
 firma = next(f for f in firmy if f["nazev_firmy"] == vybrana_firma_nazev)
 f_id = firma["id"]
 
-tab_legal, tab_aktiva, tab_hr, tab_finance, tab_questy, tab_stat, tab_banka, tab_krize = st.tabs([
-    "1. Spis", "2. Vize a AI", "3. HR", "4. E-shop a Zákazníci", "5. Úřad práce a XP", "6. Státní pokladna a Daně", "7. Banka a Ceník", "8. Krizové řízení"
+tab_legal, tab_aktiva, tab_hr, tab_finance, tab_questy, tab_stat, tab_banka, tab_krize, tab_hodnoceni = st.tabs([
+    "1. Spis", "2. Vize a AI", "3. HR", "4. E-shop a Zákazníci", "5. Úřad práce a XP", "6. Státní pokladna a Daně", "7. Banka a Ceník", "8. Krizové řízení", "9. Přehled a Hodnocení"
+])
 ])
 
 # ==========================================
