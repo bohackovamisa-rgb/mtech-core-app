@@ -14,7 +14,9 @@ st.markdown("""
     .card-box { background-color: #1e293b; padding: 20px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 15px; }
     .status-ok { color: #34d399; font-weight: 700; background: rgba(16, 185, 129, 0.1); padding: 4px 8px; border-radius: 6px; }
     .status-wait { color: #fbbf24; font-weight: 700; background: rgba(245, 158, 11, 0.1); padding: 4px 8px; border-radius: 6px; }
+    .status-err { color: #f87171; font-weight: 700; background: rgba(239, 68, 68, 0.1); padding: 4px 8px; border-radius: 6px; }
     .asset-link { color: #00B4D8; font-weight: bold; text-decoration: none; }
+    .asset-link:hover { text-decoration: underline; color: #0077B6; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -32,7 +34,6 @@ except Exception:
     st.error("Chybí konfigurace databáze.")
     st.stop()
 
-# --- Zjištění kódu školy pro zobrazení nastavení ---
 res_ucitel = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{st.session_state.uzivatel}", headers=headers).json()
 skolni_kod_ucitele = res_ucitel[0].get("skolni_kod", "") if res_ucitel else ""
 
@@ -56,13 +57,7 @@ ucto = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{f_
 st.write("---")
 
 tab_legal, tab_aktiva, tab_hr, tab_finance, tab_questy, tab_stat, tab_banka = st.tabs([
-    "Schvalování spisu", 
-    "Reporty a Vize", 
-    "HR a Management", 
-    "Audit a Cenotvorba",
-    "Úřad práce",
-    "Státní pokladna",
-    "Centrální Banka"
+    "Schvalování spisu", "Reporty a Vize", "HR a Management", "Audit a Cenotvorba", "Úřad práce", "Státní pokladna", "Centrální Banka a Pravidla"
 ])
 
 with tab_legal:
@@ -98,16 +93,14 @@ with tab_aktiva:
                 st.write("**Řešení:**", canvas[0]['reseni'])
     if reporty:
         st.markdown("#### Vykázané reporty")
-        for r in reporty:
-            st.markdown(f"<a href='{r['odkaz_soubor']}' class='asset-link' target='_blank'>Zobrazit: {r['nazev_reportu']} ({r['typ_reportu']})</a>", unsafe_allow_html=True)
+        for r in reporty: st.markdown(f"<a href='{r['odkaz_soubor']}' class='asset-link' target='_blank'>Zobrazit: {r['nazev_reportu']} ({r['typ_reportu']})</a>", unsafe_allow_html=True)
 
 with tab_hr:
     st.markdown("#### Mzdový a personální audit")
     if zamestnanci:
         df_zam = pd.DataFrame(zamestnanci)[['jmeno_zamestnance', 'pozice', 'hodinova_sazba', 'vyplaceno_celkem']]
         st.dataframe(df_zam, use_container_width=True)
-    else:
-        st.caption("Firma neeviduje žádné zaměstnance.")
+    else: st.caption("Firma neeviduje žádné zaměstnance.")
 
 with tab_finance:
     st.markdown("#### Schvalování prodejních cen pro Tržiště")
@@ -176,11 +169,10 @@ with tab_stat:
                     st.rerun()
 
 # ==========================================
-# NOVÁ ZÁLOŽKA: CENTRÁLNÍ BANKA A MAKROEKONOMIKA
+# ZÁLOŽKA: CENTRÁLNÍ BANKA A MAKROEKONOMIKA
 # ==========================================
 with tab_banka:
     st.subheader("Centrální Banka a Makroekonomika")
-    
     col_cb1, col_cb2 = st.columns(2)
     
     with col_cb1:
@@ -190,21 +182,24 @@ with tab_banka:
             if nastaveni_res:
                 akt_nastaveni = nastaveni_res[0]
                 with st.form("form_makro"):
-                    st.caption("Toto nastavení definuje kapitál pro nové registrace.")
+                    st.caption("Pravidla, ceník a daně platné pro celou školu/třídu.")
                     n_zak = st.number_input("Startovací kredit pro ŽÁKA (M-K):", value=akt_nastaveni.get('start_kredit_zak', 100))
                     n_firma = st.number_input("Startovací kredit pro FIRMU (M-K):", value=akt_nastaveni.get('start_kredit_firma', 300))
-                    n_cenik = st.text_area("Globální státní ceník (Materiál a služby):", value=akt_nastaveni.get('globalni_cenik', ''), height=150)
                     
-                    if st.form_submit_button("Aktualizovat makroekonomická pravidla", icon=":material/settings:"):
+                    st.markdown("##### Daňová politika")
+                    n_dan = st.number_input("M-TECH Daň pro e-shop (% z prodeje):", min_value=0.0, max_value=50.0, value=float(akt_nastaveni.get('mtech_dan_pct', 15.0)))
+                    n_dan_prijem = st.number_input("Daň z příjmu zaměstnanců (% ze mzdy):", min_value=0.0, max_value=50.0, value=float(akt_nastaveni.get('dan_prijem_pct', 15.0)))
+                    
+                    st.markdown("##### Centrální ceník služeb a materiálu")
+                    n_cenik = st.text_area("Ceník (zobrazí se firmám v aplikaci):", value=akt_nastaveni.get('globalni_cenik', ''), height=150)
+                    
+                    if st.form_submit_button("Uložit makroekonomická pravidla", icon=":material/settings:"):
                         requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{skolni_kod_ucitele}", headers=headers, json={
-                            "start_kredit_zak": n_zak, "start_kredit_firma": n_firma, "globalni_cenik": n_cenik
+                            "start_kredit_zak": n_zak, "start_kredit_firma": n_firma, "globalni_cenik": n_cenik, "mtech_dan_pct": n_dan, "dan_prijem_pct": n_dan_prijem
                         })
                         st.success("Ekonomika aktualizována!")
                         st.rerun()
-            else:
-                st.warning("Škola nemá založen záznam v nastavení.")
-        else:
-            st.info("Zjišťování kódu školy...")
+            else: st.warning("Škola nemá založen záznam v nastavení.")
 
     with col_cb2:
         st.markdown("#### Žádosti o podnikatelský úvěr")
@@ -213,24 +208,18 @@ with tab_banka:
             for u in uvery:
                 f_jmeno = next((f['nazev_firmy'] for f in firmy if f['id'] == u['firma_id']), "Neznámá firma")
                 st.markdown(f"<div class='card-box'><h5>Žadatel: {f_jmeno}</h5><p>Požadovaná částka: <b>{u['castka']} M-K</b> (Úrok: {u['urok_pct']} %)<br>Účel: {u['ucel']}</p></div>", unsafe_allow_html=True)
-                
                 col_u_btn1, col_u_btn2 = st.columns(2)
                 with col_u_btn1:
                     if st.button("Schválit úvěr", key=f"uv_ok_{u['id']}", icon=":material/check:"):
                         f_ceo = next((f['ceo_jmeno'] for f in firmy if f['id'] == u['firma_id']), None)
                         celkem_vratit = u['castka'] * (1 + (u['urok_pct'] / 100.0))
-                        
-                        # Změna stavu
                         requests.patch(f"{SUPABASE_URL}/rest/v1/bankovni_uvery?id=eq.{u['id']}", headers=headers, json={"stav": "SCHVALENO", "zbyva_splatit": celkem_vratit})
-                        # Vyplatit peníze CEO
                         res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f_ceo}", headers=headers).json()
                         if res_ceo: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f_ceo}", headers=headers, json={"kredity": res_ceo[0]['kredity'] + u['castka']})
-                        # Zapsat do účetnictví
                         requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": u['firma_id'], "typ_transakce": "PRIJEM", "titul": f"Bankovní úvěr: {u['ucel']}", "castka": u['castka'], "auditovano": True})
                         st.rerun()
                 with col_u_btn2:
                     if st.button("Zamítnout", key=f"uv_ne_{u['id']}", icon=":material/close:"):
                         requests.patch(f"{SUPABASE_URL}/rest/v1/bankovni_uvery?id=eq.{u['id']}", headers=headers, json={"stav": "ZAMITNUTO"})
                         st.rerun()
-        else:
-            st.info("Centrální banka neeviduje žádné čekající žádosti o úvěr.")
+        else: st.info("Centrální banka neeviduje žádné čekající žádosti o úvěr.")
