@@ -20,7 +20,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Ochrana úřadu – povolí vstup jen učitelům nebo adminům
+# Ochrana úřadu
 if not st.session_state.get("prihlasen") or str(st.session_state.get("role")).upper() not in ["UCITEL", "ADMIN"]:
     st.error("Na tuto stránku mají přístup pouze vyučující a administrátoři!")
     st.stop()
@@ -55,11 +55,13 @@ ucto = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{f_
 
 st.write("---")
 
-tab_legal, tab_aktiva, tab_hr, tab_finance = st.tabs([
+# ZDE JE PŘIDANÁ 5. ZÁLOŽKA PRO QUESTY
+tab_legal, tab_aktiva, tab_hr, tab_finance, tab_questy = st.tabs([
     "Schvalování spisu", 
     "Reporty & Vize", 
     "HR & Agilní vývoj", 
-    "Audit: Kalkulace a Účto"
+    "Audit: Kalkulace a Účto",
+    "Úřad práce (Zadat úkol)"
 ])
 
 with tab_legal:
@@ -135,3 +137,47 @@ with tab_finance:
                 st.rerun()
         df_show = pd.DataFrame(ucto)[['datum', 'typ_transakce', 'titul', 'castka', 'auditovano']]
         st.dataframe(df_show, use_container_width=True)
+
+# NOVÝ BLOK PRO ÚŘAD PRÁCE
+with tab_questy:
+    st.subheader("Úřad práce - Správa Questů")
+    st.caption("Zadávejte žákům úkoly a pošlete jim peníze (M-Kredity) do ekonomiky.")
+    
+    col_q1, col_q2 = st.columns(2)
+    with col_q1:
+        st.markdown("#### Vypsat nový úkol")
+        with st.form("new_quest"):
+            q_nazev = st.text_input("Název úkolu / brigády:")
+            q_popis = st.text_area("Popis (Co se má udělat):")
+            q_odmena = st.number_input("Odměna (M-Kredity):", min_value=1.0, value=20.0)
+            if st.form_submit_button("Zveřejnit na nástěnce", icon=":material/campaign:"):
+                if q_nazev:
+                    requests.post(f"{SUPABASE_URL}/rest/v1/questy", headers=headers, json={
+                        "nazev": q_nazev, "popis": q_popis, "odmena": q_odmena, "zadavatel": st.session_state.uzivatel, "stav": "VOLNY"
+                    })
+                    st.success("Úkol vypsán!")
+                    st.rerun()
+
+    with col_q2:
+        st.markdown("#### Ke schválení a proplacení")
+        res_q_check = requests.get(f"{SUPABASE_URL}/rest/v1/questy?stav=eq.K_KONTROLE", headers=headers)
+        k_kontrole = res_q_check.json() if res_q_check.status_code == 200 else []
+        
+        if k_kontrole:
+            for q in k_kontrole:
+                st.markdown(f"<div class='card-box'><h5>{q['nazev']}</h5><p><b>Řešitel:</b> {q['resitel']} <br> <b>Výstup:</b> <a href='{q['odkaz_vystup']}' target='_blank'>Zobrazit odkaz</a></p></div>", unsafe_allow_html=True)
+                if st.button(f"Schválit a vyplatit {q['odmena']} M-K", key=f"pay_{q['id']}", icon=":material/payments:"):
+                    # Přidat peníze řešiteli
+                    res_r = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{q['resitel']}", headers=headers).json()
+                    if res_r:
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{q['resitel']}", headers=headers, json={"kredity": res_r[0]['kredity'] + q['odmena']})
+                    # Změnit stav úkolu
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/questy?id=eq.{q['id']}", headers=headers, json={"stav": "DOKONCENO"})
+                    # Zapsat do historie banky
+                    requests.post(f"{SUPABASE_URL}/rest/v1/bankovni_prevody", headers=headers, json={
+                        "odesilatel": "Stát (Úřad práce)", "prijemce": q['resitel'], "castka": q['odmena'], "ucel": f"Odměna za úkol: {q['nazev']}"
+                    })
+                    st.success("Odměna vyplacena!")
+                    st.rerun()
+        else:
+            st.info("Žádné úkoly nečekají na vaši kontrolu.")
