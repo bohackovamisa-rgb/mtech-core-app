@@ -96,9 +96,12 @@ else:
                     st.error("Nedostatek kreditů!")
 
 st.write("---")
-st.subheader("Historie moji nákupů")
+st.subheader("Historie mých nákupů")
 res_moje_objednavky = requests.get(f"{SUPABASE_URL}/rest/v1/objednavky?kupujici=eq.{uzivatel}&order=datum.desc", headers=headers).json()
+
 if res_moje_objednavky:
     df = pd.DataFrame(res_moje_objednavky)
     df['Firma'] = df['prodavajici_firma_id'].map(lambda x: firmy_dict.get(x, "Neznámá firma"))
     st.dataframe(df[['datum', 'Firma', 'produkt', 'cena']], use_container_width=True)
+else:
+    st.info("Zatím jste na tržišti neprovedli žádný nákup.")
