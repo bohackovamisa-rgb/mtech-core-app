@@ -49,6 +49,7 @@ akt_dan_mtech = 15.0
 akt_dan_prijem = 15.0
 kurz_kc = 10.0
 akt_cenik = "Ceník zatím není nastaven."
+dnesni_datum = datetime.date.today().isoformat()
 
 if moje_firma:
     nastaveni_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{moje_firma['skolni_kod']}", headers=headers).json()
@@ -130,13 +131,13 @@ with tab_zalozeni:
                 st.rerun()
 
 # ==========================================
-# 2. BRAND A AI SHARK TANK (S GEMINI API)
+# 2. BRAND, AI SHARK TANK A REKLAMACE
 # ==========================================
 with tab_brand:
     if not moje_firma:
         st.warning("Nejprve založte firmu.")
     else:
-        t_aktiva, t_lean, t_ai_shark = st.tabs(["Vizuální Identita", "Lean Canvas", "AI Shark Tank (Investoři)"])
+        t_aktiva, t_lean, t_ai_shark, t_reklamace = st.tabs(["Vizuální Identita", "Lean Canvas", "AI Shark Tank", "Zákaznická podpora & AI Reklamace"])
         
         with t_aktiva:
             with st.form("form_brand"):
@@ -165,127 +166,134 @@ with tab_brand:
             
             res_pitches = requests.get(f"{SUPABASE_URL}/rest/v1/ai_pitches?firma_id=eq.{moje_firma['id']}&order=datum.desc", headers=headers).json()
             
-            with st.form("form_pitch"):
-                p_nazev = st.text_input("Název investiční prezentace / produktu:")
-                p_popis = st.text_area("Detailní pitch (Popište problém, vaše řešení, cílovou skupinu a jak vyděláte):")
-                col_p1, col_p2 = st.columns(2)
-                with col_p1: p_castka = st.number_input("Požadovaný kapitál od AI Investorů (M-K):", min_value=50, value=200)
-                with col_p2: p_akcie = st.number_input("Nabízený počet akcií za investici (ks):", min_value=5, value=20)
-                
-                if st.form_submit_button("Spustit AI Pitching (Prezentovat před porotou)"):
-                    if len(p_popis) < 20:
-                        st.error("Pitch je příliš krátký! Investoři potřebují více detailů o vašem projektu.")
-                    else:
-                        with st.spinner("Google Gemini AI analyzuje váš pitch a připravuje reakce investorů..."):
-                            gemini_key = st.secrets.get("GEMINI_API_KEY", "")
-                            
-                            eval_ostry = ""
-                            eval_vizionarka = ""
-                            eval_rychly = ""
-                            score_ostry = "ZAMITNUTO"
-                            score_vizionarka = "ZAMITNUTO"
-                            score_rychly = "ZAMITNUTO"
-                            
-                            if gemini_key:
-                                try:
-                                    g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-                                    prompt_text = f"""
-                                    Jsi porota v pořadu Shark Tank / Den D složená ze 3 investorů:
-                                    1. Ing. Viktor Ostrý (přísný analytik, řeší finanční logiku, náklady a marže)
-                                    2. Elena Vizionářová (tech a impact investorka, řeší inovace, přidanou hodnotu a společenský dopad)
-                                    3. Petr Rychlý (agresivní VC investor, řeší rychlost, skálovatelnost a výši podílu za investici)
+            # Anti-Spam Logika pro Shark Tank
+            ma_uspesnou_investici = any(p.get('schvaleno_investovano', False) for p in res_pitches) if res_pitches else False
+            posledni_pitch_dnes = any(p.get('datum', '').startswith(dnesni_datum) for p in res_pitches) if res_pitches else False
 
-                                    Posuď tento startupový pitch:
-                                    Název projektu: {p_nazev}
-                                    Detailní popis: {p_popis}
-                                    Požadovaná částka investice: {p_castka} M-Kreditů
-                                    Nabízený počet akcií: {p_akcie} ks
-
-                                    Odpověz VÝHRADNĚ ve formátu JSON s těmito přesnými klíči:
-                                    {{
-                                      "ostry_status": "SCHVALENO" nebo "ZAMITNUTO",
-                                      "ostry_text": "text hodnocení Viktora Ostrého (max 2 věty)",
-                                      "vizionarka_status": "SCHVALENO" nebo "ZAMITNUTO",
-                                      "vizionarka_text": "text hodnocení Eleny Vizionářové (max 2 věty)",
-                                      "rychly_status": "SCHVALENO" nebo "ZAMITNUTO",
-                                      "rychly_text": "text hodnocení Petra Rychlého (max 2 věty)"
-                                    }}
-                                    """
-                                    payload = {
-                                        "contents": [{"parts": [{"text": prompt_text}]}],
-                                        "generationConfig": {"response_mime_type": "application/json"}
-                                    }
-                                    response = requests.post(g_url, json=payload, timeout=10)
-                                    
-                                    if response.status_code == 200:
-                                        res_json = response.json()
-                                        raw_reply = res_json['candidates'][0]['content']['parts'][0]['text']
-                                        data_ai = json.loads(raw_reply)
-                                        
+            if ma_uspesnou_investici:
+                st.success("🎉 Gratulujeme! Vaše firma již dříve úspěšně získala Seed investici od AI Shark Tanku. Pro získání dalšího kapitálu nyní musíte využít Emisi akcií na reálné Burze nebo si zažádat o úvěr v Bance.")
+            elif posledni_pitch_dnes:
+                st.warning("⏳ Dnes jste již před investory prezentovali a váš návrh byl zamítnut. Další schůzku a pitch si můžete sjednat až zítra. Zapracujte zatím na vašem Lean Canvasu.")
+            else:
+                with st.form("form_pitch"):
+                    p_nazev = st.text_input("Název investiční prezentace / produktu:")
+                    p_popis = st.text_area("Detailní pitch (Popište problém, vaše řešení, cílovou skupinu a jak vyděláte):")
+                    col_p1, col_p2 = st.columns(2)
+                    with col_p1: p_castka = st.number_input("Požadovaný kapitál od AI Investorů (M-K):", min_value=50, value=200)
+                    with col_p2: p_akcie = st.number_input("Nabízený počet akcií za investici (ks):", min_value=5, value=20)
+                    
+                    if st.form_submit_button("Spustit AI Pitching (Prezentovat před porotou)"):
+                        if len(p_popis) < 20:
+                            st.error("Pitch je příliš krátký!")
+                        else:
+                            with st.spinner("Gemini AI analyzuje váš pitch..."):
+                                gemini_key = st.secrets.get("GEMINI_API_KEY", "")
+                                eval_ostry, eval_vizionarka, eval_rychly = "", "", ""
+                                score_ostry, score_vizionarka, score_rychly = "ZAMITNUTO", "ZAMITNUTO", "ZAMITNUTO"
+                                
+                                if gemini_key:
+                                    try:
+                                        g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+                                        prompt_text = f"""
+                                        Jsi porota Shark Tank ze 3 investorů (Viktor Ostrý - čísla, Elena Vizionářová - AI/inovace, Petr Rychlý - VC).
+                                        Pitch: {p_nazev}, Popis: {p_popis}, Kapitál: {p_castka} M-K, Akcie: {p_akcie} ks.
+                                        Odpověz VÝHRADNĚ JSON:
+                                        {{ "ostry_status": "SCHVALENO/ZAMITNUTO", "ostry_text": "...", "vizionarka_status": "SCHVALENO/ZAMITNUTO", "vizionarka_text": "...", "rychly_status": "SCHVALENO/ZAMITNUTO", "rychly_text": "..." }}
+                                        """
+                                        payload = {"contents": [{"parts": [{"text": prompt_text}]}], "generationConfig": {"response_mime_type": "application/json"}}
+                                        res = requests.post(g_url, json=payload, timeout=10).json()
+                                        data_ai = json.loads(res['candidates'][0]['content']['parts'][0]['text'])
                                         score_ostry = data_ai.get("ostry_status", "ZAMITNUTO").upper()
                                         score_vizionarka = data_ai.get("vizionarka_status", "ZAMITNUTO").upper()
                                         score_rychly = data_ai.get("rychly_status", "ZAMITNUTO").upper()
-                                        
                                         eval_ostry = f"[{score_ostry}] Ing. Viktor Ostrý: " + data_ai.get("ostry_text", "")
                                         eval_vizionarka = f"[{score_vizionarka}] Elena Vizionářová: " + data_ai.get("vizionarka_text", "")
                                         eval_rychly = f"[{score_rychly}] Petr Rychlý: " + data_ai.get("rychly_text", "")
-                                    else:
-                                        raise Exception("API error")
-                                except Exception:
-                                    # Fallback pokud vyprší čas nebo selže API klíč
-                                    score_ostry = "SCHVALENO" if "zisk" in p_popis.lower() or p_castka <= 300 else "ZAMITNUTO"
-                                    score_vizionarka = "SCHVALENO" if "ai" in p_popis.lower() or "inovace" in p_popis.lower() else "ZAMITNUTO"
-                                    score_rychly = "SCHVALENO" if len(p_popis) > 80 and p_akcie >= 10 else "ZAMITNUTO"
-                                    
-                                    eval_ostry = f"[{score_ostry}] Ing. Viktor Ostrý: Finanční záměr odpovídá běžným parametrům."
-                                    eval_vizionarka = f"[{score_vizionarka}] Elena Vizionářová: Projekt přináší zajímavý pohled na trh."
-                                    eval_rychly = f"[{score_rychly}] Petr Rychlý: Nabídka akcií je k diskusi, vidím zde potenciál."
-                            else:
-                                # Fallback bez klíče
-                                score_ostry = "SCHVALENO" if "zisk" in p_popis.lower() or p_castka <= 300 else "ZAMITNUTO"
-                                score_vizionarka = "SCHVALENO" if "ai" in p_popis.lower() or "inovace" in p_popis.lower() else "ZAMITNUTO"
-                                score_rychly = "SCHVALENO" if len(p_popis) > 80 and p_akcie >= 10 else "ZAMITNUTO"
+                                    except Exception:
+                                        score_ostry = "SCHVALENO" if "zisk" in p_popis.lower() or p_castka <= 300 else "ZAMITNUTO"
+                                        score_vizionarka = "SCHVALENO" if "ai" in p_popis.lower() or "inovace" in p_popis.lower() else "ZAMITNUTO"
+                                        score_rychly = "SCHVALENO" if len(p_popis) > 80 and p_akcie >= 10 else "ZAMITNUTO"
+                                        eval_ostry = f"[{score_ostry}] Ing. Viktor Ostrý: Základní kalkulace vypadá stabilně."
+                                        eval_vizionarka = f"[{score_vizionarka}] Elena Vizionářová: Projekt přináší zajímavou hodnotu."
+                                        eval_rychly = f"[{score_rychly}] Petr Rychlý: Nabídka akcií odpovídá riziku."
                                 
-                                eval_ostry = f"[{score_ostry}] Ing. Viktor Ostrý: Základní výpočet nákladů schválen."
-                                eval_vizionarka = f"[{score_vizionarka}] Elena Vizionářová: Váš nápad přináší novou hodnotu."
-                                eval_rychly = f"[{score_rychly}] Petr Rychlý: Akceptuji vaši nabídku podílu."
-
-                            schvaleno = [score_ostry, score_vizionarka, score_rychly].count("SCHVALENO") >= 2
-                            
-                            requests.post(f"{SUPABASE_URL}/rest/v1/ai_pitches", headers=headers, json={
-                                "firma_id": moje_firma['id'], "nazev_pitchu": p_nazev, "popis_projektu": p_popis,
-                                "zadana_castka": p_castka, "nabizene_akcie": p_akcie,
-                                "hodnoceni_ostry": eval_ostry, "hodnoceni_vizionarka": eval_vizionarka, "hodnoceni_rychly": eval_rychly,
-                                "schvaleno_investovano": schvaleno, "investovana_castka": p_castka if schvaleno else 0
-                            })
-                            
-                            if schvaleno:
-                                r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers).json()
-                                if r_ceo: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"kredity": r_ceo[0]['kredity'] + p_castka})
-                                requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "PRIJEM", "titul": f"AI Shark Tank Investice: {p_nazev}", "castka": p_castka, "auditovano": True})
-                                requests.post(f"{SUPABASE_URL}/rest/v1/portfolio_investoru", headers=headers, json={"investor_jmeno": "AI Shark Tank Fond", "firma_id": moje_firma["id"], "pocet_akcii": p_akcie})
-                            
-                            st.rerun()
+                                schvaleno = [score_ostry, score_vizionarka, score_rychly].count("SCHVALENO") >= 2
+                                requests.post(f"{SUPABASE_URL}/rest/v1/ai_pitches", headers=headers, json={"firma_id": moje_firma['id'], "nazev_pitchu": p_nazev, "popis_projektu": p_popis, "zadana_castka": p_castka, "nabizene_akcie": p_akcie, "hodnoceni_ostry": eval_ostry, "hodnoceni_vizionarka": eval_vizionarka, "hodnoceni_rychly": eval_rychly, "schvaleno_investovano": schvaleno, "investovana_castka": p_castka if schvaleno else 0})
+                                if schvaleno:
+                                    r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers).json()
+                                    if r_ceo: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"kredity": r_ceo[0]['kredity'] + p_castka})
+                                    requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "PRIJEM", "titul": f"AI Shark Tank Investice: {p_nazev}", "castka": p_castka, "auditovano": True})
+                                st.rerun()
 
             st.write("---")
             st.markdown("#### Historie vašich prezentací před AI Shark Tank")
             if res_pitches:
                 for pitch in res_pitches:
                     st_barva = "status-badge-ok" if pitch['schvaleno_investovano'] else "status-badge-wait"
-                    st.markdown(f"""
-                        <div class='card-box'>
-                            <div style='display:flex; justify-content:space-between; align-items:center;'>
-                                <h4>{pitch['nazev_pitchu']}</h4>
-                                <div class='{st_barva}'>{'INVESTICE SCHVÁLENA (+ ' + str(pitch['zadana_castka']) + ' M-K)' if pitch['schvaleno_investovano'] else 'INVESTICE ZAMÍTNUTA'}</div>
-                            </div>
-                            <p><b>Hodnocení AI Investorů:</b></p>
-                            <div class='shark-card'>{pitch['hodnoceni_ostry']}</div>
-                            <div class='shark-card'>{pitch['hodnoceni_vizionarka']}</div>
-                            <div class='shark-card'>{pitch['hodnoceni_rychly']}</div>
-                        </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(f"<div class='card-box'><div style='display:flex; justify-content:space-between;'><h4>{pitch['nazev_pitchu']}</h4><div class='{st_barva}'>{'SCHVÁLENO (+ ' + str(pitch['zadana_castka']) + ' M-K)' if pitch['schvaleno_investovano'] else 'ZAMÍTNUTO'}</div></div><p>{pitch['hodnoceni_ostry']}<br>{pitch['hodnoceni_vizionarka']}<br>{pitch['hodnoceni_rychly']}</p></div>", unsafe_allow_html=True)
+
+        with t_reklamace:
+            st.subheader("Zákaznická podpora & AI Reklamace")
+            st.caption("Reagujte na stížnosti zákazníků. Správně vyřešená reklamace vám přinese +15 Marketing XP. Špatná vám způsobí pokutu za poškození reputace.")
+            
+            reklamace_list = requests.get(f"{SUPABASE_URL}/rest/v1/ai_reklamace?firma_id=eq.{moje_firma['id']}&order=datum.desc", headers=headers).json()
+            
+            # Anti-spam pro reklamace (max 1 nova stiznost denne)
+            reklamace_dnes = any(r.get('datum', '').startswith(dnesni_datum) for r in reklamace_list) if reklamace_list else False
+
+            if reklamace_dnes:
+                st.success("Pro dnešek máte čistý stůl! Žádný další zákazník si už dnes nestěžuje. Přijďte zkontrolovat tickety opět zítra.")
             else:
-                st.info("Zatím jste před AI Shark Tank neprezentovali žádný projekt.")
+                if st.button("Načíst novou stížnost od zákazníka"):
+                    gemini_key = st.secrets.get("GEMINI_API_KEY", "")
+                    stiznost_text = "Dobrý den, zakoupený produkt neodpovídá popisu a dorazil s vadou. Žádám okamžitou náhradu nebo vrácení peněz!"
+                    if gemini_key:
+                        try:
+                            g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+                            p_t = f"Napiš realistickou, mírně naštvanou stížnost zákazníka pro firmu {moje_firma['nazev_firmy']}. Max 2 věty."
+                            p_load = {"contents": [{"parts": [{"text": p_t}]}]}
+                            r_g = requests.post(g_url, json=p_load, timeout=8).json()
+                            stiznost_text = r_g['candidates'][0]['content']['parts'][0]['text']
+                        except Exception: pass
+                    
+                    requests.post(f"{SUPABASE_URL}/rest/v1/ai_reklamace", headers=headers, json={"firma_id": moje_firma['id'], "zakaznik_jmeno": "Jan Novák (Zákazník)", "text_stiznosti": stiznost_text, "vysledek": "CEKA_NA_ODPOVED"})
+                    st.rerun()
+
+            st.write("---")
+            if reklamace_list:
+                for r in reklamace_list:
+                    st.markdown(f"<div class='card-box'><h5>Stížnost od: {r['zakaznik_jmeno']}</h5><p><i>'{r['text_stiznosti']}'</i></p></div>", unsafe_allow_html=True)
+                    if r['vysledek'] == 'CEKA_NA_ODPOVED':
+                        with st.form(f"f_rek_{r['id']}"):
+                            odpoved = st.text_area("Vaše oficiální odpoveď zákazníkovi:")
+                            if st.form_submit_button("Odeslat odpoveď zákazníkovi"):
+                                gemini_key = st.secrets.get("GEMINI_API_KEY", "")
+                                v_res = "SCHVALENO"
+                                h_text = "Odpověď byla profesionální a zákazník je spokojen."
+                                if gemini_key and len(odpoved) > 10:
+                                    try:
+                                        g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+                                        p_eval = f"Posuď odpoveď firmy na stížnost. Stížnost: {r['text_stiznosti']}. Odpoveď: {odpoved}. Odpověz VÝHRADNĚ JSON: {{\"vysledek\": \"SCHVALENO\" nebo \"ZAMITNUTO_POKUTA\", \"hodnoceni\": \"text (max 2 věty)\"}}"
+                                        p_l = {"contents": [{"parts": [{"text": p_eval}]}], "generationConfig": {"response_mime_type": "application/json"}}
+                                        res_ev = requests.post(g_url, json=p_l, timeout=8).json()
+                                        d_ev = json.loads(res_ev['candidates'][0]['content']['parts'][0]['text'])
+                                        v_res = d_ev.get("vysledek", "SCHVALENO")
+                                        h_text = d_ev.get("hodnoceni", "")
+                                    except Exception: pass
+                                
+                                # Dopad hodnoceni
+                                if v_res == "SCHVALENO":
+                                    r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers).json()
+                                    if r_ceo: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"xp_marketing": r_ceo[0].get('xp_marketing', 0) + 15})
+                                else:
+                                    r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers).json()
+                                    if r_ceo: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"kredity": max(0, r_ceo[0]['kredity'] - 20)})
+                                    requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "VYDAJ", "titul": "POKUTA: Špatné vyřízení reklamace", "castka": 20, "auditovano": True})
+
+                                requests.patch(f"{SUPABASE_URL}/rest/v1/ai_reklamace?id=eq.{r['id']}", headers=headers, json={"odpoved_firmy": odpoved, "hodnoceni_ai": h_text, "vysledek": v_res})
+                                st.rerun()
+                    else:
+                        st.info(f"Vyřízeno [{r['vysledek']}]: {r.get('hodnoceni_ai','')}")
 
 # ==========================================
 # 3. AGILNÍ VÝVOJ
