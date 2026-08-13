@@ -315,18 +315,37 @@ with tab_hr:
 
 with tab_kalkulace:
     if moje_firma:
+        st.subheader("Unit Economics & Založení produktu pro E-shop")
         with st.form("form_kalkulace"):
             prod_nazev = st.text_input("Produkt / Služba (Název):")
-            p_naklady = st.number_input("Přímé náklady (M-K / ks):", min_value=0.0, value=35.0)
-            rezie = st.number_input("Režijní náklady (M-K / ks):", min_value=0.0, value=10.0)
-            marze = st.number_input("Marže (M-K / ks):", min_value=0.0, value=50.0)
-            dan_pct = st.number_input("M-TECH Daň (%):", min_value=10.0, max_value=30.0, value=15.0)
+            popis = st.text_area("Lákavý marketingový popis pro E-shop (Tržiště):")
+            obrazek = st.text_input("🔗 Odkaz na fotografii produktu (Google Drive, Imgur, Canva):")
+            
+            col_k1, col_k2 = st.columns(2)
+            with col_k1:
+                p_naklady = st.number_input("Přímé náklady (M-K / ks):", min_value=0.0, value=35.0)
+                rezie = st.number_input("Režijní náklady (M-K / ks):", min_value=0.0, value=10.0)
+            with col_k2:
+                marze = st.number_input("Marže (M-K / ks):", min_value=0.0, value=50.0)
+                dan_pct = st.number_input("M-TECH Daň (%):", min_value=10.0, max_value=30.0, value=15.0)
             
             k_cena = (p_naklady + rezie + marze) * (1 + (dan_pct / 100.0))
             
-            st.markdown(f"**Retail Cena:** `{k_cena:.2f} M-Kreditů`")
-            if st.form_submit_button("Odeslat ke schválení", icon=":material/send:"):
-                requests.post(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy", headers=headers, json={"firma_id": moje_firma["id"], "nazev_produktu": prod_nazev, "prime_naklady": p_naklady, "rezie_skoly": rezie, "mtech_dan_procento": dan_pct, "marze_zisk": marze, "konecna_cena": k_cena, "schvaleno_uradem": False})
+            st.markdown(f"**Konečná prodejní cena pro Tržiště:** `{k_cena:.2f} M-Kreditů`")
+            if st.form_submit_button("Odeslat ke schválení (Zveřejnit po auditu)", icon=":material/send:"):
+                requests.post(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy", headers=headers, json={
+                    "firma_id": moje_firma["id"], 
+                    "nazev_produktu": prod_nazev, 
+                    "popis": popis,
+                    "obrazek_url": obrazek,
+                    "prime_naklady": p_naklady, 
+                    "rezie_skoly": rezie, 
+                    "mtech_dan_procento": dan_pct, 
+                    "marze_zisk": marze, 
+                    "konecna_cena": k_cena, 
+                    "schvaleno_uradem": False
+                })
+                st.success("Kalkulace odeslána. Jakmile ji úřad schválí, objeví se s fotkou na Tržišti!")
                 st.rerun()
 
 with tab_ucto:
