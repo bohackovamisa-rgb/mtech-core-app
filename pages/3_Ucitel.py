@@ -408,8 +408,9 @@ with col_cb2:
             with st.spinner("Generuji bleskovou zprávu na Wall Street..."):
                 if gemini_key:
                     try:
-                        g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-                        # Zmírněný prompt bez zakázaných "finančních rad"
+                        # ZMĚNA 1: Přesnější název nejnovějšího modelu
+                        g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={gemini_key}"
+                        
                         prompt = f"""Jsi finanční reportér. Ve škole je aktivní krize: {akt_nastaveni.get('aktivni_krize', 'Zadna')}.
                         Napiš stručný, úderný článek (1 věta titulek, 2 věty text), který komentuje náladu na trhu. Nedávej konkrétní investiční rady.
                         Odpověz VÝHRADNĚ jako čistý JSON objekt: {{"titulek": "...", "text_zpravy": "..."}}"""
@@ -417,11 +418,18 @@ with col_cb2:
                         p_load = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"response_mime_type": "application/json"}}
                         res_ai = requests.post(g_url, json=p_load, timeout=10).json()
                         
-                        # Pokus o přečtení odpovědi
+                        # ZMĚNA 2: Automatické záchranné lano (Fallback na 'gemini-pro')
+                        if 'error' in res_ai:
+                            g_url_fallback = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={gemini_key}"
+                            res_ai = requests.post(g_url_fallback, json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=10).json()
+                            
                         if 'error' in res_ai:
                             st.error(f"Chyba u Google AI: {res_ai['error']['message']}")
                         else:
-                            data_ai = json.loads(res_ai['candidates'][0]['content']['parts'][0]['text'])
+                            # Očištění textu pro jistotu (gemini-pro občas posílá formátování navíc)
+                            raw_text = res_ai['candidates'][0]['content']['parts'][0]['text']
+                            clean_text = raw_text.replace("```json", "").replace("```", "").strip()
+                            data_ai = json.loads(clean_text)
                             
                             # Uložení do databáze
                             res_db = requests.post(f"{SUPABASE_URL}/rest/v1/burza_zpravy", headers=headers, json={"titulek": data_ai['titulek'], "text_zpravy": data_ai['text_zpravy']})
@@ -430,7 +438,7 @@ with col_cb2:
                                 st.success("Zpráva úspěšně vydána na trh!")
                                 st.rerun()
                             else:
-                                st.error(f"Chyba při ukládání do DB. Byla vytvořena tabulka burza_zpravy? Detail: {res_db.text}")
+                                st.error(f"Chyba při ukládání do databáze: {res_db.text}")
                     except Exception as e:
                         st.error(f"Kritická chyba v kódu: {str(e)}")
 
