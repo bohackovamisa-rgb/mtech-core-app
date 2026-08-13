@@ -33,7 +33,7 @@ try:
     SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json", "Prefer": "return=representation"}
 except Exception:
-    st.error("Chybí konfigurace databáze.")
+    st.error("Chybí konfigurace databáze v Secrets!")
     st.stop()
 
 uzivatel = st.session_state.uzivatel
@@ -52,10 +52,10 @@ hodnota_kc = aktualni_kredity * kurz_kc
 st.title("Moje Peněženka a Úřad práce")
 
 if nastaveni.get('aktivni_krize') != 'ZADNA':
-    st.markdown(f"<div class='crisis-banner'>⚠️ GLOBÁLNÍ KRIZE NA TRHU: {nastaveni.get('krize_popis')}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='crisis-banner'>GLOBÁLNÍ KRIZE NA TRHU: {nastaveni.get('krize_popis')}</div>", unsafe_allow_html=True)
 
 if not u_data.get('naklady_zaplaceny', True):
-    st.markdown("<div class='alert-banner'>🚨 POZOR! Nemáte zaplacené životní náklady za tento měsíc! Přejděte do záložky 'M-TECH ID' a účty zaplaťte.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='alert-banner'>POZOR! Nemáte zaplacené životní náklady za tento měsíc! Přejděte do záložky 'M-TECH ID' a účty zaplaťte.</div>", unsafe_allow_html=True)
 
 st.markdown(f"""
     <div class="wallet-card">
@@ -127,7 +127,7 @@ with tab_burza:
     st.subheader("Investiční Burza")
     col_b1, col_b2 = st.columns([1.5, 1])
     res_f = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?select=id,nazev_firmy,ceo_jmeno", headers=headers).json()
-    firmy_dict = {f['id']: f for f in res_f} if res_f else {}
+    firmy_dict = {f['id']: f['nazev_firmy'] for f in res_f} if res_f else {}
     with col_b1:
         st.markdown("#### Aktivní nabídky akcií")
         nabidky = requests.get(f"{SUPABASE_URL}/rest/v1/burza_nabidky?aktivni=eq.true", headers=headers).json()
@@ -136,16 +136,18 @@ with tab_burza:
             for n in nabidky:
                 f_info = firmy_dict.get(n['firma_id'])
                 if f_info and n['pocet_k_prodeji'] > 0:
-                    st.markdown(f"<div class='card-box' style='border-left: 4px solid #f59e0b;'><h4>{f_info['nazev_firmy']}</h4><p>K dispozici: <b>{n['pocet_k_prodeji']} ks</b> | Cena: <b>{n['cena_za_kus']} M-K</b></p></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='card-box' style='border-left: 4px solid #f59e0b;'><h4>{f_info}</h4><p>K dispozici: <b>{n['pocet_k_prodeji']} ks</b> | Cena: <b>{n['cena_za_kus']} M-K ({n['cena_za_kus'] * kurz_kc:,.0f} Kč)</b></p></div>", unsafe_allow_html=True)
                     with st.form(f"buy_{n['id']}"):
                         pocet = st.number_input("Počet ks:", min_value=1, max_value=n['pocet_k_prodeji'])
                         cena_c = pocet * n['cena_za_kus']
                         if st.form_submit_button(f"Koupit za {cena_c} M-K"):
                             if cena_c <= aktualni_kredity:
                                 requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers, json={"kredity": aktualni_kredity - cena_c})
-                                ceo = f_info['ceo_jmeno']
-                                r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ceo}", headers=headers).json()
-                                if r_ceo: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ceo}", headers=headers, json={"kredity": r_ceo[0]['kredity'] + cena_c})
+                                f_full = next((f for f in res_f if f['id'] == n['firma_id']), None)
+                                ceo = f_full['ceo_jmeno'] if f_full else None
+                                if ceo:
+                                    r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ceo}", headers=headers).json()
+                                    if r_ceo: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ceo}", headers=headers, json={"kredity": r_ceo[0]['kredity'] + cena_c})
                                 e_port = requests.get(f"{SUPABASE_URL}/rest/v1/portfolio_investoru?investor_jmeno=eq.{uzivatel}&firma_id=eq.{n['firma_id']}", headers=headers).json()
                                 if e_port: requests.patch(f"{SUPABASE_URL}/rest/v1/portfolio_investoru?id=eq.{e_port[0]['id']}", headers=headers, json={"pocet_akcii": e_port[0]['pocet_akcii'] + pocet})
                                 else: requests.post(f"{SUPABASE_URL}/rest/v1/portfolio_investoru", headers=headers, json={"investor_jmeno": uzivatel, "firma_id": n['firma_id'], "pocet_akcii": pocet})
@@ -156,13 +158,13 @@ with tab_burza:
         port = requests.get(f"{SUPABASE_URL}/rest/v1/portfolio_investoru?investor_jmeno=eq.{uzivatel}", headers=headers).json()
         if not port: st.info("Zatím nevlastníte akcie.")
         else:
-            for p in port: st.markdown(f"<div class='card-box'><b>{firmy_dict.get(p['firma_id'], {}).get('nazev_firmy', 'Neznámá')}</b><br>{p['pocet_akcii']} ks</div>", unsafe_allow_html=True)
+            for p in port: st.markdown(f"<div class='card-box'><b>{firmy_dict.get(p['firma_id'], 'Neznámá firma')}</b><br>Vlastníte: {p['pocet_akcii']} ks</div>", unsafe_allow_html=True)
 
 with tab_profil:
     col_p1, col_p2 = st.columns([1, 1])
     
     with col_p1:
-        st.markdown("#### 🏠 Můj osobní život (Výdaje)")
+        st.markdown("#### Můj osobní život (Výdaje)")
         st.caption("Každý měsíc musíte státu zaplatit poplatky za nájem, jídlo a služby.")
         uroven = u_data.get('zivotni_uroven', 'STUDENT')
         zaplaceno = u_data.get('naklady_zaplaceny', True)
@@ -192,8 +194,8 @@ with tab_profil:
             st.success("Složenky za tento měsíc máte zaplacené.")
 
     with col_p2:
-        st.markdown("#### 🎓 M-TECH ID (Osobní Certifikát)")
-        st.caption("Toto je vaše digitální stopa, vaše nasbírané dovednosti a zkušenosti. Můžete si je exportovat do reálného CV.")
+        st.markdown("#### M-TECH ID (Osobní Certifikát)")
+        st.caption("Toto je vaše digitální stopa a dovednosti. Můžete si je exportovat do reálného CV.")
         
         xp_it = u_data.get('xp_it', 0)
         xp_mark = u_data.get('xp_marketing', 0)
@@ -201,14 +203,13 @@ with tab_profil:
         celkem_xp = xp_it + xp_mark + xp_byz
         
         st.markdown(f"<div class='card-box' style='text-align:center;'><h3>Celkové Skóre: {celkem_xp} XP</h3></div>", unsafe_allow_html=True)
-        st.write("**💻 IT & Technologie**")
+        st.write("**IT a Technologie**")
         st.progress(min(xp_it / 200.0, 1.0), text=f"{xp_it} XP")
-        st.write("**🎨 Marketing & Kreativita**")
+        st.write("**Marketing a Kreativita**")
         st.progress(min(xp_mark / 200.0, 1.0), text=f"{xp_mark} XP")
-        st.write("**📈 Byznys & Finance**")
+        st.write("**Byznys a Finance**")
         st.progress(min(xp_byz / 200.0, 1.0), text=f"{xp_byz} XP")
         
-        # Generování certifikátu
         res_moje_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?or=(ceo_jmeno.eq.{uzivatel},cfo_jmeno.eq.{uzivatel},cto_jmeno.eq.{uzivatel})", headers=headers).json()
         pozice_text = ""
         if res_moje_firmy:
@@ -223,16 +224,16 @@ with tab_profil:
 **Datum vystavení:** {datetime.date.today().strftime('%d. %m. %Y')}
 **Licenční kód instituce:** {skolni_kod}
 
-## 📊 Dosažená úroveň dovedností (XP)
-* 💻 **IT a Technologie:** {xp_it} XP
-* 🎨 **Marketing a Kreativita:** {xp_mark} XP
-* 📈 **Byznys a Finance:** {xp_byz} XP
-* **CELKOVÉ SKÓRE:** {celkem_xp} XP
+## Dosažená úroveň dovedností (XP)
+* IT a Technologie: {xp_it} XP
+* Marketing a Kreativita: {xp_mark} XP
+* Byznys a Finance: {xp_byz} XP
+* CELKOVÉ SKÓRE: {celkem_xp} XP
 
-## 🏢 Pracovní a manažerské zkušenosti
+## Pracovní a manažerské zkušenosti
 {pozice_text}
 
-## 🏛️ Finanční spolehlivost
+## Finanční spolehlivost
 Držitel certifikátu má v M-TECH ekosystému platební morálku: **{"VYNIKAJÍCÍ (Bez dluhů)" if zaplaceno else "MÁ ZPOŽDĚNÍ S PLATBOU"}**.
 
 ---
