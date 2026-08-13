@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import datetime
 
-st.set_page_config(page_title="Startup Hub & Dashboard", page_icon=":material/insights:", layout="wide")
+st.set_page_config(page_title="Startup Hub a Dashboard", page_icon=":material/insights:", layout="wide")
 
 st.markdown("""
     <style>
@@ -24,17 +24,17 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 if not st.session_state.get("prihlasen"):
-    st.warning("Pro zobrazení Firemního Dashboardu se musíte přihlásit na hlavní obrazovce.")
+    st.warning("Pro zobrazení Dashboardu se musíte přihlásit na hlavní obrazovce.")
     st.stop()
 
-st.title("Startup Hub & Dashboard M-TECH CORE")
+st.title("Startup Hub a Firemní Dashboard")
 
 try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"].rstrip("/")
     SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json", "Prefer": "return=representation"}
 except Exception:
-    st.error("Chybí konfigurace databáze v Secrets!")
+    st.error("Chybí konfigurace databáze.")
     st.stop()
 
 uzivatel = st.session_state.get("uzivatel")
@@ -45,56 +45,54 @@ moje_firma = next((f for f in vsechny_firmy if uzivatel.lower() in [f.get('ceo_j
 
 if moje_firma:
     f_id = moje_firma["id"]
-    st.subheader(f"Startup: {moje_firma['nazev_firmy']} (ID spisu: #{f_id})")
+    st.subheader(f"Entita: {moje_firma['nazev_firmy']} (ID: #{f_id})")
     col_s1, col_s2, col_s3, col_s4, col_s5 = st.columns(5)
-    stav = moje_firma['stave_licence']
     
     with col_s1:
-        if stav == "SCHVALENO": st.markdown('<div class="status-badge-ok">Zápis v rejstříku OK</div>', unsafe_allow_html=True)
-        else: st.markdown('<div class="status-badge-wait">Založení čeká na audit</div>', unsafe_allow_html=True)
+        if moje_firma['stave_licence'] == "SCHVALENO": st.markdown('<div class="status-badge-ok">Rejstřík OK</div>', unsafe_allow_html=True)
+        else: st.markdown('<div class="status-badge-wait">Založení čeká</div>', unsafe_allow_html=True)
     with col_s2: st.markdown('<div class="status-badge-ok">Brand a Vize</div>', unsafe_allow_html=True)
     with col_s3: st.markdown('<div class="status-badge-ok">Agilní Vývoj</div>', unsafe_allow_html=True)
     with col_s4: st.markdown('<div class="status-badge-ok">HR a Úřady</div>', unsafe_allow_html=True)
-    with col_s5: st.markdown('<div class="status-badge-ok">Finance a Cenotvorba</div>', unsafe_allow_html=True)
+    with col_s5: st.markdown('<div class="status-badge-ok">Finance</div>', unsafe_allow_html=True)
 
     st.write("---")
 
 tab_zalozeni, tab_brand, tab_vyvoj, tab_hr, tab_kalkulace, tab_ucto, tab_burza = st.tabs([
     "1. Zakladatelský Spis", 
-    "2. Brand Kit a AI Mentor", 
+    "2. Brand a AI Mentor", 
     "3. Agilní Vývoj",
     "4. Tým a HR",
     "5. Cenotvorba", 
-    "6. Cash-flow",
-    "7. Burza a Investice"
+    "6. Účetnictví a Úvěry",
+    "7. Burza"
 ])
 
 # ==========================================
 # TAB 1: ZAKLADATELSKÝ SPIS
 # ==========================================
 with tab_zalozeni:
-    st.subheader("Registrační spis zakládané entity")
+    st.subheader("Registrační spis")
     
     if moje_firma:
         st.success(f"Stav zápisu v rejstříku: {moje_firma['stave_licence']}")
-        if moje_firma.get("duvod_zamitnuti"):
-            st.error(f"Připomínky Kontrolního úřadu: {moje_firma['duvod_zamitnuti']}")
+        if moje_firma.get("duvod_zamitnuti"): st.error(f"Připomínky úřadu: {moje_firma['duvod_zamitnuti']}")
         
         doc_content = f"""# ZAKLADATELSKÁ LISTINA
-Obchodní firma: {moje_firma['nazev_firmy']}
+Firma: {moje_firma['nazev_firmy']}
 Licenční kód: {moje_firma['skolni_kod']}
-Datum: {datetime.date.today().strftime('%d. %m. %Y')}
+Datum zápisu: {datetime.date.today().strftime('%d. %m. %Y')}
 
 1. Statutární orgán
 CEO: {moje_firma['ceo_jmeno']}
 CFO: {moje_firma['cfo_jmeno']}
 CTO: {moje_firma['cto_jmeno']}
 
-2. Základní kapitál a podnikání
-Kapitál: {moje_firma['pocatecni_kapital']} M-Kreditů
-Zaměření: {moje_firma['podnikatelsky_zamer']}
+2. Základní kapitál a předmět podnikání
+Základní kapitál: {moje_firma['pocatecni_kapital']} M-Kreditů
+Předmět: {moje_firma['podnikatelsky_zamer']}
 """
-        st.download_button(label="Stáhnout Zakladatelskou listinu", data=doc_content, file_name=f"Listina_{moje_firma['nazev_firmy']}.md", mime="text/markdown", icon=":material/download:")
+        st.download_button(label="Stáhnout Zakladatelskou listinu", data=doc_content, file_name=f"Spis_{moje_firma['nazev_firmy']}.md", mime="text/markdown", icon=":material/download:")
         st.write("")
         if st.button("Editovat dokumentaci", icon=":material/edit:"):
             st.session_state.edit_spis = True
@@ -117,17 +115,17 @@ Zaměření: {moje_firma['podnikatelsky_zamer']}
             with col_k2: st.session_state.reg_data["podily_popis"] = st.text_area("Rozdělení podílů (%):", value="CEO: 40 %, CFO: 30 %, CTO: 30 %")
 
         with u_zivnost:
-            st.session_state.reg_data["druh_zivnosti"] = st.radio("Druh ohlašované živnosti:", ["Volná", "Řemeslná", "Vázaná"], horizontal=True)
+            st.session_state.reg_data["druh_zivnosti"] = st.radio("Druh živnosti:", ["Volná", "Řemeslná", "Vázaná"], horizontal=True)
             col_j1, col_j2 = st.columns(2)
             with col_j1:
-                st.session_state.reg_data["zivnost_detail"] = st.text_input("Obor činnosti:")
+                st.session_state.reg_data["zivnost_detail"] = st.text_input("Obor činnosti (specifikace):")
                 st.session_state.reg_data["predmet"] = st.text_area("Předmět podnikání:", value="Vývoj a prodej inovačních řešení.")
             with col_j2:
                 st.session_state.reg_data["bozp_garant"] = st.text_input("Garant živnosti:", value=uzivatel)
-                st.session_state.reg_data["provozovna"] = st.text_input("Sídlo / Provozovna:", value="Učebna 102")
+                st.session_state.reg_data["provozovna"] = st.text_input("Sídlo / Provozovna:", value="Akcelerační centrum")
 
         with u_financak:
-            st.session_state.reg_data["typ_dani"] = st.multiselect("Přihláška k daním:", ["DPPO", "Závislá činnost", "Nezávislá činnost", "M-TECH daň"], default=["DPPO"])
+            st.session_state.reg_data["typ_dani"] = st.multiselect("Registrace k daním:", ["DPPO", "Závislá činnost", "Nezávislá činnost", "Ekologická daň"], default=["DPPO"])
             st.session_state.reg_data["zdanovaci_obdobi"] = st.selectbox("Zdaňovací období:", ["Měsíční", "Čtvrtletní"])
 
         with u_cssz:
@@ -149,12 +147,12 @@ Zaměření: {moje_firma['podnikatelsky_zamer']}
                     st.rerun()
 
 # ==========================================
-# TAB 2: BRAND & LEAN CANVAS
+# TAB 2: BRAND & AI MENTOR
 # ==========================================
 with tab_brand:
     if not moje_firma: st.warning("Nejprve založte firmu.")
     else:
-        tab_aktiva, tab_lean = st.tabs(["Vizuální Identita", "Lean Canvas"])
+        tab_aktiva, tab_lean, tab_ai = st.tabs(["Vizuální Identita", "Lean Canvas", "AI Mentor"])
         with tab_aktiva:
             with st.form("form_brand"):
                 b_logo = st.text_input("Odkaz na LOGO:", value=moje_firma.get('logo_url','') or "")
@@ -174,6 +172,27 @@ with tab_brand:
                     if exist_canvas: requests.patch(f"{SUPABASE_URL}/rest/v1/lean_canvas?id=eq.{exist_canvas['id']}", headers=headers, json=c_payload)
                     else: requests.post(f"{SUPABASE_URL}/rest/v1/lean_canvas", headers=headers, json=c_payload)
                     st.rerun()
+        with tab_ai:
+            st.markdown("#### Diagnostika byznys modelu")
+            if st.button("Spustit AI Audit projektu", icon=":material/psychology:"):
+                score = 0
+                feedback = []
+                if moje_firma.get("logo_url") and moje_firma.get("web_url"):
+                    score += 25
+                    feedback.append("**Brand:** Máte připravené logo i funkční stránku.")
+                else: feedback.append("**Brand:** Chybí odkaz na webové stránky nebo logo.")
+                if exist_canvas and exist_canvas.get("problem") and exist_canvas.get("reseni"):
+                    score += 35
+                    feedback.append("**Lean Canvas:** Máte jasně definovaný problém a řešení.")
+                else: feedback.append("**Lean Canvas:** Nemáte dostatečně vyplněný model.")
+                res_k = requests.get(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?firma_id=eq.{moje_firma['id']}", headers=headers).json()
+                if res_k:
+                    score += 40
+                    feedback.append("**Finance:** Máte zpracovanou kalkulaci produktů.")
+                else: feedback.append("**Finance:** Zatím nemáte vytvořený produkt s kalkulací.")
+                
+                st.markdown(f"<div class='card-box'><h3>Skóre připravenosti: {score} %</h3></div>", unsafe_allow_html=True)
+                for item in feedback: st.markdown(f"- {item}")
 
 # ==========================================
 # TAB 3: AGILNÍ VÝVOJ
@@ -181,36 +200,59 @@ with tab_brand:
 with tab_vyvoj:
     if not moje_firma: st.warning("Nejprve založte firmu.")
     else:
-        with st.form("form_novy_ukol"):
-            col_u1, col_u2 = st.columns(2)
-            with col_u1: u_nazev = st.text_input("Nový úkol:")
-            with col_u2: u_osoba = st.text_input("Zodpovídá:", value=uzivatel)
-            if st.form_submit_button("Přidat úkol", icon=":material/add:"):
-                requests.post(f"{SUPABASE_URL}/rest/v1/projektove_ukoly", headers=headers, json={"firma_id": moje_firma["id"], "nazev_ukolu": u_nazev, "zodpovedna_osoba": u_osoba, "stav": "TO_DO"})
-                st.rerun()
-        ukoly = requests.get(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?firma_id=eq.{moje_firma['id']}&order=datum_zadani.desc", headers=headers).json()
-        col_todo, col_ip, col_done = st.columns(3)
-        with col_todo:
-            st.markdown("<div class='kanban-col-header header-todo'>K VYŘEŠENÍ</div>", unsafe_allow_html=True)
-            for u in [x for x in ukoly if x['stav'] == 'TO_DO']:
-                st.markdown(f"<div class='kanban-card'><h5>{u['nazev_ukolu']}</h5><p>{u['zodpovedna_osoba']}</p></div>", unsafe_allow_html=True)
-                if st.button("Do procesu", key=f"btn_ip_{u['id']}", icon=":material/arrow_forward:"):
-                    requests.patch(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?id=eq.{u['id']}", headers=headers, json={"stav": "IN_PROGRESS"})
+        ag_kanban, ag_porady, ag_outsourcing = st.tabs(["Agilní Kanban", "Zápisy z porad", "B2B Outsourcing"])
+        with ag_kanban:
+            with st.form("form_novy_ukol"):
+                col_u1, col_u2 = st.columns(2)
+                with col_u1: u_nazev = st.text_input("Nový úkol:")
+                with col_u2: u_osoba = st.text_input("Zodpovídá:", value=uzivatel)
+                if st.form_submit_button("Přidat úkol", icon=":material/add:"):
+                    requests.post(f"{SUPABASE_URL}/rest/v1/projektove_ukoly", headers=headers, json={"firma_id": moje_firma["id"], "nazev_ukolu": u_nazev, "zodpovedna_osoba": u_osoba, "stav": "TO_DO"})
                     st.rerun()
-        with col_ip:
-            st.markdown("<div class='kanban-col-header header-ip'>V PROCESU</div>", unsafe_allow_html=True)
-            for u in [x for x in ukoly if x['stav'] == 'IN_PROGRESS']:
-                st.markdown(f"<div class='kanban-card' style='border-color:#f59e0b;'><h5>{u['nazev_ukolu']}</h5><p>{u['zodpovedna_osoba']}</p></div>", unsafe_allow_html=True)
-                if st.button("Dokončit", key=f"btn_done_{u['id']}", icon=":material/check:"):
-                    requests.patch(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?id=eq.{u['id']}", headers=headers, json={"stav": "DONE"})
+            ukoly = requests.get(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?firma_id=eq.{moje_firma['id']}&order=datum_zadani.desc", headers=headers).json()
+            col_todo, col_ip, col_done = st.columns(3)
+            with col_todo:
+                st.markdown("<div class='kanban-col-header header-todo'>K VYŘEŠENÍ</div>", unsafe_allow_html=True)
+                for u in [x for x in ukoly if x['stav'] == 'TO_DO']:
+                    st.markdown(f"<div class='kanban-card'><h5>{u['nazev_ukolu']}</h5><p>{u['zodpovedna_osoba']}</p></div>", unsafe_allow_html=True)
+                    if st.button("Do procesu", key=f"btn_ip_{u['id']}", icon=":material/arrow_forward:"):
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?id=eq.{u['id']}", headers=headers, json={"stav": "IN_PROGRESS"})
+                        st.rerun()
+            with col_ip:
+                st.markdown("<div class='kanban-col-header header-ip'>V PROCESU</div>", unsafe_allow_html=True)
+                for u in [x for x in ukoly if x['stav'] == 'IN_PROGRESS']:
+                    st.markdown(f"<div class='kanban-card' style='border-color:#f59e0b;'><h5>{u['nazev_ukolu']}</h5><p>{u['zodpovedna_osoba']}</p></div>", unsafe_allow_html=True)
+                    if st.button("Dokončit", key=f"btn_done_{u['id']}", icon=":material/check:"):
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?id=eq.{u['id']}", headers=headers, json={"stav": "DONE"})
+                        st.rerun()
+            with col_done:
+                st.markdown("<div class='kanban-col-header header-done'>HOTOVO</div>", unsafe_allow_html=True)
+                for u in [x for x in ukoly if x['stav'] == 'DONE']:
+                    st.markdown(f"<div class='kanban-card' style='border-color:#10b981;'><h5>{u['nazev_ukolu']}</h5><p>{u['zodpovedna_osoba']}</p></div>", unsafe_allow_html=True)
+                    if st.button("Smazat", key=f"btn_del_{u['id']}", icon=":material/delete:"):
+                        requests.delete(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?id=eq.{u['id']}", headers=headers)
+                        st.rerun()
+        with ag_porady:
+            with st.form("form_porada"):
+                projednano = st.text_area("Projednáno:")
+                if st.form_submit_button("Uložit Zápis", icon=":material/post_add:"):
+                    requests.post(f"{SUPABASE_URL}/rest/v1/zapisy_porady", headers=headers, json={"firma_id": moje_firma["id"], "projednane_body": projednano})
                     st.rerun()
-        with col_done:
-            st.markdown("<div class='kanban-col-header header-done'>HOTOVO</div>", unsafe_allow_html=True)
-            for u in [x for x in ukoly if x['stav'] == 'DONE']:
-                st.markdown(f"<div class='kanban-card' style='border-color:#10b981;'><h5>{u['nazev_ukolu']}</h5><p>{u['zodpovedna_osoba']}</p></div>", unsafe_allow_html=True)
-                if st.button("Smazat", key=f"btn_del_{u['id']}", icon=":material/delete:"):
-                    requests.delete(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?id=eq.{u['id']}", headers=headers)
-                    st.rerun()
+        with ag_outsourcing:
+            st.markdown("#### B2B Subdodávky")
+            ostatni_firmy = [f for f in vsechny_firmy if f['id'] != moje_firma['id']]
+            with st.form("form_outsourcing"):
+                dodavatel_nazev = st.selectbox("Dodavatel:", [f['nazev_firmy'] for f in ostatni_firmy] if ostatni_firmy else ["Žádná další firma"])
+                o_predmet = st.text_input("Předmět:")
+                o_cena = st.number_input("Částka (M-K):", min_value=1.0, value=50.0)
+                if st.form_submit_button("Uzavřít kontrakt a odeslat platbu", icon=":material/handshake:"):
+                    dodavatel_firma = next((f for f in ostatni_firmy if f['nazev_firmy'] == dodavatel_nazev), None)
+                    if dodavatel_firma and o_predmet:
+                        requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "VYDAJ", "titul": f"Outsourcing: {o_predmet}", "castka": o_cena, "auditovano": False})
+                        requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": dodavatel_firma["id"], "typ_transakce": "PRIJEM", "titul": f"B2B zakázka od {moje_firma['nazev_firmy']}", "castka": o_cena, "auditovano": False})
+                        res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{dodavatel_firma['ceo_jmeno']}", headers=headers).json()
+                        if res_ceo: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{dodavatel_firma['ceo_jmeno']}", headers=headers, json={"kredity": res_ceo[0]['kredity'] + o_cena})
+                        st.rerun()
 
 # ==========================================
 # TAB 4: HR A MZDY
@@ -238,94 +280,132 @@ with tab_hr:
             if vybrany_z:
                 hodiny = st.number_input("Odpracované hodiny:", min_value=1.0, value=4.0)
                 cista = (hodiny * vybrany_z["hodinova_sazba"]) * 0.85
-                if st.button(f"Odeslat výplatu {cista} M-K", icon=":material/payments:"):
+                if st.button(f"Odeslat výplatu {cista:.2f} M-K", icon=":material/payments:"):
                     requests.patch(f"{SUPABASE_URL}/rest/v1/zamestnanci?id=eq.{vybrany_z['id']}", headers=headers, json={"vyplaceno_celkem": vybrany_z["vyplaceno_celkem"] + cista})
                     requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "VYDAJ", "titul": f"Výplata: {vybrany_z['jmeno_zamestnance']}", "castka": cista, "auditovano": False})
                     st.rerun()
 
 # ==========================================
-# TAB 5 A 6: KALKULACE A CASH-FLOW
+# TAB 5: CENOTVORBA (S napojením na Globální ceník)
 # ==========================================
 with tab_kalkulace:
-    if moje_firma:
-        with st.form("form_kalkulace"):
-            prod_nazev = st.text_input("Název produktu pro E-shop:")
-            p_naklady = st.number_input("Náklady (M-K):", value=35.0)
-            marze = st.number_input("Zisk (M-K):", value=50.0)
-            k_cena = (p_naklady + marze) * 1.15
-            if st.form_submit_button("Odeslat ke schválení", icon=":material/send:"):
-                requests.post(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy", headers=headers, json={"firma_id": moje_firma["id"], "nazev_produktu": prod_nazev, "prime_naklady": p_naklady, "marze_zisk": marze, "konecna_cena": k_cena, "schvaleno_uradem": False})
-                st.rerun()
-
-with tab_ucto:
-    if moje_firma:
-        with st.form("form_transakce"):
-            col_t1, col_t2 = st.columns(2)
-            with col_t1: typ = st.selectbox("Typ transakce:", ["PRIJEM", "VYDAJ"])
-            with col_t2: castka = st.number_input("Částka v M-Kreditech:", min_value=1.0)
-            titul = st.text_input("Důvod:")
-            if st.form_submit_button("Zaevidovat", icon=":material/account_balance_wallet:"):
-                requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": typ, "titul": titul, "castka": castka, "auditovano": False})
-                st.rerun()
+    if not moje_firma: st.warning("Nejprve založte firmu.")
+    else:
+        col_c_left, col_c_right = st.columns([1.5, 1])
+        
+        with col_c_right:
+            st.markdown("#### Globální ceník školy")
+            nastaveni_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{moje_firma['skolni_kod']}", headers=headers).json()
+            if nastaveni_res and nastaveni_res[0].get('globalni_cenik'):
+                st.info(nastaveni_res[0]['globalni_cenik'].replace('\n', '  \n'))
+            else:
+                st.caption("Ceník materiálů zatím nebyl školou stanoven.")
+                
+        with col_c_left:
+            st.subheader("Kalkulační list produktu")
+            with st.form("form_kalkulace"):
+                prod_nazev = st.text_input("Název produktu:")
+                p_naklady = st.number_input("Přímé náklady (dle ceníku v M-K):", value=35.0)
+                marze = st.number_input("Zisková marže (M-K):", value=50.0)
+                dan_pct = st.number_input("Odvod daně (%):", min_value=10.0, value=15.0)
+                k_cena = (p_naklady + marze) * (1 + (dan_pct / 100.0))
+                st.markdown(f"**Koncová cena pro E-shop:** `{k_cena:.2f} M-Kreditů`")
+                if st.form_submit_button("Odeslat ke schválení úřadem", icon=":material/send:"):
+                    requests.post(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy", headers=headers, json={"firma_id": moje_firma["id"], "nazev_produktu": prod_nazev, "prime_naklady": p_naklady, "marze_zisk": marze, "mtech_dan_procento": dan_pct, "konecna_cena": k_cena, "schvaleno_uradem": False})
+                    st.rerun()
 
 # ==========================================
-# TAB 7: BURZA, AKCIE A DIVIDENDY
+# TAB 6: ÚČETNICTVÍ A ÚVĚRY
+# ==========================================
+with tab_ucto:
+    if not moje_firma: st.warning("Nejprve založte firmu.")
+    else:
+        col_u1, col_u2 = st.columns(2)
+        with col_u1:
+            st.subheader("Cash-flow a Transakce")
+            with st.form("form_transakce"):
+                typ = st.selectbox("Typ:", ["PRIJEM", "VYDAJ"])
+                castka = st.number_input("Částka (M-K):", min_value=1.0)
+                titul = st.text_input("Důvod:")
+                if st.form_submit_button("Zaevidovat", icon=":material/account_balance_wallet:"):
+                    requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": typ, "titul": titul, "castka": castka, "auditovano": False})
+                    st.rerun()
+            res_kniha = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{moje_firma['id']}&order=datum.desc", headers=headers)
+            if res_kniha.status_code == 200 and len(res_kniha.json()) > 0:
+                st.dataframe(pd.DataFrame(res_kniha.json())[['datum', 'typ_transakce', 'titul', 'castka']], use_container_width=True)
+                
+        with col_u2:
+            st.subheader("Financování a Bankovní úvěry")
+            st.caption("Zažádejte u Centrální banky o úvěr na rozvoj firmy nebo nákup materiálu.")
+            with st.form("form_uver"):
+                u_castka = st.number_input("Požadovaná částka (M-K):", min_value=50, value=500)
+                u_ucel = st.text_input("Účel půjčky (např. Nákup 3D tiskárny):")
+                if st.form_submit_button("Odeslat žádost do banky", icon=":material/account_balance:"):
+                    requests.post(f"{SUPABASE_URL}/rest/v1/bankovni_uvery", headers=headers, json={"firma_id": moje_firma["id"], "castka": u_castka, "ucel": u_ucel, "urok_pct": 10, "stav": "ZADOST"})
+                    st.success("Žádost odeslána. Vyčkejte na rozhodnutí úřadu.")
+                    st.rerun()
+            
+            uvery = requests.get(f"{SUPABASE_URL}/rest/v1/bankovni_uvery?firma_id=eq.{moje_firma['id']}", headers=headers).json()
+            if uvery:
+                st.markdown("#### Aktivní úvěry a žádosti")
+                for uv in uvery:
+                    if uv['stav'] == 'ZADOST':
+                        st.markdown(f"<div class='card-box'><p>Žádost o {uv['castka']} M-K (Účel: {uv['ucel']})</p><span class='status-wait'>Čeká na schválení</span></div>", unsafe_allow_html=True)
+                    elif uv['stav'] == 'ZAMITNUTO':
+                        st.markdown(f"<div class='card-box'><p>Žádost o {uv['castka']} M-K</p><span class='status-err'>Zamítnuto úřadem</span></div>", unsafe_allow_html=True)
+                    elif uv['stav'] == 'SCHVALENO':
+                        zbyva = uv['zbyva_splatit']
+                        st.markdown(f"<div class='card-box'><p>Aktivní úvěr: {uv['ucel']}</p><b>Zbývá splatit: {zbyva:.2f} M-K</b></div>", unsafe_allow_html=True)
+                        with st.form(f"splatka_{uv['id']}"):
+                            splatka = st.number_input("Výše splátky (M-K):", min_value=1.0, max_value=float(zbyva), value=float(min(100.0, zbyva)))
+                            if st.form_submit_button("Odeslat splátku bance", icon=":material/payments:"):
+                                res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers).json()
+                                k_dispozici = res_ceo[0]['kredity'] if res_ceo else 0
+                                if splatka > k_dispozici:
+                                    st.error("Nedostatek prostředků na firemním účtu (CEO).")
+                                else:
+                                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"kredity": k_dispozici - splatka})
+                                    requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "VYDAJ", "titul": f"Splátka úvěru: {uv['ucel']}", "castka": splatka, "auditovano": True})
+                                    novy_zustatek_uveru = zbyva - splatka
+                                    n_stav = "SPLACENO" if novy_zustatek_uveru <= 0 else "SCHVALENO"
+                                    requests.patch(f"{SUPABASE_URL}/rest/v1/bankovni_uvery?id=eq.{uv['id']}", headers=headers, json={"zbyva_splatit": novy_zustatek_uveru, "stav": n_stav})
+                                    st.rerun()
+
+# ==========================================
+# TAB 7: BURZA
 # ==========================================
 with tab_burza:
-    if not moje_firma:
-        st.warning("Nejprve musíte projít procesem Založení.")
+    if not moje_firma: st.warning("Nejprve založte firmu.")
     else:
-        st.subheader("Správa investic a akcií")
-        st.caption("Nabídněte podíly firmy veřejnosti nebo vyplaťte dividendy stávajícím akcionářům.")
-        
         col_b1, col_b2 = st.columns(2)
-        
         with col_b1:
             st.markdown("#### Emise nových akcií (IPO)")
             with st.form("form_ipo"):
                 pocet_akcii = st.number_input("Počet akcií k prodeji:", min_value=1, value=100)
                 cena_akcie = st.number_input("Cena za 1 akcii (M-K):", min_value=1.0, value=10.0)
-                if st.form_submit_button("Zveřejnit nabídku na Burze", icon=":material/campaign:"):
+                if st.form_submit_button("Zveřejnit nabídku", icon=":material/campaign:"):
                     requests.post(f"{SUPABASE_URL}/rest/v1/burza_nabidky", headers=headers, json={"firma_id": moje_firma["id"], "pocet_k_prodeji": pocet_akcii, "cena_za_kus": cena_akcie, "aktivni": True})
-                    st.success("Akcie byly úspěšně nabídnuty na trhu!")
                     st.rerun()
-                    
         with col_b2:
-            st.markdown("#### Výplata dividend ze zisku")
+            st.markdown("#### Výplata dividend")
             portfolio = requests.get(f"{SUPABASE_URL}/rest/v1/portfolio_investoru?firma_id=eq.{moje_firma['id']}", headers=headers).json()
             celkem_akcii = sum(p['pocet_akcii'] for p in portfolio) if portfolio else 0
-            
-            st.info(f"Aktuálně vydáno: **{celkem_akcii} akcií** mezi investory.")
-            
+            st.info(f"Vydáno {celkem_akcii} akcií.")
             with st.form("form_dividendy"):
-                castka_rozdelit = st.number_input("Celková částka zisku k rozdělení (M-K):", min_value=1.0, value=100.0)
-                if st.form_submit_button("Vyplatit dividendy akcionářům", icon=":material/payments:"):
-                    if not portfolio or celkem_akcii == 0:
-                        st.error("Nemáte žádné externí akcionáře.")
+                castka_rozdelit = st.number_input("Celková částka zisku k rozdělení:", min_value=1.0, value=100.0)
+                if st.form_submit_button("Vyplatit akcionářům", icon=":material/payments:"):
+                    if not portfolio or celkem_akcii == 0: st.error("Nemáte akcionáře.")
                     else:
                         div_na_akcii = castka_rozdelit / celkem_akcii
                         ceo = moje_firma['ceo_jmeno']
                         res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ceo}", headers=headers).json()
                         zustatek_ceo = res_ceo[0]['kredity'] if res_ceo else 0
-                        
-                        if castka_rozdelit > zustatek_ceo:
-                            st.error(f"Firemní účet (CEO) nemá dostatek prostředků. Zbývá: {zustatek_ceo} M-K.")
+                        if castka_rozdelit > zustatek_ceo: st.error("Nedostatek prostředků.")
                         else:
                             requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ceo}", headers=headers, json={"kredity": zustatek_ceo - castka_rozdelit})
                             for p in portfolio:
                                 zisk = p['pocet_akcii'] * div_na_akcii
                                 r_inv = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{p['investor_jmeno']}", headers=headers).json()
-                                if r_inv:
-                                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{p['investor_jmeno']}", headers=headers, json={"kredity": r_inv[0]['kredity'] + zisk})
-                            requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "VYDAJ", "titul": "Výplata dividend", "castka": castka_rozdelit, "auditovano": True})
-                            st.success(f"Rozděleno {castka_rozdelit} M-K mezi akcionáře!")
+                                if r_inv: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{p['investor_jmeno']}", headers=headers, json={"kredity": r_inv[0]['kredity'] + zisk})
+                            requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "VYDAJ", "titul": "Dividendy", "castka": castka_rozdelit, "auditovano": True})
                             st.rerun()
-
-        st.write("---")
-        st.markdown("#### Naši Investoři (Kniha akcionářů)")
-        if portfolio:
-            df_port = pd.DataFrame(portfolio)[['investor_jmeno', 'pocet_akcii']]
-            df_port.columns = ['Jméno Investora', 'Držené akcie (ks)']
-            st.dataframe(df_port, use_container_width=True)
-        else:
-            st.caption("Zatím do vaší firmy nikdo neinvestoval.")
