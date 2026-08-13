@@ -425,8 +425,14 @@ with col_cb2:
                         if not dostupne_modely:
                             dostupne_modely = ["gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
                         
-                        prompt = f"""Jsi finanční reportér. Ve škole je aktivní krize: {akt_nastaveni.get('aktivni_krize', 'Zadna')}.
-                        Napiš stručný, úderný článek (1 věta titulek, 2 věty text), který komentuje náladu na trhu. Nedávej konkrétní investiční rady.
+krize_text = akt_nastaveni.get('krize_popis', '')
+                        if not krize_text: 
+                            krize_text = 'Na trzích je klid, žádná makroekonomická krize neprobíhá.'
+
+                        prompt = f"""Jsi finanční reportér na Wall Street v M-TECH (školní byznys simulátor, kde žáci řídí startupy a obchodují ve virtuální měně M-Kredit). 
+                        Na trhu se právě stalo toto: {krize_text}
+                        Napiš stručný, úderný finanční článek (1 věta titulek, 2 věty text), který komentuje dopad této události na studentské firmy a investory. 
+                        Pravidlo: NEPIŠ o známkách, učitelích ani školních testech, piš jako skutečný reportér z Forbesu nebo Bloombergu.
                         Odpověz VÝHRADNĚ jako čistý JSON objekt: {{"titulek": "...", "text_zpravy": "..."}}"""
                         
                         p_load = {"contents": [{"parts": [{"text": prompt}]}]}
