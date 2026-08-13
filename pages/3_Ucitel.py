@@ -405,11 +405,12 @@ with col_cb2:
         gemini_key = st.secrets.get("GEMINI_API_KEY", "")
         
         if st.button("Vygenerovat AI Burzovní zprávu", type="primary"):
-            with st.spinner("Zjišťuji dostupné AI modely a generuji zprávu..."):
+            with st.spinner("Zjišťuji dostupné AI modely a generuji zprávu (může to chvíli trvat)..."):
                 if gemini_key:
                     try:
+                        # ZMĚNA: Zvýšený timeout na 30 vteřin
                         list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={gemini_key}"
-                        models_data = requests.get(list_url, timeout=10).json()
+                        models_data = requests.get(list_url, timeout=30).json()
                         
                         dostupne_modely = []
                         if "models" in models_data:
@@ -436,7 +437,8 @@ with col_cb2:
                         
                         for model in dostupne_modely:
                             g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
-                            res = requests.post(g_url, json=p_load, timeout=10).json()
+                            # ZMĚNA: Zvýšený timeout na 30 vteřin
+                            res = requests.post(g_url, json=p_load, timeout=30).json()
                             if 'error' not in res:
                                 uspesna_odpoved = res
                                 pouzity_model = model
@@ -458,12 +460,12 @@ with col_cb2:
                                 st.rerun()
                             else:
                                 st.error(f"Chyba při ukládání do DB: {res_db.text}")
+                    except requests.exceptions.Timeout:
+                        st.error("Chyba: Servery Googlu jsou aktuálně přetížené a nestihly odpovědět do 30 vteřin. Zkuste to za okamžik znovu.")
                     except Exception as e:
                         st.error(f"Kritická chyba v kódu: {str(e)}")
 
-        # ---------------------------------------------------------
-        # PŘIDANÁ ČÁST: Zobrazení zpráv i pro učitele
-        # ---------------------------------------------------------
+        # Náhled vydaných zpráv
         st.markdown("##### 📰 Náhled vydaných zpráv")
         zpravy_ucitel = requests.get(f"{SUPABASE_URL}/rest/v1/burza_zpravy?order=datum.desc&limit=2", headers=headers).json()
         if zpravy_ucitel:
@@ -471,8 +473,7 @@ with col_cb2:
                 st.markdown(f"<div style='border-left: 3px solid #f59e0b; padding-left: 10px; margin-bottom: 10px;'><b style='color:#f59e0b;'>{z['titulek']}</b><br><span style='font-size:13px; color:#cbd5e1;'>{z['text_zpravy']}</span></div>", unsafe_allow_html=True)
         else:
             st.info("Zatím jste nevydali žádnou zprávu.")
-        # ---------------------------------------------------------
-
+        
         st.write("---")
         st.markdown("#### Žádosti o podnikatelský úvěr")
         uvery = requests.get(f"{SUPABASE_URL}/rest/v1/bankovni_uvery?stav=eq.ZADOST", headers=headers).json()
