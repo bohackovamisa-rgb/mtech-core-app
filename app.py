@@ -5,7 +5,6 @@ import string
 
 st.set_page_config(page_title="M-TECH CORE", page_icon=":material/hub:", layout="wide")
 
-# --- VYLEPŠENÉ UI / CSS STYLY DLE TVÉHO ZADÁNÍ ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&display=swap');
@@ -42,14 +41,14 @@ if "kredity" not in st.session_state:
 if "uzivatel" not in st.session_state:
     st.session_state.uzivatel = None
 
-# --- DEFINICE STRÁNEK VČETNĚ TRŽIŠTĚ ---
+# --- DEFINICE STRÁNEK VČETNĚ SÍNĚ SLÁVY ---
 zaci_page = st.Page("pages/1_Zaci.py", title="Moje peněženka", icon=":material/wallet:")
 firma_page = st.Page("pages/2_Firma.py", title="Firemní Dashboard", icon=":material/insights:")
 ucitel_page = st.Page("pages/3_Ucitel.py", title="Kontrolní úřad", icon=":material/account_balance:")
 trh_page = st.Page("pages/4_Trh.py", title="Tržiště produktů", icon=":material/shopping_cart:")
+zebricky_page = st.Page("pages/5_Zebricky.py", title="Síň slávy", icon=":material/emoji_events:")
 
 if not st.session_state.prihlasen:
-    # --- HERO LANDING PAGE A LOGIN ---
     st.markdown("""
         <div class="hero-card">
             <h1 style="margin:0; font-size: 2.5em;">M-TECH CORE</h1>
@@ -134,23 +133,19 @@ if not st.session_state.prihlasen:
                 else:
                     st.warning("Vyplňte prosím název školy i e-mail.")
 
-# ==================================================
-# ZOBRAZENÍ MENU PO PŘIHLÁŠENÍ (S TRŽIŠTĚM)
-# ==================================================
 else:
-    # 1. Zobrazení správné stránky podle role (Zde je přidáno `trh_page`)
+    # --- PŘIDÁNO ZOBRAZENÍ SÍNĚ SLÁVY PRO VŠECHNY ROLE ---
     if st.session_state.role == "zak":
-        pg = st.navigation([zaci_page, trh_page])
+        pg = st.navigation([zaci_page, trh_page, zebricky_page])
     elif st.session_state.role == "firma":
-        pg = st.navigation([firma_page, zaci_page, trh_page])
+        pg = st.navigation([firma_page, zaci_page, trh_page, zebricky_page])
     elif st.session_state.role == "ucitel":
-        pg = st.navigation([ucitel_page, trh_page])
+        pg = st.navigation([ucitel_page, trh_page, zebricky_page])
     elif st.session_state.role == "admin":
-        pg = st.navigation([zaci_page, firma_page, ucitel_page, trh_page])
+        pg = st.navigation([zaci_page, firma_page, ucitel_page, trh_page, zebricky_page])
     
     pg.run()
     
-    # 2. Levý panel přesně dle tvého kódu
     with st.sidebar:
         st.divider()
         st.markdown(f"Přihlášen: **{st.session_state.uzivatel}**")
