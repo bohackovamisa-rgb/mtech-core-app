@@ -80,13 +80,19 @@ tab_zalozeni, tab_brand, tab_vyvoj, tab_hr, tab_kalkulace, tab_ucto, tab_burza =
 ])
 
 # ==========================================
-# 1. ZAKLADATELSKÝ SPIS
+# 1. ZAKLADATELSKÝ SPIS A LIKVIDACE
 # ==========================================
 with tab_zalozeni:
-    st.subheader("Registrační spis")
+    st.subheader("Registrační spis a Právní status")
     if moje_firma:
-        st.success(f"Stav zápisu: {moje_firma['stave_licence']}")
+        barva_statusu = "status-ok" if moje_firma['stave_licence'] == 'SCHVALENO' else "status-err" if moje_firma['stave_licence'] == 'UKONCENO' else "status-wait"
+        st.markdown(f"**Stav v rejstříku:** <span class='{barva_statusu}'>{moje_firma['stave_licence']}</span>", unsafe_allow_html=True)
+        
         if moje_firma.get("duvod_zamitnuti"): st.error(f"Zamítnuto: {moje_firma['duvod_zamitnuti']}")
+        
+        if moje_firma['stave_licence'] == 'UKONCENO':
+            st.error("🚨 TATO FIRMA BYLA OFICIÁLNĚ VYMAZÁNA Z REJSTŘÍKU A UKONČILA SVOU ČINNOST. 🚨")
+            
         doc = f"# ZAKLADATELSKÁ LISTINA\nFirma: {moje_firma['nazev_firmy']}\nKód: {moje_firma['skolni_kod']}\n\n1. Statutární orgán\nCEO: {moje_firma['ceo_jmeno']}\nCFO: {moje_firma['cfo_jmeno']}\nCTO: {moje_firma['cto_jmeno']}\n\n2. Základní kapitál\nKapitál: {moje_firma['pocatecni_kapital']} M-K\nPředmět: {moje_firma['podnikatelsky_zamer']}\n"
         st.download_button(label="Stáhnout Zakladatelskou Listinu", data=doc, file_name=f"Spis_{moje_firma['nazev_firmy']}.md", mime="text/markdown")
         if st.button("Editovat dokumentaci"):
@@ -94,7 +100,7 @@ with tab_zalozeni:
             st.rerun()
             
     if not moje_firma or st.session_state.get("edit_spis", False):
-        u_notar, u_zivnost, u_financak, u_cssz, u_rejstrik = st.tabs(["Notář", "Živnostenský úřad", "Finanční úřad", "ČSSZ", "Rejstřík"])
+        u_notar, u_zivnost, u_financak, u_cssz, u_rejstrik, u_likvidace = st.tabs(["Notář", "Živnostenský úřad", "Finanční úřad", "ČSSZ", "Rejstřík", "Likvidace firmy"])
         if "reg_data" not in st.session_state: st.session_state.reg_data = {}
         with u_notar:
             st.session_state.reg_data["nazev_firmy"] = st.text_input("Firma:", value=st.session_state.reg_data.get("nazev_firmy", moje_firma['nazev_firmy'] if moje_firma else ""))
@@ -134,7 +140,17 @@ with tab_zalozeni:
                 else: requests.post(f"{SUPABASE_URL}/rest/v1/firmy", headers=headers, json=payload)
                 st.session_state.edit_spis = False
                 st.rerun()
-
+        with u_likvidace:
+            st.markdown("#### Ukončení činnosti (Likvidace firmy)")
+            st.caption("Na konci školního roku, nebo při bankrotu, je nutné firmu oficiálně zrušit a vymazat z rejstříku.")
+            if moje_firma and moje_firma['stave_licence'] == 'ZADOST_O_ZRUSENI':
+                st.warning("⏳ Žádost o výmaz byla odeslána. Čeká se na rozhodnutí Kontrolního úřadu.")
+            elif moje_firma and moje_firma['stave_licence'] != 'UKONCENO':
+                st.error("Pozor: Tento krok je nevratný. Jakmile úřad schválí likvidaci, vaše produkty zmizí z trhu.")
+                if st.button("Podat úřadu žádost o zrušení firmy a výmaz z rejstříku"):
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{moje_firma['id']}", headers=headers, json={"stave_licence": "ZADOST_O_ZRUSENI"})
+                    st.session_state.edit_spis = False
+                    st.rerun()
 # ==========================================
 # 2. BRAND, LEAN CANVAS A AI MENTOR
 # ==========================================
