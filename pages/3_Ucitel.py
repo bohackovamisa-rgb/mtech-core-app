@@ -425,7 +425,7 @@ with col_cb2:
                         if not dostupne_modely:
                             dostupne_modely = ["gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
                         
-krize_text = akt_nastaveni.get('krize_popis', '')
+                        krize_text = akt_nastaveni.get('krize_popis', '')
                         if not krize_text: 
                             krize_text = 'Na trzích je klid, žádná makroekonomická krize neprobíhá.'
 
