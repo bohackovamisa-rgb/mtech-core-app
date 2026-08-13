@@ -313,8 +313,13 @@ with tab_hr:
                         requests.patch(f"{SUPABASE_URL}/rest/v1/zamestnanci?id=eq.{z_peer_obj['id']}", headers=headers, json={"hodnoceni_skore": (bod_aktivita + bod_spoluprace) / 2.0})
                         st.rerun()
 
+# ==========================================
+# TAB 5 & 6: KALKULACE A ÚČETNICTVÍ
+# ==========================================
 with tab_kalkulace:
-    if moje_firma:
+    if not moje_firma:
+        st.warning("Nejprve musíte projít procesem Založení (Záložka 1).")
+    else:
         st.subheader("Unit Economics & Založení produktu pro E-shop")
         with st.form("form_kalkulace"):
             prod_nazev = st.text_input("Produkt / Služba (Název):")
@@ -349,7 +354,10 @@ with tab_kalkulace:
                 st.rerun()
 
 with tab_ucto:
-    if moje_firma:
+    if not moje_firma:
+        st.warning("Nejprve musíte projít procesem Založení (Záložka 1).")
+    else:
+        st.subheader("Cash-flow deník & Runway")
         with st.form("form_transakce"):
             col_t1, col_t2, col_t3 = st.columns(3)
             with col_t1: typ = st.selectbox("Typ transakce:", ["PRIJEM", "VYDAJ"])
