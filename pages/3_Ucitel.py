@@ -408,23 +408,19 @@ with col_cb2:
             with st.spinner("Zjišťuji dostupné AI modely a generuji zprávu..."):
                 if gemini_key:
                     try:
-                        # 1. DYNAMICKÝ KROK: Zjistíme, jaké modely tvůj klíč aktuálně podporuje (ListModels)
                         list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={gemini_key}"
                         models_data = requests.get(list_url, timeout=10).json()
                         
                         dostupne_modely = []
                         if "models" in models_data:
                             for m in models_data["models"]:
-                                # Vyfiltrujeme jen ty modely, které umí tvořit text ("generateContent")
                                 if "generateContent" in m.get("supportedGenerationMethods", []):
                                     nazev = m["name"].replace("models/", "")
-                                    # Upřednostníme rychlé 'flash' modely a ignorujeme video/audio modely
                                     if "flash" in nazev and "vision" not in nazev and "audio" not in nazev:
                                         dostupne_modely.insert(0, nazev)
                                     else:
                                         dostupne_modely.append(nazev)
                         
-                        # Fallback (kdyby náhodou API pro seznam selhalo)
                         if not dostupne_modely:
                             dostupne_modely = ["gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
                         
@@ -438,7 +434,6 @@ with col_cb2:
                         chyba_msg = ""
                         pouzity_model = ""
                         
-                        # 2. KROK: Použijeme první zjištěný funkční model
                         for model in dostupne_modely:
                             g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
                             res = requests.post(g_url, json=p_load, timeout=10).json()
@@ -452,12 +447,10 @@ with col_cb2:
                         if not uspesna_odpoved:
                             st.error(f"Googlu selhalo všech {len(dostupne_modely)} modelů! Poslední chyba: {chyba_msg}")
                         else:
-                            # Očištění textu pro jistotu (některé modely vrací formátování s uvozovkami)
                             raw_text = uspesna_odpoved['candidates'][0]['content']['parts'][0]['text']
                             clean_text = raw_text.replace("```json", "").replace("```", "").strip()
                             data_ai = json.loads(clean_text)
                             
-                            # Uložení do databáze
                             res_db = requests.post(f"{SUPABASE_URL}/rest/v1/burza_zpravy", headers=headers, json={"titulek": data_ai['titulek'], "text_zpravy": data_ai['text_zpravy']})
                             
                             if res_db.status_code in [200, 201]:
@@ -467,6 +460,18 @@ with col_cb2:
                                 st.error(f"Chyba při ukládání do DB: {res_db.text}")
                     except Exception as e:
                         st.error(f"Kritická chyba v kódu: {str(e)}")
+
+        # ---------------------------------------------------------
+        # PŘIDANÁ ČÁST: Zobrazení zpráv i pro učitele
+        # ---------------------------------------------------------
+        st.markdown("##### 📰 Náhled vydaných zpráv")
+        zpravy_ucitel = requests.get(f"{SUPABASE_URL}/rest/v1/burza_zpravy?order=datum.desc&limit=2", headers=headers).json()
+        if zpravy_ucitel:
+            for z in zpravy_ucitel:
+                st.markdown(f"<div style='border-left: 3px solid #f59e0b; padding-left: 10px; margin-bottom: 10px;'><b style='color:#f59e0b;'>{z['titulek']}</b><br><span style='font-size:13px; color:#cbd5e1;'>{z['text_zpravy']}</span></div>", unsafe_allow_html=True)
+        else:
+            st.info("Zatím jste nevydali žádnou zprávu.")
+        # ---------------------------------------------------------
 
         st.write("---")
         st.markdown("#### Žádosti o podnikatelský úvěr")
