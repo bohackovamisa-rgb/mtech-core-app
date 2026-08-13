@@ -258,7 +258,8 @@ with tab_stat:
     st.subheader("Státní pokladna a Daňové audity")
     res_stat = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers).json()
     stat_kredity = res_stat[0]['kredity'] if res_stat else 0
-    st.markdown(f"<div class='card-box' style='text-align: center; background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%); border: none;'><h3 style='color: white; font-weight: 400; margin-bottom: 5px;'>Vybrané daně a poplatky v rozpočtu</h3><h1 style='background: none; -webkit-text-fill-color: white; margin: 0; font-size: 3em;'>{stat_kredity:.2f} M-K</h1></div>", unsafe_allow_html=True)
+    # Zde je oprava - pridano -webkit-text-fill-color: white; a background: none; do H3 tagu!
+    st.markdown(f"<div class='card-box' style='text-align: center; background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%); border: none;'><h3 style='background: none; -webkit-text-fill-color: white; font-weight: 400; margin-bottom: 5px;'>Vybrané daně a poplatky v rozpočtu</h3><h1 style='background: none; -webkit-text-fill-color: white; margin: 0; font-size: 3em;'>{stat_kredity:.2f} M-K</h1></div>", unsafe_allow_html=True)
 
     with st.form("form_dotace"):
         vybrana_dotace_firma = st.selectbox("Příjemce grantu (Firma):", [f["nazev_firmy"] for f in firmy])
@@ -309,13 +310,11 @@ with tab_stat:
             gemini_key = st.secrets.get("GEMINI_API_KEY", "")
             if st.button(f"Spustit AI Daňový Audit (Zkontrolovat přiznání #{p['id']})", key=f"ai_audit_{p['id']}"):
                 with st.spinner("AI Inspektor Klement Neúprosný kontroluje účetnictví..."):
-                    # Výchozí logika bez API (Fallback)
                     vysledek_status = "SCHVALENO" if abs(pozadovana_dan - p['dane_priznane']) <= 1 else "ZAMITNUTO_PENALE"
                     rozdil = max(0, pozadovana_dan - p['dane_priznane'])
                     vymere_penale = rozdil + 50.0 if vysledek_status == "ZAMITNUTO_PENALE" else 0.0
                     zprava = "Přiznání je v pořádku. Daň byla odvedena správně." if vysledek_status == "SCHVALENO" else f"Bylo zjištěno krácení daně. Vyměřuji doplatek a pokutu ve výši {vymere_penale} M-K."
 
-                    # Volání Gemini AI
                     if gemini_key:
                         try:
                             g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
@@ -340,7 +339,6 @@ with tab_stat:
                         except Exception:
                             pass
 
-                    # Zapsání výsledku a dopadu
                     if vysledek_status == "SCHVALENO":
                         requests.patch(f"{SUPABASE_URL}/rest/v1/danova_priznani?id=eq.{p['id']}", headers=headers, json={"stav": "SCHVALENO"})
                         requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": p['firma_id'], "typ_transakce": "PRIJEM", "titul": f"INFO OD FÚ: {zprava}", "castka": 0, "auditovano": True})
