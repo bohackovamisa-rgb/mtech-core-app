@@ -405,33 +405,54 @@ with col_cb2:
         gemini_key = st.secrets.get("GEMINI_API_KEY", "")
         
         if st.button("Vygenerovat AI Burzovní zprávu", type="primary"):
-            with st.spinner("Generuji bleskovou zprávu na Wall Street..."):
+            with st.spinner("Zjišťuji dostupné AI modely a generuji zprávu..."):
                 if gemini_key:
                     try:
+                        # 1. DYNAMICKÝ KROK: Zjistíme, jaké modely tvůj klíč aktuálně podporuje (ListModels)
+                        list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={gemini_key}"
+                        models_data = requests.get(list_url, timeout=10).json()
+                        
+                        dostupne_modely = []
+                        if "models" in models_data:
+                            for m in models_data["models"]:
+                                # Vyfiltrujeme jen ty modely, které umí tvořit text ("generateContent")
+                                if "generateContent" in m.get("supportedGenerationMethods", []):
+                                    nazev = m["name"].replace("models/", "")
+                                    # Upřednostníme rychlé 'flash' modely a ignorujeme video/audio modely
+                                    if "flash" in nazev and "vision" not in nazev and "audio" not in nazev:
+                                        dostupne_modely.insert(0, nazev)
+                                    else:
+                                        dostupne_modely.append(nazev)
+                        
+                        # Fallback (kdyby náhodou API pro seznam selhalo)
+                        if not dostupne_modely:
+                            dostupne_modely = ["gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+                        
                         prompt = f"""Jsi finanční reportér. Ve škole je aktivní krize: {akt_nastaveni.get('aktivni_krize', 'Zadna')}.
                         Napiš stručný, úderný článek (1 věta titulek, 2 věty text), který komentuje náladu na trhu. Nedávej konkrétní investiční rady.
                         Odpověz VÝHRADNĚ jako čistý JSON objekt: {{"titulek": "...", "text_zpravy": "..."}}"""
                         
                         p_load = {"contents": [{"parts": [{"text": prompt}]}]}
                         
-                        # NEPRŮSTŘELNÁ SMYČKA: Zkusí všechny dostupné Google modely
-                        dostupne_modely = ["gemini-1.5-flash", "gemini-1.0-pro", "gemini-1.5-pro"]
                         uspesna_odpoved = None
                         chyba_msg = ""
+                        pouzity_model = ""
                         
+                        # 2. KROK: Použijeme první zjištěný funkční model
                         for model in dostupne_modely:
                             g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
                             res = requests.post(g_url, json=p_load, timeout=10).json()
                             if 'error' not in res:
                                 uspesna_odpoved = res
+                                pouzity_model = model
                                 break
                             else:
                                 chyba_msg = res['error']['message']
                                 
                         if not uspesna_odpoved:
-                            st.error(f"Google AI odmítlo všechny modely. Poslední chyba: {chyba_msg}")
+                            st.error(f"Googlu selhalo všech {len(dostupne_modely)} modelů! Poslední chyba: {chyba_msg}")
                         else:
-                            # Očištění textu pro jistotu
+                            # Očištění textu pro jistotu (některé modely vrací formátování s uvozovkami)
                             raw_text = uspesna_odpoved['candidates'][0]['content']['parts'][0]['text']
                             clean_text = raw_text.replace("```json", "").replace("```", "").strip()
                             data_ai = json.loads(clean_text)
@@ -440,10 +461,10 @@ with col_cb2:
                             res_db = requests.post(f"{SUPABASE_URL}/rest/v1/burza_zpravy", headers=headers, json={"titulek": data_ai['titulek'], "text_zpravy": data_ai['text_zpravy']})
                             
                             if res_db.status_code in [200, 201]:
-                                st.success("Zpráva úspěšně vydána na trh!")
+                                st.success(f"Zpráva úspěšně vydána! (Vygeneroval model: {pouzity_model})")
                                 st.rerun()
                             else:
-                                st.error(f"Chyba při ukládání do databáze: {res_db.text}")
+                                st.error(f"Chyba při ukládání do DB: {res_db.text}")
                     except Exception as e:
                         st.error(f"Kritická chyba v kódu: {str(e)}")
 
