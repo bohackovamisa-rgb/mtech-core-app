@@ -399,7 +399,7 @@ with tab_banka:
                 st.success("Ekonomika byla úspěšně uložena!")
                 st.rerun()
 
-with col_cb2:
+    with col_cb2:
         st.markdown("#### 📰 Ovlivňování nálady na trhu (AI News)")
         st.caption("Kliknutím vygenerujete zprávu z trhu, kterou uvidí všechny firmy. Zpráva vznikne na základě aktuálních krizí a dění.")
         gemini_key = st.secrets.get("GEMINI_API_KEY", "")
@@ -408,7 +408,6 @@ with col_cb2:
             with st.spinner("Zjišťuji dostupné AI modely a generuji zprávu (může to chvíli trvat)..."):
                 if gemini_key:
                     try:
-                        # ZMĚNA: Zvýšený timeout na 30 vteřin
                         list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={gemini_key}"
                         models_data = requests.get(list_url, timeout=30).json()
                         
@@ -443,7 +442,6 @@ with col_cb2:
                         
                         for model in dostupne_modely:
                             g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
-                            # ZMĚNA: Zvýšený timeout na 30 vteřin
                             res = requests.post(g_url, json=p_load, timeout=30).json()
                             if 'error' not in res:
                                 uspesna_odpoved = res
@@ -471,7 +469,6 @@ with col_cb2:
                     except Exception as e:
                         st.error(f"Kritická chyba v kódu: {str(e)}")
 
-        # Náhled vydaných zpráv
         st.markdown("##### 📰 Náhled vydaných zpráv")
         zpravy_ucitel = requests.get(f"{SUPABASE_URL}/rest/v1/burza_zpravy?order=datum.desc&limit=2", headers=headers).json()
         if zpravy_ucitel:
