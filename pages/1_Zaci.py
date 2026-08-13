@@ -1,8 +1,9 @@
 import streamlit as st
 import requests
 import pandas as pd
+import datetime
 
-st.set_page_config(page_title="Moje peněženka", page_icon=":material/wallet:", layout="wide")
+st.set_page_config(page_title="Moje peněženka", layout="wide")
 
 st.markdown("""
     <style>
@@ -50,12 +51,11 @@ hodnota_kc = aktualni_kredity * kurz_kc
 
 st.title("Moje Peněženka a Úřad práce")
 
-# --- KRIZOVÝ A ŽIVOTNÍ SYSTÉM (VAROVÁNÍ) ---
 if nastaveni.get('aktivni_krize') != 'ZADNA':
     st.markdown(f"<div class='crisis-banner'>⚠️ GLOBÁLNÍ KRIZE NA TRHU: {nastaveni.get('krize_popis')}</div>", unsafe_allow_html=True)
 
 if not u_data.get('naklady_zaplaceny', True):
-    st.markdown("<div class='alert-banner'>🚨 POZOR! Nemáte zaplacené životní náklady za tento měsíc! Hrozí vám dluhová past. Přejděte do záložky 'M-TECH ID' a účty zaplaťte.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='alert-banner'>🚨 POZOR! Nemáte zaplacené životní náklady za tento měsíc! Přejděte do záložky 'M-TECH ID' a účty zaplaťte.</div>", unsafe_allow_html=True)
 
 st.markdown(f"""
     <div class="wallet-card">
@@ -66,7 +66,7 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-tab_banka, tab_questy, tab_burza, tab_profil = st.tabs(["1. Banka a Převody", "2. Úřad práce", "3. Investice a Burza", "4. M-TECH ID a Osobní život"])
+tab_banka, tab_questy, tab_burza, tab_profil = st.tabs(["1. Banka a Převody", "2. Úřad práce", "3. Burza", "4. M-TECH ID (Certifikát)"])
 
 with tab_banka:
     col1, col2 = st.columns([1, 1.5])
@@ -78,7 +78,7 @@ with tab_banka:
             prijemce = st.selectbox("Komu posíláte platbu:", všichni)
             castka = st.number_input("Částka (M-K):", min_value=1.0, value=10.0)
             ucel = st.text_input("Účel platby:")
-            if st.form_submit_button("Odeslat peníze", icon=":material/send_money:"):
+            if st.form_submit_button("Odeslat peníze"):
                 if castka > aktualni_kredity: st.error("Nedostatek prostředků!")
                 elif prijemce:
                     requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers, json={"kredity": aktualni_kredity - castka})
@@ -94,7 +94,6 @@ with tab_banka:
                 datum = t['datum'][:10]
                 if t['odesilatel'] == uzivatel: st.markdown(f"<div class='card-box' style='padding: 10px;'><div style='display:flex; justify-content:space-between;'><div><small>{datum} | Pro: {t['prijemce']}</small><br><span>{t['ucel']}</span></div><div class='transaction-minus'>- {t['castka']} M-K</div></div></div>", unsafe_allow_html=True)
                 else: st.markdown(f"<div class='card-box' style='padding: 10px; border-left: 4px solid #10b981;'><div style='display:flex; justify-content:space-between;'><div><small>{datum} | Od: {t['odesilatel']}</small><br><span>{t['ucel']}</span></div><div class='transaction-plus'>+ {t['castka']} M-K</div></div></div>", unsafe_allow_html=True)
-        else: st.info("Zatím nemáte žádné transakce.")
 
 with tab_questy:
     st.subheader("Nástěnka úkolů")
@@ -108,7 +107,7 @@ with tab_questy:
             st.markdown("#### Volné brigády")
             for q in q_volne:
                 st.markdown(f"<div class='quest-card'><h4>{q['nazev']}</h4><p>{q['popis']}</p><p><b>Odměna:</b> <span class='transaction-plus'>{q['odmena']} M-K ({q['odmena'] * kurz_kc:,.0f} Kč)</span></p></div>", unsafe_allow_html=True)
-                if st.button("Přijmout úkol", key=f"q_{q['id']}", icon=":material/task:"):
+                if st.button("Přijmout úkol", key=f"q_{q['id']}"):
                     requests.patch(f"{SUPABASE_URL}/rest/v1/questy?id=eq.{q['id']}", headers=headers, json={"stav": "V_PROCESU", "resitel": uzivatel})
                     st.rerun()
         with col_q2:
@@ -141,7 +140,7 @@ with tab_burza:
                     with st.form(f"buy_{n['id']}"):
                         pocet = st.number_input("Počet ks:", min_value=1, max_value=n['pocet_k_prodeji'])
                         cena_c = pocet * n['cena_za_kus']
-                        if st.form_submit_button(f"Koupit za {cena_c} M-K", icon=":material/shopping_cart:"):
+                        if st.form_submit_button(f"Koupit za {cena_c} M-K"):
                             if cena_c <= aktualni_kredity:
                                 requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers, json={"kredity": aktualni_kredity - cena_c})
                                 ceo = f_info['ceo_jmeno']
@@ -159,49 +158,42 @@ with tab_burza:
         else:
             for p in port: st.markdown(f"<div class='card-box'><b>{firmy_dict.get(p['firma_id'], {}).get('nazev_firmy', 'Neznámá')}</b><br>{p['pocet_akcii']} ks</div>", unsafe_allow_html=True)
 
-# ====== NOVÉ: M-TECH ID & OSOBNÍ ŽIVOT ======
 with tab_profil:
     col_p1, col_p2 = st.columns([1, 1])
     
     with col_p1:
         st.markdown("#### 🏠 Můj osobní život (Výdaje)")
-        st.caption("Každý měsíc (Sprint) musíte státu zaplatit poplatky za nájem, jídlo a služby. Vyberte si svůj životní styl.")
-        
+        st.caption("Každý měsíc musíte státu zaplatit poplatky za nájem, jídlo a služby.")
         uroven = u_data.get('zivotni_uroven', 'STUDENT')
         zaplaceno = u_data.get('naklady_zaplaceny', True)
-        
         ceny_zivot = {"STUDENT": 30, "STANDARD": 60, "LUXUS": 120}
         castka_k_uhrade = ceny_zivot.get(uroven, 30)
         
         with st.form("form_zivot"):
             nova_uroven = st.radio("Zvolte si životní standard:", ["STUDENT", "STANDARD", "LUXUS"], index=["STUDENT", "STANDARD", "LUXUS"].index(uroven))
             st.markdown(f"**Aktuální měsíční náklad:** `{ceny_zivot[nova_uroven]} M-K` (cca {ceny_zivot[nova_uroven]*kurz_kc:,.0f} Kč)")
-            
-            if st.form_submit_button("Uložit životní styl", icon=":material/tune:"):
+            if st.form_submit_button("Uložit životní styl"):
                 requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers, json={"zivotni_uroven": nova_uroven})
                 st.rerun()
                 
         if not zaplaceno:
             st.markdown("---")
             st.error("NEMÁTE ZAPLACENO ZA TENTO MĚSÍC!")
-            if st.button(f"Zaplatit složenky ({castka_k_uhrade} M-K)", icon=":material/payments:"):
+            if st.button(f"Zaplatit složenky ({castka_k_uhrade} M-K)"):
                 if aktualni_kredity >= castka_k_uhrade:
-                    # Platba odchází státu
                     requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers, json={"kredity": aktualni_kredity - castka_k_uhrade, "naklady_zaplaceny": True})
                     res_stat = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers).json()
-                    if res_stat:
-                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers, json={"kredity": res_stat[0]['kredity'] + castka_k_uhrade})
+                    if res_stat: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers, json={"kredity": res_stat[0]['kredity'] + castka_k_uhrade})
                     requests.post(f"{SUPABASE_URL}/rest/v1/bankovni_prevody", headers=headers, json={"odesilatel": uzivatel, "prijemce": "Stát", "castka": castka_k_uhrade, "ucel": "Platba životních nákladů"})
                     st.success("Složenky zaplaceny, děkujeme!")
                     st.rerun()
-                else:
-                    st.error("Nemáte dostatek peněz na účtu! Požádejte firmu o výplatu nebo si najděte brigádu na Úřadu práce.")
+                else: st.error("Nemáte dostatek peněz na účtu!")
         else:
-            st.success("Složenky za tento měsíc máte zaplacené. Žádné dluhy neevidujeme.")
+            st.success("Složenky za tento měsíc máte zaplacené.")
 
     with col_p2:
-        st.markdown("#### 🎓 M-TECH ID (Osobní Skill-Tree)")
-        st.caption("Za úspěšné řešení úkolů a vedení byznysu získáváte Zkušenostní body (XP). Toto je váš oficiální životopis.")
+        st.markdown("#### 🎓 M-TECH ID (Osobní Certifikát)")
+        st.caption("Toto je vaše digitální stopa, vaše nasbírané dovednosti a zkušenosti. Můžete si je exportovat do reálného CV.")
         
         xp_it = u_data.get('xp_it', 0)
         xp_mark = u_data.get('xp_marketing', 0)
@@ -209,12 +201,42 @@ with tab_profil:
         celkem_xp = xp_it + xp_mark + xp_byz
         
         st.markdown(f"<div class='card-box' style='text-align:center;'><h3>Celkové Skóre: {celkem_xp} XP</h3></div>", unsafe_allow_html=True)
-        
         st.write("**💻 IT & Technologie**")
         st.progress(min(xp_it / 200.0, 1.0), text=f"{xp_it} XP")
-        
         st.write("**🎨 Marketing & Kreativita**")
         st.progress(min(xp_mark / 200.0, 1.0), text=f"{xp_mark} XP")
-        
         st.write("**📈 Byznys & Finance**")
         st.progress(min(xp_byz / 200.0, 1.0), text=f"{xp_byz} XP")
+        
+        # Generování certifikátu
+        res_moje_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?or=(ceo_jmeno.eq.{uzivatel},cfo_jmeno.eq.{uzivatel},cto_jmeno.eq.{uzivatel})", headers=headers).json()
+        pozice_text = ""
+        if res_moje_firmy:
+            for f in res_moje_firmy:
+                role = "CEO" if f['ceo_jmeno'] == uzivatel else "CFO" if f['cfo_jmeno'] == uzivatel else "CTO"
+                pozice_text += f"- **{role}** ve startupu *{f['nazev_firmy']}*\n"
+        else:
+            pozice_text = "- Nezávislý pracovník / Freelancer na Úřadu práce\n"
+
+        cert_content = f"""# OFICIÁLNÍ M-TECH CERTIFIKÁT
+**Jméno držitele:** {uzivatel}
+**Datum vystavení:** {datetime.date.today().strftime('%d. %m. %Y')}
+**Licenční kód instituce:** {skolni_kod}
+
+## 📊 Dosažená úroveň dovedností (XP)
+* 💻 **IT a Technologie:** {xp_it} XP
+* 🎨 **Marketing a Kreativita:** {xp_mark} XP
+* 📈 **Byznys a Finance:** {xp_byz} XP
+* **CELKOVÉ SKÓRE:** {celkem_xp} XP
+
+## 🏢 Pracovní a manažerské zkušenosti
+{pozice_text}
+
+## 🏛️ Finanční spolehlivost
+Držitel certifikátu má v M-TECH ekosystému platební morálku: **{"VYNIKAJÍCÍ (Bez dluhů)" if zaplaceno else "MÁ ZPOŽDĚNÍ S PLATBOU"}**.
+
+---
+*Tento certifikát osvědčuje prokazatelné zkušenosti z praktického podnikatelského simulátoru M-TECH CORE.*
+"""
+        st.write("---")
+        st.download_button(label="Stáhnout M-TECH ID Certifikát (.txt)", data=cert_content, file_name=f"MTECH_ID_{uzivatel}.txt", mime="text/plain")
