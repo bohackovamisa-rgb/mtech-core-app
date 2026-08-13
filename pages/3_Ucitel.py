@@ -55,8 +55,8 @@ ucto = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{f_
 
 st.write("---")
 
-# ZDE JE PŘIDANÁ 5. ZÁLOŽKA PRO QUESTY
-tab_legal, tab_aktiva, tab_hr, tab_finance, tab_questy = st.tabs([
+# DEFINICE 6 ZÁLOŽEK
+tab_legal, tab_aktiva, tab_hr, tab_finance, tab_questy, tab_stat = st.tabs([
     "Schvalování spisu", 
     "Reporty & Vize", 
     "HR & Agilní vývoj", 
@@ -139,7 +139,6 @@ with tab_finance:
         df_show = pd.DataFrame(ucto)[['datum', 'typ_transakce', 'titul', 'castka', 'auditovano']]
         st.dataframe(df_show, use_container_width=True)
 
-# NOVÝ BLOK PRO ÚŘAD PRÁCE
 with tab_questy:
     st.subheader("Úřad práce - Správa Questů")
     st.caption("Zadávejte žákům úkoly a pošlete jim peníze (M-Kredity) do ekonomiky.")
@@ -168,21 +167,18 @@ with tab_questy:
             for q in k_kontrole:
                 st.markdown(f"<div class='card-box'><h5>{q['nazev']}</h5><p><b>Řešitel:</b> {q['resitel']} <br> <b>Výstup:</b> <a href='{q['odkaz_vystup']}' target='_blank'>Zobrazit odkaz</a></p></div>", unsafe_allow_html=True)
                 if st.button(f"Schválit a vyplatit {q['odmena']} M-K", key=f"pay_{q['id']}", icon=":material/payments:"):
-                    # Přidat peníze řešiteli
                     res_r = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{q['resitel']}", headers=headers).json()
                     if res_r:
                         requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{q['resitel']}", headers=headers, json={"kredity": res_r[0]['kredity'] + q['odmena']})
-                    # Změnit stav úkolu
                     requests.patch(f"{SUPABASE_URL}/rest/v1/questy?id=eq.{q['id']}", headers=headers, json={"stav": "DOKONCENO"})
-                    # Zapsat do historie banky
                     requests.post(f"{SUPABASE_URL}/rest/v1/bankovni_prevody", headers=headers, json={
-                        "odesilatel": "Stát (Úřad práce)", "prijemce": q['resitel'], "castka": q['odmena'], "ucel": f"Odměna za úkol: {q['nazev']}"
+                        "odesilatel": "Stát (Za úkol)", "prijemce": q['resitel'], "castka": q['odmena'], "ucel": f"Odměna za úkol: {q['nazev']}"
                     })
                     st.success("Odměna vyplacena!")
                     st.rerun()
         else:
             st.info("Žádné úkoly nečekají na vaši kontrolu.")
-# NOVÝ BLOK PRO STÁTNÍ POKLADNU A DOTACE
+
 with tab_stat:
     st.subheader("Státní pokladna & M-TECH Fond rozvoje")
     
@@ -211,20 +207,13 @@ with tab_stat:
                 firma_prijemce = next((f for f in firmy if f["nazev_firmy"] == vybrana_dotace_firma), None)
                 if firma_prijemce:
                     ceo_prijemce = firma_prijemce['ceo_jmeno']
-                    
-                    # 1. Odečíst státu
                     requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers, json={"kredity": stat_kredity - castka_dotace})
-                    
-                    # 2. Přičíst CEO firmy
                     res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ceo_prijemce}", headers=headers).json()
                     if res_ceo:
                         requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ceo_prijemce}", headers=headers, json={"kredity": res_ceo[0]['kredity'] + castka_dotace})
-                    
-                    # 3. Zápis do účetnictví firmy
                     requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={
                         "firma_id": firma_prijemce["id"], "typ_transakce": "PRIJEM", "titul": f"Státní dotace: {ucel_dotace}",
                         "castka": castka_dotace, "auditovano": True
                     })
-                    
                     st.success(f"Dotace ve výši {castka_dotace} M-K byla úspěšně odeslána firmě {vybrana_dotace_firma}.")
                     st.rerun()
