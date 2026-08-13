@@ -61,7 +61,8 @@ tab_legal, tab_aktiva, tab_hr, tab_finance, tab_questy = st.tabs([
     "Reporty & Vize", 
     "HR & Agilní vývoj", 
     "Audit: Kalkulace a Účto",
-    "Úřad práce (Zadat úkol)"
+    "Úřad práce (Zadat úkol)",
+    "Státní pokladna (Dotace)"
 ])
 
 with tab_legal:
@@ -181,3 +182,49 @@ with tab_questy:
                     st.rerun()
         else:
             st.info("Žádné úkoly nečekají na vaši kontrolu.")
+# NOVÝ BLOK PRO STÁTNÍ POKLADNU A DOTACE
+with tab_stat:
+    st.subheader("Státní pokladna & M-TECH Fond rozvoje")
+    
+    res_stat = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers)
+    stat_kredity = res_stat.json()[0]['kredity'] if res_stat.status_code == 200 and res_stat.json() else 0
+    
+    st.markdown(f"""
+        <div class='card-box' style='text-align: center; background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%); border: none;'>
+            <h3 style='color: white; font-weight: 400; margin-bottom: 5px;'>Vybráno na daních</h3>
+            <h1 style='background: none; -webkit-text-fill-color: white; margin: 0; font-size: 3em;'>{stat_kredity:.2f} M-K</h1>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("#### Poskytnutí státní dotace (Grantu) firmě")
+    st.caption("Investujte vybrané daně zpět do inovativních studentských firem.")
+    
+    with st.form("form_dotace"):
+        vybrana_dotace_firma = st.selectbox("Příjemce dotace (Firma):", [f["nazev_firmy"] for f in firmy])
+        castka_dotace = st.number_input("Výše grantu (M-K):", min_value=1.0, value=100.0)
+        ucel_dotace = st.text_input("Účel grantu (např. Podpora udržitelnosti):", value="Státní podpora inovací")
+        
+        if st.form_submit_button("Odeslat dotaci firmě", icon=":material/account_balance:"):
+            if castka_dotace > stat_kredity:
+                st.error("Státní pokladna nemá dostatek financí! Musíte počkat, až se vybere více daní.")
+            else:
+                firma_prijemce = next((f for f in firmy if f["nazev_firmy"] == vybrana_dotace_firma), None)
+                if firma_prijemce:
+                    ceo_prijemce = firma_prijemce['ceo_jmeno']
+                    
+                    # 1. Odečíst státu
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers, json={"kredity": stat_kredity - castka_dotace})
+                    
+                    # 2. Přičíst CEO firmy
+                    res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ceo_prijemce}", headers=headers).json()
+                    if res_ceo:
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ceo_prijemce}", headers=headers, json={"kredity": res_ceo[0]['kredity'] + castka_dotace})
+                    
+                    # 3. Zápis do účetnictví firmy
+                    requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={
+                        "firma_id": firma_prijemce["id"], "typ_transakce": "PRIJEM", "titul": f"Státní dotace: {ucel_dotace}",
+                        "castka": castka_dotace, "auditovano": True
+                    })
+                    
+                    st.success(f"Dotace ve výši {castka_dotace} M-K byla úspěšně odeslána firmě {vybrana_dotace_firma}.")
+                    st.rerun()
