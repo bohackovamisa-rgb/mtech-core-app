@@ -35,11 +35,29 @@ except Exception:
     st.error("Chybí konfigurace databáze v Secrets!")
     st.stop()
 
+# GENERÁTOR DEMO DAT DNOU KUCHYNÍ
+with st.sidebar:
+    st.markdown("### 🛠️ Administrace")
+    if st.button("⚡ Vygenerovat Demo Ekosystém", help="Nalije do databáze testovací firmy, schválené produkty na e-shop a questy pro vyzkoušení."):
+        # Demo firmy
+        f1 = {"nazev_firmy": "EcoPrint 3D s.r.o.", "skolni_kod": "SKOLA-DEMO", "uroven_projektu": 2, "ceo_jmeno": "Firma1", "cfo_jmeno": "Jan_Novak", "cto_jmeno": "Petr_Svoboda", "podnikatelsky_zamer": "Výroba ekologických 3D produktů z recyklovaných plastů.", "pocatecni_kapital": 300, "stave_licence": "SCHVALENO"}
+        f2 = {"nazev_firmy": "DevLabs AI", "skolni_kod": "SKOLA-DEMO", "uroven_projektu": 3, "ceo_jmeno": "Admin", "cfo_jmeno": "Eva_Cerna", "cto_jmeno": "Martin_Kucera", "podnikatelsky_zamer": "Vývoj AI chatbotů a B2B automatizací.", "pocatecni_kapital": 500, "stave_licence": "SCHVALENO"}
+        
+        requests.post(f"{SUPABASE_URL}/rest/v1/firmy", headers=headers, json=f1)
+        res2 = requests.post(f"{SUPABASE_URL}/rest/v1/firmy", headers=headers, json=f2).json()
+        
+        # Questy
+        requests.post(f"{SUPABASE_URL}/rest/v1/questy", headers=headers, json={"nazev": "Grafický návrh letáku pro Dne Otevřených Dveří", "popis": "Vytvořte v Canvě reklamní banner formátu A4.", "odmena": 50, "zadavatel": "Učitel", "stav": "VOLNY"})
+        requests.post(f"{SUPABASE_URL}/rest/v1/questy", headers=headers, json={"nazev": "Příprava prezentace pro startupový pitch", "popis": "Zpracujte 5 slidů o vaší cenotvorbě.", "odmena": 75, "zadavatel": "Učitel", "stav": "VOLNY"})
+        
+        st.success("Demo ekosystém byl úspěšně vygenerován!")
+        st.rerun()
+
 res_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?select=*&order=id.desc", headers=headers)
 firmy = res_firmy.json() if res_firmy.status_code == 200 else []
 
 if not firmy:
-    st.info("Zatím nejsou v systému registrovány žádné studentské firmy.")
+    st.info("Zatím nejsou v systému registrovány žádné studentské firmy. Můžete použít tlačítko 'Vygenerovat Demo Ekosystém' v levém panelu.")
     st.stop()
 
 vybrana_firma_nazev = st.selectbox("Vyberte startup k auditu:", [f["nazev_firmy"] for f in firmy])
@@ -55,7 +73,6 @@ ucto = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{f_
 
 st.write("---")
 
-# DEFINICE 6 ZÁLOŽEK
 tab_legal, tab_aktiva, tab_hr, tab_finance, tab_questy, tab_stat = st.tabs([
     "Schvalování spisu", 
     "Reporty & Vize", 
@@ -172,7 +189,7 @@ with tab_questy:
                         requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{q['resitel']}", headers=headers, json={"kredity": res_r[0]['kredity'] + q['odmena']})
                     requests.patch(f"{SUPABASE_URL}/rest/v1/questy?id=eq.{q['id']}", headers=headers, json={"stav": "DOKONCENO"})
                     requests.post(f"{SUPABASE_URL}/rest/v1/bankovni_prevody", headers=headers, json={
-                        "odesilatel": "Stát (Za úkol)", "prijemce": q['resitel'], "castka": q['odmena'], "ucel": f"Odměna za úkol: {q['nazev']}"
+                        "odesilatel": "Stát (Úřad práce)", "prijemce": q['resitel'], "castka": q['odmena'], "ucel": f"Odměna za úkol: {q['nazev']}"
                     })
                     st.success("Odměna vyplacena!")
                     st.rerun()
