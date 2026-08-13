@@ -57,12 +57,15 @@ if moje_firma:
 tab_zalozeni, tab_brand, tab_vyvoj, tab_hr, tab_kalkulace, tab_ucto = st.tabs([
     "📜 1. Zakladatelský Spis (Legal)", 
     "🎨 2. Brand Kit & Lean Canvas", 
-    "⚡ 3. Agilní Vývoj & Reporty",
+    "⚡ 3. Agilní Vývoj & Outsourcing",
     "👷 4. Tým & HR (Onboarding na Úřady)",
     "📈 5. Cenotvorba pro E-shop", 
     "💸 6. Cash-flow a Banka"
 ])
 
+# ==========================================
+# TAB 1: ZAKLADATELSKÝ SPIS
+# ==========================================
 with tab_zalozeni:
     st.subheader("Registrační spis zakládané entity")
     st.caption("Kompletní zakladatelská dokumentace pro notáře, živnostenský úřad, finanční úřad a obchodní rejstřík.")
@@ -124,32 +127,35 @@ with tab_zalozeni:
             with col_j1:
                 if "Volná" in st.session_state.reg_data["druh_zivnosti"]:
                     st.session_state.reg_data["zivnost_detail"] = st.multiselect(
-                        "Obory voľné živnosti (čísla oborů dle ŽZ):",
+                        "Obory volné živnosti (čísla oborů dle ŽZ):",
                         [
-                            "56. Poskytování softwaru, poradenství v oblasti IT a výpočetní techniky",
-                            "52. Výroba a vývoj elektronických součástek a přístrojů",
-                            "47. Zprostředkování obchodu a služeb",
-                            "48. Velkoobchod a maloobchod (E-shop)",
-                            "62. Reklamní činnost, marketing, media a výlep plakátů",
-                            "63. Návrhářská, designérská, aranžérská činnost a modelování (3D)",
-                            "66. Fotografické a audiovizuální služby",
-                            "70. Mimoškolní výchova a vzdělávání, pořádání kurzů a workshopů",
-                            "31. Výroba strojů a zařízení a 3D aditivní výroba",
+                            "56. Poskytování softwaru, poradenství v oblasti IT a AI",
+                            "52. Výroba a vývoj elektronických součástek a výpočetní techniky",
+                            "31. Výroba strojů a aditivní výroba (3D tisk a prototyping)",
+                            "62. Reklamní činnost, marketing, media a PR",
+                            "63. Návrhářská, designérská a modelářská činnost",
+                            "48. Velkoobchod a maloobchod (E-commerce / E-shop)",
+                            "47. Zprostředkování obchodu, služeb a B2B zakázek",
+                            "66. Fotografické, video a audiovizuální služby",
+                            "70. Mimoškolní výchova, vzdělávání, kurzy a workshopy",
+                            "72. Provozování kulturních, vývojových a společenských akcí",
                             "80. Výroba, obchod a služby jinde nezařazené"
                         ],
-                        default=["56. Poskytování softwaru, poradenství v oblasti IT a výpočetní techniky", "48. Velkoobchod a maloobchod (E-shop)"]
+                        default=["56. Poskytování softwaru, poradenství v oblasti IT a AI", "48. Velkoobchod a maloobchod (E-commerce / E-shop)"]
                     )
+                    st.session_state.reg_data["vlastni_zivnost"] = st.text_input("Další / Vlastní specifikace volné živnosti (volitelné):", placeholder="Např. Vývoj autonomních dronů")
                 elif "Řemeslná" in st.session_state.reg_data["druh_zivnosti"]:
                     st.session_state.reg_data["zivnost_detail"] = st.selectbox(
                         "Obor řemeslné živnosti:",
                         [
-                            "Obrábění kovů a zámečnictví",
+                            "Obrábění kovů, zámečnictví a nástrojařství",
                             "Výroba, instalace a opravy elektrických strojů a přístrojů",
                             "Truhlářství a stolářství",
                             "Pekařství a cukrářství",
-                            "Opravy silničních vozidel"
+                            "Opravy silničních vozidel a mechaniky"
                         ]
                     )
+                    st.session_state.reg_data["vlastni_zivnost"] = ""
                 else:
                     st.session_state.reg_data["zivnost_detail"] = st.selectbox(
                         "Obor vázané živnosti:",
@@ -160,14 +166,15 @@ with tab_zalozeni:
                             "Nákup a prodej pyrotechnických výrobků"
                         ]
                     )
+                    st.session_state.reg_data["vlastni_zivnost"] = ""
                 
                 st.session_state.reg_data["predmet"] = st.text_area(
                     "Předmět podnikání (Přesné vymezení produktů/služeb):", 
-                    value="Vývoj inovačních softwarových a hardwarových řešení, prototypování a jejich B2B/B2C prodej."
+                    value="Vývoj inovačních softwarových a hardwarových řešení, prototypování, B2B outsourcing a jejich maloobchodní/velkoobchodní prodej."
                 )
 
             with col_j2:
-                st.session_state.reg_data["bozp_garant"] = st.text_input("Odborný zástupce / Garant živnosti:", value=uzivatel, help="Osoba, která splňuje podmínky odborné způsobilosti a odpovídá za provoz.")
+                st.session_state.reg_data["bozp_garant"] = st.text_input("Odborný zástupce / Garant živnosti:", value=uzivatel, help="Osoba, která splňuje podmínky odborné způsobilosti.")
                 st.session_state.reg_data["garant_doklad"] = st.text_input("Doklad o odborné způsobilosti garanta:", value="M-TECH Certifikát odbornosti / Výuční list č. 2026/01")
                 st.session_state.reg_data["sidlo"] = st.text_input("Adresa sídla startupu:", value="M-TECH Akcelerační centrum, Učebna 102")
                 st.session_state.reg_data["provozovna"] = st.text_input("Provozovna (Adresa + IČP):", value="Provozovna 01 – Laboratoř 3D tisku a prototypování (IČP: 1002345)")
@@ -175,13 +182,27 @@ with tab_zalozeni:
         # --- 3. FINANČNÍ ÚŘAD ---
         with u_financak:
             st.markdown("#### Registrace k daňovým povinnostem")
-            st.session_state.reg_data["typ_dani"] = st.multiselect("Přihláška k registraci daní:", ["Daň z příjmů právnických osob (DPPO)", "Daň ze závislé činnosti (Zaměstnanci)", "M-TECH Ekologická a vývojová daň"], default=["Daň z příjmů právnických osob (DPPO)", "Daň ze závislé činnosti (Zaměstnanci)", "M-TECH Ekologická a vývojová daň"])
+            st.session_state.reg_data["typ_dani"] = st.multiselect(
+                "Přihláška k registraci daní:", 
+                [
+                    "Daň z příjmů právnických osob (DPPO)", 
+                    "Daň ze závislé činnosti (Zaměstnanci na HPP/DPP)", 
+                    "Daň z příjmů z nezávislé činnosti (Freelancing / OSVČ / Nezávislá povolání)", 
+                    "M-TECH Ekologická a vývojová daň"
+                ], 
+                default=[
+                    "Daň z příjmů právnických osob (DPPO)", 
+                    "Daň ze závislé činnosti (Zaměstnanci na HPP/DPP)", 
+                    "Daň z příjmů z nezávislé činnosti (Freelancing / OSVČ / Nezávislá povolání)", 
+                    "M-TECH Ekologická a vývojová daň"
+                ]
+            )
             st.session_state.reg_data["zdanovaci_obdobi"] = st.selectbox("Zdaňovací období:", ["Měsíční (Sprint)", "Čtvrtletní", "Projektové"])
 
         # --- 4. ČSSZ ---
         with u_cssz:
             st.markdown("#### Registrace zaměstnavatele u OSSZ a Zdravotní pojišťovny")
-            st.info("Zde registrujete firmu jako plátce pojistného za své budoucí zaměstnance.")
+            st.info("Zde registrujete firmat jako plátce pojistného za své zaměstnance i nezávislé dodavatele.")
             st.session_state.reg_data["pocet_zakladatelu"] = st.number_input("Počet pojištěných zakladatelů/pracovníků:", min_value=1, value=3)
             st.session_state.reg_data["bozp_prohlaseni"] = st.checkbox("Prohlašujeme, že pracoviště splňuje bezpečnostní standardy BOZP.", value=True)
 
@@ -203,6 +224,9 @@ with tab_zalozeni:
                         zivnost_str = ", ".join(zivnost_info)
                     else:
                         zivnost_str = str(zivnost_info)
+                    
+                    if d.get("vlastni_zivnost"):
+                        zivnost_str += f" + Custom: {d.get('vlastni_zivnost')}"
                         
                     zamer_str = f"[{d.get('druh_zivnosti')} | Obory: {zivnost_str}] {d.get('predmet')} (Garant: {d.get('bozp_garant')} - {d.get('garant_doklad')}, Sídlo/Provozovna: {d.get('provozovna')})"
                     
@@ -227,7 +251,7 @@ with tab_zalozeni:
                     st.error("Chybí povinné údaje! Vyplňte název firmy, kód školy a všechny 3 jednatele.")
 
 # ==========================================
-# TAB 2-6 (ZŮSTÁVAJÍ V PLNÉ KRÁSE)
+# TAB 2: BRAND KIT & LEAN CANVAS
 # ==========================================
 with tab_brand:
     if not moje_firma:
@@ -261,11 +285,20 @@ with tab_brand:
                     else: requests.post(f"{SUPABASE_URL}/rest/v1/lean_canvas", headers=headers, json=c_payload)
                     st.rerun()
 
+# ==========================================
+# TAB 3: AGILNÍ VÝVOJ & OUTSOURCING B2B
+# ==========================================
 with tab_vyvoj:
     if not moje_firma:
         st.warning("Nejprve založte firmu.")
     else:
-        ag_kanban, ag_porady, ag_reporty = st.tabs(["Agilní Kanban (Sprint)", "Zápisy ze Stand-upů", "Odevzdávárna Reportů"])
+        ag_kanban, ag_porady, ag_outsourcing, ag_reporty = st.tabs([
+            "Agilní Kanban (Sprint)", 
+            "Zápisy ze Stand-upů", 
+            "🔄 B2B Outsourcing & Subdodávky", 
+            "Odevzdávárna Reportů"
+        ])
+        
         with ag_kanban:
             with st.form("form_novy_ukol"):
                 col_u1, col_u2, col_u3 = st.columns(3)
@@ -298,6 +331,7 @@ with tab_vyvoj:
                     if st.button("🗑️ Smazat", key=f"btn_del_{u['id']}"):
                         requests.delete(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?id=eq.{u['id']}", headers=headers)
                         st.rerun()
+
         with ag_porady:
             with st.form("form_porada"):
                 projednano = st.text_area("Stand-up Log:")
@@ -305,6 +339,52 @@ with tab_vyvoj:
                 if st.form_submit_button("Uložit Zápis", icon=":material/post_add:"):
                     requests.post(f"{SUPABASE_URL}/rest/v1/zapisy_porady", headers=headers, json={"firma_id": moje_firma["id"], "projednane_body": projednano, "ukoly_a_odpovednost": ukoly_zapis})
                     st.rerun()
+
+        # --- NOVÝ MODUL OUTSOURCINGU ---
+        with ag_outsourcing:
+            st.subheader("B2B Outsourcing & Subdodavatelské zakázky")
+            st.caption("Nemáte kapacity v týmu? Zadávejte zakázky jiným startupům nebo externím freelancerům na IČO/nezávislou činnost.")
+            
+            ostatni_firmy = [f for f in vsechny_firmy if f['id'] != moje_firma['id']]
+            
+            with st.form("form_outsourcing"):
+                col_o1, col_o2 = st.columns(2)
+                with col_o1:
+                    dodavatel_nazev = st.selectbox("Vyberte dodavatelskou firmu (B2B partnera):", [f['nazev_firmy'] for f in ostatni_firmy] if ostatni_firmy else ["Žádná další firma k dispozici"])
+                    o_predmet = st.text_input("Předmět subdodávky (např. Tvorba 3D modelu, Grafika, Kódování):")
+                with col_o2:
+                    o_cena = st.number_input("Dohodnutá částka (M-Kreditů):", min_value=1.0, value=50.0)
+                    o_doklad = st.text_input("Číslo B2B Smlouvy / Objednávky:", value=f"OUT-2026/{moje_firma['id']}")
+                
+                if st.form_submit_button("🤝 Uzavřít B2B Subdodávku a Odeslat platbu", icon=":material/handshake:"):
+                    dodavatel_firma = next((f for f in ostatni_firmy if f['nazev_firmy'] == dodavatel_nazev), None)
+                    if dodavatel_firma and o_predmet:
+                        # 1. Zapsat výdaj objednateli
+                        requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={
+                            "firma_id": moje_firma["id"], 
+                            "typ_transakce": "VYDAJ", 
+                            "titul": f"Outsourcing B2B pro {dodavatel_nazev}: {o_predmet} ({o_doklad})", 
+                            "castka": o_cena, 
+                            "auditovano": False
+                        })
+                        # 2. Zapsat příjem dodavateli
+                        requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={
+                            "firma_id": dodavatel_firma["id"], 
+                            "typ_transakce": "PRIJEM", 
+                            "titul": f"B2B Subdodávka od {moje_firma['nazev_firmy']}: {o_predmet} ({o_doklad})", 
+                            "castka": o_cena, 
+                            "auditovano": False
+                        })
+                        # 3. Přičíst kredity CEO dodavatelské firmy
+                        res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{dodavatel_firma['ceo_jmeno']}", headers=headers).json()
+                        if res_ceo:
+                            requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{dodavatel_firma['ceo_jmeno']}", headers=headers, json={"kredity": res_ceo[0]['kredity'] + o_cena})
+                        
+                        st.success(f"B2B zakázka v hodnotě {o_cena} M-K byla proplacena firmě {dodavatel_nazev}!")
+                        st.rerun()
+                    else:
+                        st.error("Vyberte dodavatele a vyplňte předmět subdodávky.")
+
         with ag_reporty:
             with st.form("form_report"):
                 r_typ = st.selectbox("Typ dokumentu:", ["Měsíční report", "Fotodokumentace prototypu", "Prezentace pro investory", "Závěrečná zpráva"])
@@ -315,6 +395,9 @@ with tab_vyvoj:
                         requests.post(f"{SUPABASE_URL}/rest/v1/firemni_reporty", headers=headers, json={"firma_id": moje_firma["id"], "typ_reportu": r_typ, "nazev_reportu": r_nazev, "odkaz_soubor": r_odkaz})
                         st.rerun()
 
+# ==========================================
+# TAB 4: HR & PŘIHLÁŠKY NA ÚŘADY
+# ==========================================
 with tab_hr:
     if not moje_firma:
         st.warning("Nejprve musíte projít procesem Založení.")
@@ -327,10 +410,10 @@ with tab_hr:
                     z_jmeno = st.text_input("Jméno a Příjmení pracovníka:")
                     z_pozice = st.text_input("Role:")
                 with col_z2:
-                    z_smlouva = st.selectbox("Typ smlouvy:", ["HPP", "DPP", "DPČ"])
+                    z_smlouva = st.selectbox("Typ smlouvy:", ["HPP", "DPP", "DPČ", "Nezávislá činnost / Contractor"])
                     z_sazba = st.number_input("Hodinová sazba (M-K / hod):", min_value=10, value=50)
                 z_podpis = st.checkbox("Smlouva podepsána.")
-                z_cssz = st.checkbox("Zaměstnanec přihlášen na ČSSZ / ZP.")
+                z_cssz = st.checkbox("Zaměstnanec/Freelancer přihlášen k pojištění/registru.")
                 z_bozp = st.checkbox("Školení BOZP provedeno.")
                 if st.form_submit_button("Registrovat nového zaměstnance", icon=":material/person_add:"):
                     if z_jmeno and z_pozice and z_podpis and z_cssz and z_bozp:
@@ -362,6 +445,9 @@ with tab_hr:
                         requests.patch(f"{SUPABASE_URL}/rest/v1/zamestnanci?id=eq.{z_peer_obj['id']}", headers=headers, json={"hodnoceni_skore": (bod_aktivita + bod_spoluprace) / 2.0})
                         st.rerun()
 
+# ==========================================
+# TAB 5 & 6: KALKULACE A ÚČETNICTVÍ
+# ==========================================
 with tab_kalkulace:
     if not moje_firma:
         st.warning("Nejprve musíte projít procesem Založení (Záložka 1).")
