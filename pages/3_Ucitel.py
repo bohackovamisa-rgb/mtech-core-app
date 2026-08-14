@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import json
+import time
 
 st.set_page_config(page_title="Kontrolní úřad a Audit", layout="wide")
 
@@ -149,7 +150,7 @@ with st.expander("Seznam zákazníků školy a správa jejich peněženek (Rozba
         df_zak = pd.DataFrame([{"Jméno zákazníka": z["jmeno"], "Zůstatek (M-K)": z.get("kredity", 0)} for z in zakaznici])
         st.dataframe(df_zak, use_container_width=True)
         
-        with st.form("form_ucitel_korekce_zakazniku_fixed"):
+        with st.form("form_ucitel_korekce_zakazniku_robust"):
             col_k1, col_k2, col_k3 = st.columns([2, 2, 1])
             with col_k1: 
                 z_vyber = st.selectbox("Vyberte zákazníka:", [z["jmeno"] for z in zakaznici])
@@ -158,22 +159,26 @@ with st.expander("Seznam zákazníků školy a správa jejich peněženek (Rozba
             with col_k3: 
                 hodnota = st.number_input("Částka M-K (při pokutě/bonusu):", min_value=1.0, value=50.0)
             
-            if st.form_submit_button("Provést akci"):
-                z_target = next((z for z in zakaznici if z["jmeno"] == z_vyber), None)
+            sub_zakaznik = st.form_submit_button("Provést akci")
+            
+        if sub_zakaznik:
+            z_target = next((z for z in zakaznici if z["jmeno"] == z_vyber), None)
+            if z_target:
                 if akce == "Resetovat heslo na 1234":
                     requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers, json={"heslo": "1234"})
-                    st.success(f"Zákazníkovi **{z_vyber}** bylo nastaveno heslo: `1234`.")
+                    st.success(f"✅ Zákazníkovi **{z_vyber}** bylo nastaveno heslo: `1234`.")
                 elif akce == "Smazat účet (Ban)":
                     requests.delete(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers)
-                    st.success(f"Účet zákazníka {z_vyber} byl smazán.")
+                    st.success(f"✅ Účet zákazníka {z_vyber} byl smazán.")
                 elif akce == "Strhnout kredity (Pokuta)":
                     novy = max(0, z_target.get("kredity", 0) - hodnota)
                     requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers, json={"kredity": novy})
-                    st.success(f"Zákazníkovi {z_vyber} bylo strženo {hodnota} M-K.")
+                    st.success(f"✅ Zákazníkovi {z_vyber} bylo strženo {hodnota} M-K.")
                 elif akce == "Přidat kredity (Bonus)":
                     novy = z_target.get("kredity", 0) + hodnota
                     requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers, json={"kredity": novy})
-                    st.success(f"Zákazníkovi {z_vyber} bylo přidáno {hodnota} M-K.")
+                    st.success(f"✅ Zákazníkovi {z_vyber} bylo přidáno {hodnota} M-K.")
+                time.sleep(1.5)
                 st.rerun()
 
 st.write("---")
@@ -204,6 +209,7 @@ with st.expander("Založení nové třídy / skupiny"):
                     "ucitel_jmeno": ucitel_jmeno
                 })
                 st.success(f"Třída {nova_trida_nazev} byla vytvořena.")
+                time.sleep(1.5)
                 st.rerun()
 
 # Detekce nezařazených žáků
@@ -217,7 +223,7 @@ if nezarazeni_zaci:
         st.dataframe(df_nez, use_container_width=True)
         
         if moje_tridy:
-            with st.form("form_presun_nezarazenych_do_tridy"):
+            with st.form("form_presun_nezarazenych_do_tridy_robust"):
                 col_nz1, col_nz2, col_nz3 = st.columns([2, 2, 1])
                 with col_nz1:
                     nz_vyber = st.selectbox("Vyberte žáka:", [z["jmeno"] for z in nezarazeni_zaci])
@@ -225,10 +231,15 @@ if nezarazeni_zaci:
                     nz_cilova_trida = st.selectbox("Zařadit do třídy:", [t["nazev_tridy"] for t in moje_tridy])
                 with col_nz3:
                     st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-                    if st.form_submit_button("Přesunout žáka"):
-                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{nz_vyber}", headers=headers, json={"trida_nazev": nz_cilova_trida})
-                        st.success(f"Žák {nz_vyber} byl přesunut do třídy {nz_cilova_trida}.")
-                        st.rerun()
+                    sub_presun = st.form_submit_button("Přesunout žáka")
+                    
+            if sub_presun:
+                target_nz = next((z for z in nezarazeni_zaci if z["jmeno"] == nz_vyber), None)
+                if target_nz:
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{target_nz['id']}", headers=headers, json={"trida_nazev": nz_cilova_trida})
+                    st.success(f"✅ Žák {nz_vyber} byl přesunut do třídy {nz_cilova_trida}.")
+                    time.sleep(1.5)
+                    st.rerun()
         else:
             st.info("Založte si nejprve výše svou první třídu, abyste do ní mohli žáky zařadit.")
             
@@ -264,52 +275,70 @@ else:
             
             seznam_jmen_tridy = [z["jmeno"] for z in zaci_tridy]
             
+            # --- ZMENA ROLE ---
             st.markdown("##### 1. Správa role žáka")
-            col_z1, col_z2, col_z3 = st.columns([2, 2, 1])
-            with col_z1:
-                vybrany_zak_role = st.selectbox("Vyberte žáka pro změnu role:", seznam_jmen_tridy, key="sel_role_zak")
-            with col_z2:
-                nova_role = st.selectbox("Nastavit oprávnění:", ["firma (Podnikatel / Zakladatel)", "zak (Běžný žák)"], key="sel_nova_role")
-            with col_z3:
-                st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-                if st.button("Uložit roli", key="btn_save_role"):
+            with st.form("form_ucitel_zmena_role_zaka_robust"):
+                col_z1, col_z2, col_z3 = st.columns([2, 2, 1])
+                with col_z1:
+                    vybrany_zak_role = st.selectbox("Vyberte žáka pro změnu role:", seznam_jmen_tridy)
+                with col_z2:
+                    nova_role = st.selectbox("Nastavit oprávnění:", ["firma (Podnikatel / Zakladatel)", "zak (Běžný žák)"])
+                with col_z3:
+                    st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                    sub_role = st.form_submit_button("Uložit roli")
+                    
+            if sub_role:
+                target_user_role = next((z for z in zaci_tridy if z["jmeno"] == vybrany_zak_role), None)
+                if target_user_role:
                     role_kod = "firma" if "firma" in nova_role else "zak"
-                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_zak_role}", headers=headers, json={"role": role_kod})
-                    st.success(f"Žákovi {vybrany_zak_role} byla nastavena role.")
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{target_user_role['id']}", headers=headers, json={"role": role_kod})
+                    st.success(f"✅ Žákovi {vybrany_zak_role} byla úspěšně nastavena role.")
+                    time.sleep(1.5)
                     st.rerun()
 
             st.divider()
+            
+            # --- ODMENY A POKUTY ---
             st.markdown("##### 2. Přímé udělení odměny / stržení kreditů žákovi")
-            with st.form("form_ucitel_odmena_zaka_penez_explicit"):
+            with st.form("form_ucitel_odmena_zaka_penez_robust"):
                 col_o1, col_o2, col_o3 = st.columns([2, 1.5, 1])
                 with col_o1:
-                    vybrany_zak_penize = st.selectbox("Vyberte žáka, kterému chcete upravit zůstatek:", seznam_jmen_tridy)
+                    vybrany_zak_penize = st.selectbox("Vyberte žáka pro transakci:", seznam_jmen_tridy)
                 with col_o2:
                     akce_penize = st.selectbox("Typ transakce:", ["Připsat odměnu (Bonus)", "Strhnout kredity (Pokuta)"])
                 with col_o3:
                     castka_odmeny = st.number_input("Částka M-K:", min_value=1.0, value=25.0)
                 
-                if st.form_submit_button("Provést transakci a připsat/strhnout"):
-                    r_target = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_zak_penize}", headers=headers).json()
-                    if r_target and isinstance(r_target, list):
-                        akt_bal = float(r_target[0].get("kredity", 0))
-                        novy_bal = (akt_bal + castka_odmeny) if akce_penize == "Připsat odměnu (Bonus)" else max(0.0, akt_bal - castka_odmeny)
-                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_zak_penize}", headers=headers, json={"kredity": novy_bal})
-                        st.success(f"Žákovi **{vybrany_zak_penize}** byl zůstatek upraven na **{novy_bal:.2f} M-K**.")
-                        st.rerun()
+                sub_penize = st.form_submit_button("Provést transakci")
+                
+            if sub_penize:
+                target_user = next((z for z in zaci_tridy if z["jmeno"] == vybrany_zak_penize), None)
+                if target_user:
+                    akt_bal = float(target_user.get("kredity", 0))
+                    novy_bal = (akt_bal + castka_odmeny) if "Bonus" in akce_penize else max(0.0, akt_bal - castka_odmeny)
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{target_user['id']}", headers=headers, json={"kredity": novy_bal})
+                    st.success(f"✅ Transakce úspěšná: Žák **{vybrany_zak_penize}** má nyní **{novy_bal:.2f} M-K**.")
+                    time.sleep(1.5)
+                    st.rerun()
 
             st.divider()
+            
+            # --- RESET HESLA ---
             st.markdown("##### 3. Reset zapomenutého hesla žáka")
-            with st.form("form_ucitel_reset_hesla_zaka_tridy_explicit"):
+            with st.form("form_ucitel_reset_hesla_zaka_tridy_robust"):
                 col_r1, col_r2 = st.columns([2, 1])
                 with col_r1:
                     vybrany_zak_heslo = st.selectbox("Vyberte žáka pro reset hesla:", seznam_jmen_tridy)
                     nove_heslo_pro_zaka = st.text_input("Zadejte nové heslo:", value="1234")
                 with col_r2:
                     st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-                    if st.form_submit_button("Nastavit heslo"):
-                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_zak_heslo}", headers=headers, json={"heslo": nove_heslo_pro_zaka.strip()})
-                        st.success(f"Žákovi **{vybrany_zak_heslo}** bylo nastaveno heslo: `{nove_heslo_pro_zaka.strip()}`.")
+                    sub_heslo = st.form_submit_button("Nastavit heslo")
+                    
+            if sub_heslo:
+                target_user_pw = next((z for z in zaci_tridy if z["jmeno"] == vybrany_zak_heslo), None)
+                if target_user_pw:
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{target_user_pw['id']}", headers=headers, json={"heslo": nove_heslo_pro_zaka.strip()})
+                    st.success(f"✅ Žákovi **{vybrany_zak_heslo}** bylo nastaveno heslo: `{nove_heslo_pro_zaka.strip()}`.")
 
     st.write("---")
 
@@ -367,6 +396,7 @@ else:
                 if st.button("Schválit zápis do rejstříku a povolit činnost", type="primary"):
                     requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{f_id}", headers=headers, json={"stave_licence": "SCHVALENO", "duvod_zamitnuti": ""})
                     st.success(f"Firma {firma['nazev_firmy']} byla zapsána do rejstříku.")
+                    time.sleep(1.5)
                     st.rerun()
 
         with tab_aktiva:
@@ -435,6 +465,7 @@ else:
                         "kurz_kc": n_kurz, "globalni_cenik": n_cenik, "mtech_dan_pct": n_dan, "dan_prijem_pct": n_dan_prijem, "start_kredit_zakaznik": n_zakaznik
                     })
                     st.success("Pravidla ekonomiky byla uložena.")
+                    time.sleep(1.5)
                     st.rerun()
 
         with tab_hodnoceni:
