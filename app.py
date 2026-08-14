@@ -32,13 +32,27 @@ if "uzivatel" not in st.session_state: st.session_state.uzivatel = None
 if "skolni_kod" not in st.session_state: st.session_state.skolni_kod = None
 if "trida_nazev" not in st.session_state: st.session_state.trida_nazev = None
 
+# =========================================================================
+# AUTO-LOGIN PŘI STISKU F5 (OBNOVA ZE ST.QUERY_PARAMS)
+# =========================================================================
+if not st.session_state.prihlasen and "user" in st.query_params:
+    cached_user = st.query_params["user"]
+    res_auto = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{cached_user}&select=*", headers=headers).json()
+    if res_auto and isinstance(res_auto, list) and len(res_auto) > 0:
+        st.session_state.prihlasen = True
+        st.session_state.role = str(res_auto[0]["role"]).lower()
+        st.session_state.kredity = res_auto[0]["kredity"]
+        st.session_state.uzivatel = res_auto[0]["jmeno"]
+        st.session_state.skolni_kod = res_auto[0].get("skolni_kod", "")
+        st.session_state.trida_nazev = res_auto[0].get("trida_nazev", "")
+
 zaci_page = st.Page("pages/1_Zaci.py", title="Moje peněženka")
 firma_page = st.Page("pages/2_Firma.py", title="Firemní Dashboard")
 ucitel_page = st.Page("pages/3_Ucitel.py", title="Kontrolní úřad")
 trh_page = st.Page("pages/4_Trh.py", title="Tržiště produktů")
 zebricky_page = st.Page("pages/5_Zebricky.py", title="Síň slávy")
 
-# Živá synchronizace aktuální role žáka přímo z databáze
+# Živá synchronizace aktuálních údajů
 if st.session_state.prihlasen and st.session_state.uzivatel:
     res_live = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{st.session_state.uzivatel}&select=role,kredity,trida_nazev,skolni_kod", headers=headers).json()
     if res_live and isinstance(res_live, list) and len(res_live) > 0:
@@ -80,6 +94,9 @@ if not st.session_state.prihlasen:
                         st.session_state.uzivatel = res[0]["jmeno"]
                         st.session_state.skolni_kod = res[0].get("skolni_kod", "")
                         st.session_state.trida_nazev = res[0].get("trida_nazev", "")
+                        
+                        # ULOŽENÍ DO URL PRO PŘEŽITÍ F5
+                        st.query_params["user"] = res[0]["jmeno"]
                         st.rerun()
                     else:
                         st.error("Nesprávné přihlašovací údaje.")
@@ -100,14 +117,12 @@ if not st.session_state.prihlasen:
         dostupne_tridy = []
         
         if vstupni_kod:
-            # 1. Zkusíme zjistit, zda jde o zákaznický kód
             res_nast = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?zakaznicky_kod=eq.{vstupni_kod}", headers=headers).json()
             if res_nast and isinstance(res_nast, list) and len(res_nast) > 0:
                 is_customer = True
                 skolni_kod_actual = res_nast[0]['skolni_kod']
                 start_kredit_zakaznik = res_nast[0].get('start_kredit_zakaznik', 50)
             else:
-                # 2. Nebo zda jde o výukový kód
                 res_lic = requests.get(f"{SUPABASE_URL}/rest/v1/licencovane_skoly?licencni_kod=eq.{vstupni_kod}", headers=headers).json()
                 if res_lic and isinstance(res_lic, list) and len(res_lic) > 0:
                     skolni_kod_actual = vstupni_kod
@@ -168,7 +183,7 @@ if not st.session_state.prihlasen:
                     st.warning("Vyplňte platný kód školy, jméno i heslo.")
 
     # ----------------------------------------------------
-    # ZÁLOŽKA 3: SPRÁVA LICENCÍ A HESEL (ADMIN)
+    # ZÁLOŽKA 3: SPRÁVA LICENCÍ (ADMIN)
     # ----------------------------------------------------
     with tab_admin_licence:
         st.markdown("### Administrátorská konzole")
@@ -238,7 +253,9 @@ else:
                     else:
                         st.error("Heslo nesmí být prázdné.")
 
+        # BEZPEČNÉ ODHLÁŠENÍ S VYČIŠTĚNÍM URL
         if st.button("Odhlásit se"):
+            st.query_params.clear()
             st.session_state.clear()
             st.rerun()
             
