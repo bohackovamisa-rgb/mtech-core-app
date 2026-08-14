@@ -29,6 +29,7 @@ if "prihlasen" not in st.session_state: st.session_state.prihlasen = False
 if "role" not in st.session_state: st.session_state.role = None
 if "kredity" not in st.session_state: st.session_state.kredity = 0
 if "uzivatel" not in st.session_state: st.session_state.uzivatel = None
+if "skolni_kod" not in st.session_state: st.session_state.skolni_kod = None
 
 zaci_page = st.Page("pages/1_Zaci.py", title="Moje peněženka", icon=":material/wallet:")
 firma_page = st.Page("pages/2_Firma.py", title="Firemní Dashboard", icon=":material/insights:")
@@ -67,6 +68,7 @@ if not st.session_state.prihlasen:
                         st.session_state.role = str(res[0]["role"]).lower()
                         st.session_state.kredity = res[0]["kredity"]
                         st.session_state.uzivatel = res[0]["jmeno"]
+                        st.session_state.skolni_kod = res[0].get("skolni_kod", "")
                         st.rerun()
                     else:
                         st.error("Nesprávné přihlašovací údaje.")
