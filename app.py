@@ -76,6 +76,8 @@ if not st.session_state.prihlasen:
                         st.error("Nesprávné přihlašovací údaje.")
                 else:
                     st.warning("Vyplňte obě pole.")
+        
+        st.caption("Zapomněli jste heslo? Žáci požádají svého vyučujícího o reset. Učitelé kontaktují správce systému.")
 
     # ----------------------------------------------------
     # ZÁLOŽKA 2: REGISTRACE PRO ŽÁKY A UČITELE
@@ -90,14 +92,12 @@ if not st.session_state.prihlasen:
         dostupne_tridy = []
         
         if vstupni_kod:
-            # 1. Zda jde o zákaznický kód
             res_nast = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?zakaznicky_kod=eq.{vstupni_kod}", headers=headers).json()
             if res_nast and isinstance(res_nast, list) and len(res_nast) > 0:
                 is_customer = True
                 skolni_kod_actual = res_nast[0]['skolni_kod']
                 start_kredit_zakaznik = res_nast[0].get('start_kredit_zakaznik', 50)
             else:
-                # 2. Zda jde o výukový kód školy
                 res_lic = requests.get(f"{SUPABASE_URL}/rest/v1/licencovane_skoly?licencni_kod=eq.{vstupni_kod}", headers=headers).json()
                 if res_lic and isinstance(res_lic, list) and len(res_lic) > 0:
                     skolni_kod_actual = vstupni_kod
@@ -158,34 +158,51 @@ if not st.session_state.prihlasen:
                     st.warning("Vyplňte platný kód školy, jméno i heslo.")
 
     # ----------------------------------------------------
-    # ZÁLOŽKA 3: SPRÁVA LICENCÍ (ADMIN)
+    # ZÁLOŽKA 3: SPRÁVA LICENCÍ A HESEL (ADMIN)
     # ----------------------------------------------------
     with tab_admin_licence:
-        st.markdown("### Generování licencí pro školy")
+        st.markdown("### Administrátorská konzole")
         st.caption("Sekce přístupná pouze pro hlavního administrátora platformy.")
         master_password = st.text_input("Zadejte administrátorské heslo:", type="password")
         
         if master_password == "MtechAdmin2026": 
-            with st.form("school_admin_form"):
-                nazev_skoly = st.text_input("Název vzdělávací instituce:")
-                kontakt_email = st.text_input("Kontaktní e-mail zástupce školy:")
-                
-                if st.form_submit_button("Vygenerovat novou školu a licenční kódy"):
-                    if nazev_skoly and kontakt_email:
-                        kod_vyuka = "SKOLA-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-                        kod_zakaznik = "KUPUJ-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-                        
-                        requests.post(f"{SUPABASE_URL}/rest/v1/licencovane_skoly", headers=headers, json={
-                            "nazev_skoly": nazev_skoly, "kontaktni_email": kontakt_email, "licencni_kod": kod_vyuka, "zaplaceno": False
-                        })
-                        requests.post(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni", headers=headers, json={
-                            "skolni_kod": kod_vyuka, "zakaznicky_kod": kod_zakaznik, "start_kredit_zakaznik": 50
-                        })
-                        
-                        st.success(f"Škola **{nazev_skoly}** byla úspěšně založena!")
-                        st.info(f"Výukový kód (pro učitele a jejich třídy): **{kod_vyuka}**\n\nZákaznický kód (pro ostatní žáky školy): **{kod_zakaznik}**")
-                    else:
-                        st.warning("Vyplňte název školy i e-mail.")
+            adm_tab1, adm_tab2 = st.tabs(["Generování licencí pro školy", "Správa hesel vyučujících"])
+            
+            with adm_tab1:
+                with st.form("school_admin_form"):
+                    nazev_skoly = st.text_input("Název vzdělávací instituce:")
+                    kontakt_email = st.text_input("Kontaktní e-mail zástupce školy:")
+                    
+                    if st.form_submit_button("Vygenerovat novou školu a licenční kódy"):
+                        if nazev_skoly and kontakt_email:
+                            kod_vyuka = "SKOLA-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                            kod_zakaznik = "KUPUJ-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                            
+                            requests.post(f"{SUPABASE_URL}/rest/v1/licencovane_skoly", headers=headers, json={
+                                "nazev_skoly": nazev_skoly, "kontaktni_email": kontakt_email, "licencni_kod": kod_vyuka, "zaplaceno": False
+                            })
+                            requests.post(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni", headers=headers, json={
+                                "skolni_kod": kod_vyuka, "zakaznicky_kod": kod_zakaznik, "start_kredit_zakaznik": 50
+                            })
+                            
+                            st.success(f"Škola **{nazev_skoly}** byla úspěšně založena!")
+                            st.info(f"Výukový kód: **{kod_vyuka}**\n\nZákaznický kód: **{kod_zakaznik}**")
+                        else:
+                            st.warning("Vyplňte název školy i e-mail.")
+
+            with adm_tab2:
+                st.markdown("#### Reset hesla pro vyučujícího")
+                res_ucitele = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.ucitel", headers=headers).json()
+                if res_ucitele and isinstance(res_ucitele, list):
+                    with st.form("form_admin_reset_ucitele"):
+                        ucitel_reset_jmeno = st.selectbox("Vyberte vyučujícího:", [f"{u['jmeno']} (Kód školy: {u.get('skolni_kod', '')})" for u in res_ucitele])
+                        nove_heslo_ucitele = st.text_input("Zadejte nové heslo:", value="1234")
+                        if st.form_submit_button("Nastavit nové heslo učiteli"):
+                            cilovy_ucitel = ucitel_reset_jmeno.split(" (")[0]
+                            requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{cilovy_ucitel}", headers=headers, json={"heslo": nove_heslo_ucitele})
+                            st.success(f"Učiteli **{cilovy_ucitel}** bylo nastaveno nové heslo.")
+                else:
+                    st.info("V systému zatím nejsou žádní učitelé.")
         elif master_password != "":
             st.error("Nesprávné administrátorské heslo!")
 
@@ -197,6 +214,17 @@ else:
         if st.session_state.trida_nazev:
             st.caption(f"Třída: **{st.session_state.trida_nazev}**")
         st.markdown(f"Zůstatek: **{st.session_state.kredity} M-K**")
+        
+        with st.expander("Změnit mé heslo"):
+            with st.form("form_zmena_vlastniho_hesla"):
+                moje_nove_heslo = st.text_input("Nové heslo:", type="password")
+                if st.form_submit_button("Uložit nové heslo"):
+                    if moje_nove_heslo.strip():
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{st.session_state.uzivatel}", headers=headers, json={"heslo": moje_nove_heslo.strip()})
+                        st.success("Vaše heslo bylo úspěšně změněno.")
+                    else:
+                        st.error("Heslo nesmí být prázdné.")
+
         if st.button("Odhlásit se"):
             st.session_state.clear()
             st.rerun()
