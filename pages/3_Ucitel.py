@@ -150,7 +150,7 @@ with st.expander("Seznam zákazníků školy a správa jejich peněženek (Rozba
         df_zak = pd.DataFrame([{"Jméno zákazníka": z["jmeno"], "Zůstatek (M-K)": z.get("kredity", 0)} for z in zakaznici])
         st.dataframe(df_zak, use_container_width=True)
         
-        with st.form("form_ucitel_korekce_zakazniku_robust"):
+        with st.form("form_ucitel_korekce_zakazniku_fixed"):
             col_k1, col_k2, col_k3 = st.columns([2, 2, 1])
             with col_k1: 
                 z_vyber = st.selectbox("Vyberte zákazníka:", [z["jmeno"] for z in zakaznici])
@@ -159,26 +159,22 @@ with st.expander("Seznam zákazníků školy a správa jejich peněženek (Rozba
             with col_k3: 
                 hodnota = st.number_input("Částka M-K (při pokutě/bonusu):", min_value=1.0, value=50.0)
             
-            sub_zakaznik = st.form_submit_button("Provést akci")
-            
-        if sub_zakaznik:
-            z_target = next((z for z in zakaznici if z["jmeno"] == z_vyber), None)
-            if z_target:
+            if st.form_submit_button("Provést akci"):
+                z_target = next((z for z in zakaznici if z["jmeno"] == z_vyber), None)
                 if akce == "Resetovat heslo na 1234":
                     requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers, json={"heslo": "1234"})
-                    st.success(f"✅ Zákazníkovi **{z_vyber}** bylo nastaveno heslo: `1234`.")
+                    st.success(f"Zákazníkovi **{z_vyber}** bylo nastaveno heslo: `1234`.")
                 elif akce == "Smazat účet (Ban)":
                     requests.delete(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers)
-                    st.success(f"✅ Účet zákazníka {z_vyber} byl smazán.")
+                    st.success(f"Účet zákazníka {z_vyber} byl smazán.")
                 elif akce == "Strhnout kredity (Pokuta)":
                     novy = max(0, z_target.get("kredity", 0) - hodnota)
                     requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers, json={"kredity": novy})
-                    st.success(f"✅ Zákazníkovi {z_vyber} bylo strženo {hodnota} M-K.")
+                    st.success(f"Zákazníkovi {z_vyber} bylo strženo {hodnota} M-K.")
                 elif akce == "Přidat kredity (Bonus)":
                     novy = z_target.get("kredity", 0) + hodnota
                     requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers, json={"kredity": novy})
-                    st.success(f"✅ Zákazníkovi {z_vyber} bylo přidáno {hodnota} M-K.")
-                time.sleep(1.5)
+                    st.success(f"Zákazníkovi {z_vyber} bylo přidáno {hodnota} M-K.")
                 st.rerun()
 
 st.write("---")
@@ -291,10 +287,13 @@ else:
                 target_user_role = next((z for z in zaci_tridy if z["jmeno"] == vybrany_zak_role), None)
                 if target_user_role:
                     role_kod = "firma" if "firma" in nova_role else "zak"
-                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{target_user_role['id']}", headers=headers, json={"role": role_kod})
-                    st.success(f"✅ Žákovi {vybrany_zak_role} byla úspěšně nastavena role.")
-                    time.sleep(1.5)
-                    st.rerun()
+                    res_patch = requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{target_user_role['id']}", headers=headers, json={"role": role_kod})
+                    if res_patch.status_code in [200, 204]:
+                        st.success(f"✅ Žákovi {vybrany_zak_role} byla úspěšně nastavena role.")
+                        time.sleep(1.5)
+                        st.rerun()
+                    else:
+                        st.error(f"Chyba při komunikaci s databází: {res_patch.text}")
 
             st.divider()
             
@@ -315,11 +314,16 @@ else:
                 target_user = next((z for z in zaci_tridy if z["jmeno"] == vybrany_zak_penize), None)
                 if target_user:
                     akt_bal = float(target_user.get("kredity", 0))
-                    novy_bal = (akt_bal + castka_odmeny) if "Bonus" in akce_penize else max(0.0, akt_bal - castka_odmeny)
-                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{target_user['id']}", headers=headers, json={"kredity": novy_bal})
-                    st.success(f"✅ Transakce úspěšná: Žák **{vybrany_zak_penize}** má nyní **{novy_bal:.2f} M-K**.")
-                    time.sleep(1.5)
-                    st.rerun()
+                    novy_bal = float((akt_bal + castka_odmeny) if "Bonus" in akce_penize else max(0.0, akt_bal - castka_odmeny))
+                    
+                    res_patch = requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{target_user['id']}", headers=headers, json={"kredity": novy_bal})
+                    
+                    if res_patch.status_code in [200, 204]:
+                        st.success(f"✅ Transakce úspěšná: Žák **{vybrany_zak_penize}** má nyní **{novy_bal:.2f} M-K**.")
+                        time.sleep(1.5)
+                        st.rerun()
+                    else:
+                        st.error(f"Chyba při komunikaci s databází: {res_patch.text}")
 
             st.divider()
             
@@ -356,8 +360,8 @@ else:
         firma = next(f for f in firmy if f["nazev_firmy"] == vybrana_firma_nazev)
         f_id = firma["id"]
 
-        tab_legal, tab_aktiva, tab_hr, tab_finance, tab_questy, tab_stat, tab_banka, tab_hodnoceni = st.tabs([
-            "1. Spis a Notář", "2. Vize a AI", "3. HR a Tým", "4. E-shop a Zákazníci", "5. Úřad práce a XP", "6. Státní pokladna a Daně", "7. Pravidla Ekonomiky", "8. Přehled a Hodnocení"
+        tab_legal, tab_aktiva, tab_hr, tab_finance, tab_questy, tab_stat, tab_banka, tab_hodnoceni, tab_reporty = st.tabs([
+            "1. Spis a Notář", "2. Vize a AI", "3. HR a Tým", "4. E-shop a Zákazníci", "5. Úřad práce a XP", "6. Státní pokladna a Daně", "7. Pravidla Ekonomiky", "8. Hodnocení žáků", "9. Reporty a Výkazy"
         ])
 
         with tab_legal:
@@ -471,3 +475,15 @@ else:
         with tab_hodnoceni:
             if zaci_tridy:
                 st.dataframe(pd.DataFrame([{"Jméno": z['jmeno'], "Role": z.get('role', 'zak'), "Zůstatek (M-K)": z.get('kredity', 0)} for z in zaci_tridy]), use_container_width=True)
+
+        with tab_reporty:
+            st.subheader("Deník práce a Výkazy zaměstnanců")
+            st.caption("Slouží pro hodnocení žáků na základě toho, co v rámci firmy odpracovali.")
+            res_denik = requests.get(f"{SUPABASE_URL}/rest/v1/denik_prace?firma_id=eq.{f_id}&order=id.desc", headers=headers).json()
+            if isinstance(res_denik, list) and len(res_denik) > 0:
+                df_denik = pd.DataFrame(res_denik)
+                zobrazit = [c for c in ['datum', 'jmeno_zaka', 'popis_prace', 'hodiny'] if c in df_denik.columns]
+                df_show = df_denik[zobrazit].rename(columns={'datum': 'Datum', 'jmeno_zaka': 'Pracovník', 'popis_prace': 'Popis činnosti', 'hodiny': 'Hodiny'})
+                st.dataframe(df_show, use_container_width=True)
+            else:
+                st.info("Žáci této firmy zatím neodevzdali žádné výkazy o své odvedené práci.")
