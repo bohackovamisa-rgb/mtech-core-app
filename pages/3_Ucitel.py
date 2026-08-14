@@ -6,27 +6,29 @@ import json
 st.set_page_config(page_title="Kontrolní úřad a Audit", layout="wide")
 
 st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&display=swap');
-    html, body, [class*="css"] { font-family: 'Montserrat', sans-serif !important; }
-    h1, h2, h3, h4 { background: -webkit-linear-gradient(45deg, #00B4D8, #0077B6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800 !important; }
-    .stButton>button { border-radius: 8px; transition: all 0.3s ease; border: 1px solid #00B4D8; width: 100%; font-weight: 600; }
-    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0, 180, 216, 0.4); border-color: #00B4D8; background-color: #0f172a; color: white;}
-    .card-box { background-color: #1e293b; padding: 20px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 15px; }
-    .status-ok { color: #34d399; font-weight: 700; background: rgba(16, 185, 129, 0.1); padding: 4px 8px; border-radius: 6px; }
-    .status-wait { color: #fbbf24; font-weight: 700; background: rgba(245, 158, 11, 0.1); padding: 4px 8px; border-radius: 6px; }
-    .status-err { color: #f87171; font-weight: 700; background: rgba(239, 68, 68, 0.1); padding: 4px 8px; border-radius: 6px; }
-    .alert-box { background-color: rgba(245, 158, 11, 0.1); border: 1px solid #f59e0b; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-    .info-box { background-color: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-    .licence-box { background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%); border: 1px solid #334155; padding: 20px; border-radius: 12px; margin-bottom: 25px; }
-    .licence-card { background: rgba(15, 23, 42, 0.6); padding: 15px; border-radius: 8px; border: 1px solid #334155; }
-    .licence-val { font-family: monospace; font-size: 1.5em; font-weight: bold; padding: 4px 10px; border-radius: 5px; display: inline-block; margin-top: 5px; }
-    </style>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&display=swap');
+html, body, [class*="css"] { font-family: 'Montserrat', sans-serif !important; }
+h1, h2, h3, h4 { background: -webkit-linear-gradient(45deg, #00B4D8, #0077B6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800 !important; }
+.stButton>button { border-radius: 8px; transition: all 0.3s ease; border: 1px solid #00B4D8; width: 100%; font-weight: 600; }
+.stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0, 180, 216, 0.4); border-color: #00B4D8; background-color: #0f172a; color: white;}
+.card-box { background-color: #1e293b; padding: 20px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 15px; }
+.status-ok { color: #34d399; font-weight: 700; background: rgba(16, 185, 129, 0.1); padding: 4px 8px; border-radius: 6px; }
+.status-wait { color: #fbbf24; font-weight: 700; background: rgba(245, 158, 11, 0.1); padding: 4px 8px; border-radius: 6px; }
+.status-err { color: #f87171; font-weight: 700; background: rgba(239, 68, 68, 0.1); padding: 4px 8px; border-radius: 6px; }
+.alert-box { background-color: rgba(245, 158, 11, 0.1); border: 1px solid #f59e0b; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+.info-box { background-color: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+.licence-box { background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%); border: 1px solid #334155; padding: 20px; border-radius: 12px; margin-bottom: 25px; }
+.licence-card { background: rgba(15, 23, 42, 0.6); padding: 15px; border-radius: 8px; border: 1px solid #334155; }
+.licence-val { font-family: monospace; font-size: 1.5em; font-weight: bold; padding: 4px 10px; border-radius: 5px; display: inline-block; margin-top: 5px; }
+</style>
 """, unsafe_allow_html=True)
 
 if not st.session_state.get("prihlasen") or str(st.session_state.get("role")).upper() not in ["UCITEL", "ADMIN"]:
     st.error("Přístup odepřen. Sekce pouze pro vyučující.")
     st.stop()
+
+st.title("Kontrolní úřad a Audit")
 
 try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"].rstrip("/")
@@ -40,6 +42,7 @@ ucitel_jmeno = st.session_state.get("uzivatel", "")
 skolni_kod = st.session_state.get("skolni_kod", "")
 is_admin = str(st.session_state.get("role")).upper() == "ADMIN"
 
+# Bezpečné načtení údajů o vyučujícím
 if not skolni_kod and ucitel_jmeno:
     res_ucitel = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ucitel_jmeno}", headers=headers).json()
     if isinstance(res_ucitel, list) and len(res_ucitel) > 0:
@@ -56,33 +59,27 @@ if skolni_kod and skolni_kod != "SYSTEM":
     akt_nast = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{skolni_kod}", headers=headers).json()
     z_kod = akt_nast[0].get('zakaznicky_kod', 'NENASTAVENO') if (isinstance(akt_nast, list) and len(akt_nast) > 0) else 'NENASTAVENO'
     
-    st.markdown(f"""
-        <div class="licence-box">
-            <h4 style="margin: 0 0 15px 0; color: #f8fafc; font-size: 1.15em;">Přístupové kódy školy: {nazev_skoly_zobrazeni}</h4>
-            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
-                <div style="flex: 1; min-width: 280px;" class="licence-card">
-                    <span style="font-size: 11px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px;">Výukový kód (Pro žáky ve třídách a učitele)</span>
-                    <div style="color: #cbd5e1; font-size: 13px; margin: 4px 0 8px 0;">Zadávají žáci ve vašich hodinách pro založení firmy a práci ve třídě.</div>
-                    <div class="licence-val" style="background: rgba(14, 165, 233, 0.15); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4);">{skolni_kod}</div>
-                </div>
-                <div style="flex: 1; min-width: 280px;" class="licence-card">
-                    <span style="font-size: 11px; font-weight: 700; color: #34d399; text-transform: uppercase; letter-spacing: 0.5px;">Zákaznický kód (Pro ostatní žáky školy)</span>
-                    <div style="color: #cbd5e1; font-size: 13px; margin: 4px 0 8px 0;">Tento kód předejte ostatním žákům školy, aby mohli na E-shopu nakupovat.</div>
-                    <div class="licence-val" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);">{z_kod}</div>
-                </div>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+    box_kody_html = f"""<div class="licence-box">
+<h4 style="margin: 0 0 15px 0; color: #f8fafc; font-size: 1.15em;">Přístupové kódy školy: {nazev_skoly_zobrazeni}</h4>
+<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+<div style="flex: 1; min-width: 280px;" class="licence-card">
+<span style="font-size: 11px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px;">Výukový kód (Pro žáky ve třídách a učitele)</span>
+<div style="color: #cbd5e1; font-size: 13px; margin: 4px 0 8px 0;">Zadávají žáci ve vašich hodinách pro založení firmy a práci ve třídě.</div>
+<div class="licence-val" style="background: rgba(14, 165, 233, 0.15); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4);">{skolni_kod}</div>
+</div>
+<div style="flex: 1; min-width: 280px;" class="licence-card">
+<span style="font-size: 11px; font-weight: 700; color: #34d399; text-transform: uppercase; letter-spacing: 0.5px;">Zákaznický kód (Pro ostatní žáky školy)</span>
+<div style="color: #cbd5e1; font-size: 13px; margin: 4px 0 8px 0;">Tento kód předejte ostatním žákům školy, aby mohli na E-shopu nakupovat.</div>
+<div class="licence-val" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);">{z_kod}</div>
+</div>
+</div>
+</div>"""
+    st.markdown(box_kody_html, unsafe_allow_html=True)
 elif is_admin:
-    st.markdown("""
-        <div class="licence-box">
-            <h4 style="margin: 0; color: #cbd5e1;">Režim: Hlavní Administrátor</h4>
-            <p style="margin: 5px 0 0 0; font-size: 0.9em; color: #94a3b8;">Máte neomezený přístup napříč všemi školami v systému.</p>
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown("""<div class="licence-box"><h4 style="margin: 0; color: #cbd5e1;">Režim: Hlavní Administrátor</h4><p style="margin: 5px 0 0 0; font-size: 0.9em; color: #94a3b8;">Máte neomezený přístup napříč všemi školami v systému.</p></div>""", unsafe_allow_html=True)
 
 # =========================================================================
-# 1. ŘÍDÍCÍ PANEL (ACTION CENTER)
+# 1. ŘÍDÍCÍ PANEL (ACTION CENTER) - NOTIFIKACE PRO UČITELE
 # =========================================================================
 if is_admin:
     res_moje_tridy_global = requests.get(f"{SUPABASE_URL}/rest/v1/tridy?select=nazev_tridy", headers=headers).json()
@@ -122,37 +119,23 @@ pocet_zaku_zakladni_role = len([z for z in moji_zaci_global if z.get("role") == 
 col_dash1, col_dash2 = st.columns(2)
 
 with col_dash1:
-    st.markdown(f"""
-    <div class='info-box'>
-        <h4 style='margin:0; color:#10b981;'>Stav registrací ve vašich třídách</h4>
-        <p style='margin: 5px 0 0 0; color:#cbd5e1; font-size: 15px;'>
-            Ve vašich třídách je aktuálně registrováno celkem <b>{pocet_zaku_celkem} žáků</b>.<br>
-            Z toho <b>{pocet_zaku_zakladni_role} žáků</b> má zatím jen základní roli.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
+    box_zaci_html = f"""<div class='info-box'><h4 style='margin:0; color:#10b981;'>Stav registrací ve vašich třídách</h4><p style='margin: 5px 0 0 0; color:#cbd5e1; font-size: 15px;'>Ve vašich třídách je aktuálně registrováno celkem <b>{pocet_zaku_celkem} žáků</b>.<br>Z toho <b>{pocet_zaku_zakladni_role} žáků</b> má zatím jen základní roli.</p></div>"""
+    st.markdown(box_zaci_html, unsafe_allow_html=True)
 
 with col_dash2:
     if g_pocet_celkem_restu > 0:
-        st.markdown(f"""
-        <div class='alert-box'>
-            <h4 style='margin:0; color:#f59e0b;'>Nevyřízené úkoly a audity ({g_pocet_celkem_restu})</h4>
-            <ul style='margin-bottom:0; color:#cbd5e1; font-size: 14px; margin-top: 5px;'>
-                {"<li><b>Žádosti o registraci firmy:</b> " + str(len(g_firmy_cekajici)) + "</li>" if g_firmy_cekajici else ""}
-                {"<li><b>Odevzdané úkoly ke kontrole:</b> " + str(len(g_questy_cekajici)) + "</li>" if g_questy_cekajici else ""}
-                {"<li><b>Kalkulace produktů pro E-shop:</b> " + str(len(g_kalkulace_cekajici)) + "</li>" if g_kalkulace_cekajici else ""}
-                {"<li><b>Odevzdaná daňová přiznání:</b> " + str(len(g_priznani_cekajici)) + "</li>" if g_priznani_cekajici else ""}
-                {"<li><b>Žádosti firem o bankovní úvěr:</b> " + str(len(g_uvery_cekajici)) + "</li>" if g_uvery_cekajici else ""}
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
+        polozky = []
+        if g_firmy_cekajici: polozky.append(f"<li><b>Žádosti o registraci firmy:</b> {len(g_firmy_cekajici)}</li>")
+        if g_questy_cekajici: polozky.append(f"<li><b>Odevzdané úkoly ke kontrole:</b> {len(g_questy_cekajici)}</li>")
+        if g_kalkulace_cekajici: polozky.append(f"<li><b>Kalkulace produktů pro E-shop:</b> {len(g_kalkulace_cekajici)}</li>")
+        if g_priznani_cekajici: polozky.append(f"<li><b>Odevzdaná daňová přiznání:</b> {len(g_priznani_cekajici)}</li>")
+        if g_uvery_cekajici: polozky.append(f"<li><b>Žádosti o firemní úvěr:</b> {len(g_uvery_cekajici)}</li>")
+        
+        seznam_str = "".join(polozky)
+        alert_html = f"""<div class='alert-box'><h4 style='margin:0; color:#f59e0b;'>Nevyřízené úkoly a audity ({g_pocet_celkem_restu})</h4><ul style='margin: 5px 0 0 0; padding-left: 20px; color:#cbd5e1; font-size: 14px;'>{seznam_str}</ul></div>"""
+        st.markdown(alert_html, unsafe_allow_html=True)
     else:
-        st.markdown("""
-        <div class='info-box' style='background-color: rgba(52, 211, 153, 0.05); border-color: #34d399;'>
-            <h4 style='margin:0; color:#34d399;'>Čistý stůl</h4>
-            <p style='margin: 5px 0 0 0; color:#cbd5e1; font-size: 14px;'>Žádné firmy ani úkoly nečekají na váš audit.</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("""<div class='info-box' style='background-color: rgba(52, 211, 153, 0.05); border-color: #34d399;'><h4 style='margin:0; color:#34d399;'>Čistý stůl</h4><p style='margin: 5px 0 0 0; color:#cbd5e1; font-size: 14px;'>Žádné firmy ani úkoly nečekají na váš audit.</p></div>""", unsafe_allow_html=True)
 
 st.write("---")
 
@@ -233,12 +216,7 @@ res_nezarazeni = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{
 nezarazeni_zaci = res_nezarazeni if isinstance(res_nezarazeni, list) else []
 
 if nezarazeni_zaci:
-    st.markdown("""
-    <div class='alert-box' style='border-color: #ef4444; background-color: rgba(239, 68, 68, 0.1); margin-top: 15px;'>
-        <h4 style='margin:0; color:#ef4444;'>Nezařazení žáci (Čekají na zařazení do třídy)</h4>
-        <p style='margin: 5px 0 0 0; color:#cbd5e1; font-size: 14px;'>Tito žáci se zaregistrovali výukovým kódem dříve, než jste založili třídu. Přiřaďte je níže.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("""<div class='alert-box' style='border-color: #ef4444; background-color: rgba(239, 68, 68, 0.1); margin-top: 15px;'><h4 style='margin:0; color:#ef4444;'>Nezařazení žáci (Čekají na zařazení do třídy)</h4><p style='margin: 5px 0 0 0; color:#cbd5e1; font-size: 14px;'>Tito žáci se zaregistrovali výukovým kódem dříve, než jste založili třídu. Přiřaďte je níže.</p></div>""", unsafe_allow_html=True)
     
     with st.expander("Přiřadit nezařazené žáky do vaší třídy", expanded=True):
         df_nez = pd.DataFrame([{"Jméno žáka": z["jmeno"], "Role": z.get("role", "zak"), "Zůstatek": z.get("kredity", 0)} for z in nezarazeni_zaci])
@@ -276,7 +254,7 @@ else:
     firmy = res_firmy if isinstance(res_firmy, list) else []
 
     # Správa žáků vybrané třídy
-    with st.expander(f"Seznam žáků třídy {aktivni_trida} (Role a Reset hesel)", expanded=False):
+    with st.expander(f"Seznam žáků třídy {aktivni_trida} (Role, Odměny a Reset hesel)", expanded=False):
         if not zaci_tridy:
             st.info(f"Ve třídě {aktivni_trida} zatím nejsou registrováni žádní žáci.")
         else:
@@ -290,7 +268,7 @@ else:
                 })
             st.dataframe(pd.DataFrame(tabulka_zaku), use_container_width=True)
             
-            st.markdown("##### Správa role žáka")
+            st.markdown("##### 1. Správa role žáka")
             col_z1, col_z2, col_z3 = st.columns([2, 2, 1])
             with col_z1:
                 vybrany_zak = st.selectbox("Vyberte žáka z této třídy:", [z["jmeno"] for z in zaci_tridy])
@@ -305,7 +283,31 @@ else:
                     st.rerun()
 
             st.divider()
-            st.markdown("##### Reset zapomenutého hesla žáka")
+            st.markdown("##### 2. Přímé udělení odměny / stržení kreditů žákovi")
+            st.caption("Můžete žákovi připsat odměnu za aktivitu v hodině nebo mu udělit finanční postih.")
+            with st.form("form_ucitel_odmena_zaka_penez"):
+                col_o1, col_o2, col_o3 = st.columns([2, 2, 1])
+                with col_o1:
+                    akce_penize = st.selectbox("Typ transakce:", ["Připsat odměnu (Bonus)", "Strhnout kredity (Pokuta)"])
+                with col_o2:
+                    castka_odmeny = st.number_input("Částka M-K:", min_value=1.0, value=25.0)
+                with col_o3:
+                    st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                    if st.form_submit_button("Provést"):
+                        target_user = next((z for z in zaci_tridy if z["jmeno"] == vybrany_zak), None)
+                        if target_user:
+                            if akce_penize == "Připsat odměnu (Bonus)":
+                                novy_bal = target_user.get("kredity", 0) + castka_odmeny
+                                requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_zak}", headers=headers, json={"kredity": novy_bal})
+                                st.success(f"Žákovi **{vybrany_zak}** bylo připsáno {castka_odmeny} M-K.")
+                            else:
+                                novy_bal = max(0, target_user.get("kredity", 0) - castka_odmeny)
+                                requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_zak}", headers=headers, json={"kredity": novy_bal})
+                                st.success(f"Žákovi **{vybrany_zak}** bylo strženo {castka_odmeny} M-K.")
+                            st.rerun()
+
+            st.divider()
+            st.markdown("##### 3. Reset zapomenutého hesla žáka")
             with st.form("form_ucitel_reset_hesla_zaka_tridy_unique"):
                 col_r1, col_r2 = st.columns([2, 1])
                 with col_r1:
@@ -333,7 +335,7 @@ else:
         f_id = firma["id"]
 
         tab_legal, tab_aktiva, tab_hr, tab_finance, tab_questy, tab_stat, tab_banka, tab_hodnoceni = st.tabs([
-            "1. Spis a Notář", "2. Vize a AI", "3. HR a Tým", "4. E-shop a Zákazníci", "5. Úřad práce a XP", "6. Státní pokladna a Daně", "7. Banka a Ceník", "8. Přehled a Hodnocení"
+            "1. Spis a Notář", "2. Vize a AI", "3. HR a Tým", "4. E-shop a Zákazníci", "5. Úřad práce a XP", "6. Státní pokladna a Daně", "7. Pravidla Ekonomiky", "8. Přehled a Hodnocení"
         ])
 
         with tab_legal:
@@ -408,32 +410,38 @@ else:
             else: st.info("Žádné kalkulace.")
 
         with tab_questy:
-            st.subheader("Úkoly třídy")
+            st.subheader("Úkoly třídy na Úřadu práce")
             with st.form("form_ucitel_pridat_novy_quest_clean"):
                 qn = st.text_input("Název úkolu:")
                 qp = st.text_area("Popis:")
-                qo = st.number_input("Odměna (M-K):", min_value=1.0, value=20.0)
-                if st.form_submit_button("Vypsat úkol"):
+                qo = st.number_input("Odměna za splnění (M-K):", min_value=1.0, value=20.0)
+                if st.form_submit_button("Vypsat úkol na Úřad práce"):
                     requests.post(f"{SUPABASE_URL}/rest/v1/questy", headers=headers, json={"nazev": qn, "popis": qp, "odmena": qo, "zadavatel": ucitel_jmeno, "stav": "VOLNY"})
                     st.rerun()
 
         with tab_stat:
             res_stat = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers).json()
             stat_kredity = res_stat[0]['kredity'] if (isinstance(res_stat, list) and len(res_stat) > 0) else 0
-            st.markdown(f"### Rozpočet vybraných daní: `{stat_kredity:.2f} M-K`")
+            st.markdown(f"### Rozpočet vybraných daní školy: `{stat_kredity:.2f} M-K`")
 
         with tab_banka:
             nastaveni_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{skolni_kod}", headers=headers).json()
             akt_nastaveni = nastaveni_res[0] if (isinstance(nastaveni_res, list) and len(nastaveni_res) > 0) else {}
-            with st.form("form_ucitel_tisk_kreditu_banka_clean"):
-                st.markdown("#### Tisk peněz na účet vyučujícího")
-                tisk_castka = st.number_input("Částka k připsání (M-K):", min_value=100, value=1000)
-                if st.form_submit_button("Vytisknout a připsat kredity"):
-                    res_ucitel_akt = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ucitel_jmeno}", headers=headers).json()
-                    novy_zustatek = (res_ucitel_akt[0].get("kredity", 0) if res_ucitel_akt else 0) + tisk_castka
-                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ucitel_jmeno}", headers=headers, json={"kredity": novy_zustatek})
-                    st.session_state.kredity = novy_zustatek
-                    st.success(f"Na váš účet bylo připsáno {tisk_castka} M-K.")
+            
+            with st.form("form_nastaveni_ekonomiky_skoly"):
+                st.markdown("#### Nastavení ekonomických pravidel školy")
+                st.caption(f"Platné pro licenční kód: **{skolni_kod}**")
+                n_kurz = st.number_input("Kurz M-Kreditu k CZK (1 M-K = X Kč):", min_value=1.0, value=float(akt_nastaveni.get('kurz_kc', 10.0)))
+                n_dan = st.number_input("M-TECH Daň pro e-shop (%):", min_value=0.0, max_value=50.0, value=float(akt_nastaveni.get('mtech_dan_pct', 15.0)))
+                n_dan_prijem = st.number_input("Daň z příjmu zaměstnanců (%):", min_value=0.0, max_value=50.0, value=float(akt_nastaveni.get('dan_prijem_pct', 15.0)))
+                n_zakaznik = st.number_input("Výchozí startovací kredit pro ZÁKAZNÍKA (M-K):", min_value=0.0, value=float(akt_nastaveni.get('start_kredit_zakaznik', 50.0)))
+                n_cenik = st.text_area("Globální ceník školy (materiály, pronájmy):", value=str(akt_nastaveni.get('globalni_cenik', '')), height=150)
+                
+                if st.form_submit_button("Uložit ekonomická pravidla"):
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{skolni_kod}", headers=headers, json={
+                        "kurz_kc": n_kurz, "globalni_cenik": n_cenik, "mtech_dan_pct": n_dan, "dan_prijem_pct": n_dan_prijem, "start_kredit_zakaznik": n_zakaznik
+                    })
+                    st.success("Pravidla ekonomiky byla uložena.")
                     st.rerun()
 
         with tab_hodnoceni:
