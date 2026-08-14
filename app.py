@@ -48,23 +48,16 @@ if not st.session_state.prihlasen:
         </div>
     """, unsafe_allow_html=True)
 
-    col1, col2, col3 = st.columns(3)
-    with col1: st.markdown("<div class='feature-box'><h4>Pro Žáky</h4><p style='font-size: 0.9em; color: #cbd5e1;'>Získávají M-Kredity za plnění úkolů a učí se pracovat s digitální peněženkou.</p></div>", unsafe_allow_html=True)
-    with col2: st.markdown("<div class='feature-box'><h4>Pro Firmy</h4><p style='font-size: 0.9em; color: #cbd5e1;'>Vypisují zakázky, nabízí produkty a spravují kapitál v dashboardu.</p></div>", unsafe_allow_html=True)
-    with col3: st.markdown("<div class='feature-box'><h4>Pro Školy</h4><p style='font-size: 0.9em; color: #cbd5e1;'>Kontrolní úřad s dohledem nad transakcemi a ekonomikou.</p></div>", unsafe_allow_html=True)
-
-    st.write("---")
-
     tab_login, tab_user_reg, tab_school_licence = st.tabs(["Přihlášení do systému", "Registrace pro Žáky", "Registrace Nové Školy (Pro učitele)"])
     
     with tab_login:
         with st.form("login_form"):
-            jmeno = st.text_input("Přihlašovací jméno (nebo e-mail):")
+            jmeno = st.text_input("Přihlašovací jméno:")
             heslo = st.text_input("Heslo:", type="password")
             if st.form_submit_button("Vstoupit do ekosystému"):
                 if jmeno and heslo:
                     res = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{jmeno}&heslo=eq.{heslo}&select=*", headers=headers).json()
-                    if res:
+                    if res and isinstance(res, list) and len(res) > 0:
                         st.session_state.prihlasen = True
                         st.session_state.role = str(res[0]["role"]).lower()
                         st.session_state.kredity = res[0]["kredity"]
@@ -78,51 +71,71 @@ if not st.session_state.prihlasen:
                     st.warning("Vyplňte obě pole.")
 
     with tab_user_reg:
-        st.info("Zadejte licenční kód školy, který vám poskytl vyučující (případně kód vaší školy pro nakupování).")
-        skolni_kod_input = st.text_input("Licenční kód školy:", key="reg_kod").upper().strip()
+        st.info("Zadejte přístupový kód. Systém automaticky pozná, zda jste součástí výukové třídy, nebo běžný zákazník.")
+        vstupni_kod = st.text_input("Přístupový kód (Výukový nebo Zákaznický):", key="reg_kod").upper().strip()
         
+        is_customer = False
+        skolni_kod_actual = None
+        start_kredit_zakaznik = 50
         dostupne_tridy = []
-        if skolni_kod_input:
-            res_tridy = requests.get(f"{SUPABASE_URL}/rest/v1/tridy?skolni_kod=eq.{skolni_kod_input}&select=*", headers=headers).json()
-            if isinstance(res_tridy, list) and res_tridy:
-                dostupne_tridy = res_tridy
         
+        if vstupni_kod:
+            # 1. Zkusíme, zda to není zákaznický kód
+            res_nast = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?zakaznicky_kod=eq.{vstupni_kod}", headers=headers).json()
+            if res_nast and isinstance(res_nast, list) and len(res_nast) > 0:
+                is_customer = True
+                skolni_kod_actual = res_nast[0]['skolni_kod']
+                start_kredit_zakaznik = res_nast[0].get('start_kredit_zakaznik', 50)
+            else:
+                # 2. Pokud ne, zkusíme, zda to není hlavní výukový kód školy
+                res_lic = requests.get(f"{SUPABASE_URL}/rest/v1/licencovane_skoly?licencni_kod=eq.{vstupni_kod}", headers=headers).json()
+                if res_lic and isinstance(res_lic, list) and len(res_lic) > 0:
+                    skolni_kod_actual = vstupni_kod
+                    res_tridy = requests.get(f"{SUPABASE_URL}/rest/v1/tridy?skolni_kod=eq.{skolni_kod_actual}&select=*", headers=headers).json()
+                    if isinstance(res_tridy, list) and res_tridy:
+                        dostupne_tridy = res_tridy
+
         with st.form("user_reg_form"):
             reg_jmeno = st.text_input("Vaše jméno (nebo přezdívka):")
             reg_heslo = st.text_input("Zvolte si bezpečné heslo:", type="password")
             
             vybrana_trida_str = None
-            if dostupne_tridy:
-                moznosti_trid = ["-- Jsem pouze zákazník školy (nechodím do těchto tříd) --"] + [f"{t['nazev_tridy']} (Vyučující: {t['ucitel_jmeno']})" for t in dostupne_tridy]
-                vybrana_trida_str = st.selectbox("Vyberte svou třídu ze seznamu:", moznosti_trid)
-            else:
-                st.warning("Ve škole zatím nejsou žádné třídy. Budete registrováni jako Zákazník školy.")
+            if skolni_kod_actual and not is_customer:
+                if dostupne_tridy:
+                    moznosti_trid = [f"{t['nazev_tridy']} (Vyučující: {t['ucitel_jmeno']})" for t in dostupne_tridy]
+                    vybrana_trida_str = st.selectbox("Vyberte svou třídu:", moznosti_trid)
+                else:
+                    st.warning("Učitel zatím nezaložil žádnou třídu. Počkejte na pokyn vyučujícího.")
+            elif is_customer:
+                st.success("✅ Byl rozpoznán zákaznický kód. Budete registrováni jako Zákazník školy (bez přiřazení do konkrétní třídy).")
             
-            if st.form_submit_button("Založit žákovský účet"):
-                if skolni_kod_input and reg_jmeno and reg_heslo:
-                    lic_res = requests.get(f"{SUPABASE_URL}/rest/v1/licencovane_skoly?licencni_kod=eq.{skolni_kod_input}", headers=headers).json()
-                    if not lic_res:
-                        st.error("Neplatný licenční kód školy.")
+            if st.form_submit_button("Vytvořit účet"):
+                if skolni_kod_actual and reg_jmeno and reg_heslo:
+                    if requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{reg_jmeno}", headers=headers).json():
+                        st.error("Toto jméno je již obsazené. Zvolte jiné.")
                     else:
-                        if requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{reg_jmeno}", headers=headers).json():
-                            st.error("Toto uživatelské jméno je již v systému obsazené. Zvolte jiné.")
-                        else:
-                            nastaveni = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{skolni_kod_input}", headers=headers).json()
-                            start_kredity = nastaveni[0]['start_kredit_zak'] if nastaveni else 100
-                            
-                            if not vybrana_trida_str or vybrana_trida_str.startswith("--"):
-                                t_nazev = "Zákazník"
-                            else:
-                                t_nazev = vybrana_trida_str.split(" (")[0]
-                                
+                        if is_customer:
                             requests.post(f"{SUPABASE_URL}/rest/v1/uzivatele", headers=headers, json={
                                 "jmeno": reg_jmeno, "heslo": reg_heslo, "role": "zak",
-                                "kredity": start_kredity, "skolni_kod": skolni_kod_input,
-                                "trida_nazev": t_nazev, "aktivni": True
+                                "kredity": start_kredit_zakaznik, "skolni_kod": skolni_kod_actual,
+                                "trida_nazev": "Zákazník", "aktivni": True
                             })
-                            st.success("Účet byl úspěšně vytvořen. Můžete se přihlásit v první záložce.")
+                            st.success("Zákaznický účet byl vytvořen. Můžete se přihlásit.")
+                        else:
+                            if not vybrana_trida_str:
+                                st.error("Musíte vybrat třídu.")
+                            else:
+                                t_nazev = vybrana_trida_str.split(" (")[0]
+                                nastaveni = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{skolni_kod_actual}", headers=headers).json()
+                                start_kredity = nastaveni[0]['start_kredit_zak'] if nastaveni else 100
+                                requests.post(f"{SUPABASE_URL}/rest/v1/uzivatele", headers=headers, json={
+                                    "jmeno": reg_jmeno, "heslo": reg_heslo, "role": "zak",
+                                    "kredity": start_kredity, "skolni_kod": skolni_kod_actual,
+                                    "trida_nazev": t_nazev, "aktivni": True
+                                })
+                                st.success("Žákovský účet vytvořen. Můžete se přihlásit.")
                 else:
-                    st.warning("Vyplňte kód školy, jméno i heslo.")
+                    st.warning("Vyplňte správný kód, jméno i heslo.")
 
     with tab_school_licence:
         st.markdown("### Nová licence pro školu a zakládající účet garanta")
@@ -131,29 +144,26 @@ if not st.session_state.prihlasen:
         
         if master_password == "MtechAdmin2026": 
             with st.form("school_form"):
-                st.markdown("**1. Údaje o škole**")
                 nazev_skoly = st.text_input("Název vzdělávací instituce:")
-                st.markdown("**2. Údaje o vyučujícím (první garant školy)**")
                 ucitel_jmeno = st.text_input("Přihlašovací jméno garanta (např. email):")
                 ucitel_heslo = st.text_input("Přístupové heslo pro garanta:", type="password")
                 
                 if st.form_submit_button("Generovat školu a učitele"):
                     if nazev_skoly and ucitel_jmeno and ucitel_heslo:
                         if requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ucitel_jmeno}", headers=headers).json():
-                            st.error("Tento učitel (e-mail) je již v systému zaregistrován.")
+                            st.error("Tento učitel je již v systému.")
                         else:
                             kod = "SKOLA-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                            zakaznik_kod = "KUPUJ-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
                             requests.post(f"{SUPABASE_URL}/rest/v1/licencovane_skoly", headers=headers, json={"nazev_skoly": nazev_skoly, "kontaktni_email": ucitel_jmeno, "licencni_kod": kod, "zaplaceno": False})
-                            requests.post(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni", headers=headers, json={"skolni_kod": kod})
-                            
+                            requests.post(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni", headers=headers, json={"skolni_kod": kod, "zakaznicky_kod": zakaznik_kod, "start_kredit_zakaznik": 50})
                             requests.post(f"{SUPABASE_URL}/rest/v1/uzivatele", headers=headers, json={
                                 "jmeno": ucitel_jmeno, "heslo": ucitel_heslo, "role": "ucitel",
                                 "kredity": 500, "skolni_kod": kod, "aktivni": True
                             })
-                            st.success(f"Licence úspěšně vytvořena! Kód školy: **{kod}**")
-                            st.success(f"Účet garanta (**{ucitel_jmeno}**) byl založen. Můžete se přihlásit.")
+                            st.success(f"Licence vytvořena! Kód školy: {kod}")
                     else:
-                        st.warning("Vyplňte všechny údaje o škole i vyučujícím.")
+                        st.warning("Vyplňte všechny údaje.")
         elif master_password != "":
             st.error("Nesprávné administrátorské heslo!")
 
