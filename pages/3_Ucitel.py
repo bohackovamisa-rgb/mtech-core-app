@@ -301,7 +301,7 @@ with tab_questy:
         if isinstance(res_q_check, list) and len(res_q_check) > 0:
             for q in res_q_check:
                 
-                # --- BEZPEČNÉ ZPRACOVÁNÍ ODKAZU/TEXTU ---
+                # Bezpečné zpracování odkazu proti pádu
                 odkaz = q.get('odkaz_vystup', '')
                 if not odkaz:
                     vystup_html = "<span style='color:#64748b;'><i>Žák neposkytl žádný text ani odkaz, pouze označil jako hotové.</i></span>"
@@ -309,14 +309,21 @@ with tab_questy:
                     vystup_html = f"<a href='{odkaz}' target='_blank' style='color:#0ea5e9; font-weight:bold;'>🔗 Otevřít odkaz na práci žáka</a>"
                 else:
                     vystup_html = f"<b>Komentář žáka:</b> <i>{odkaz}</i>"
-                # ----------------------------------------
                 
                 st.markdown(f"<div class='card-box'><h5>{q['nazev']}</h5><p>Zhotovitel: <b>{q['resitel']}</b><br><br>{vystup_html}</p></div>", unsafe_allow_html=True)
                 
                 with st.form(f"schvaleni_{q['id']}"):
                     kategorie_xp = st.selectbox("Typ XP bodů:", ["IT a Technologie", "Marketing a Kreativita", "Byznys a Finance"])
                     pocet_xp = st.number_input("Počet XP:", min_value=0, max_value=50, value=10)
-                    if st.form_submit_button("Schválit úkol a odeslat odměny"):
+                    
+                    # Dvě tlačítka: Jedno pro schválení, druhé pro zamítnutí
+                    col_btn1, col_btn2 = st.columns(2)
+                    with col_btn1:
+                        btn_schvalit = st.form_submit_button("✅ Schválit a vyplatit")
+                    with col_btn2:
+                        btn_zamitnout = st.form_submit_button("❌ Zamítnout (Vrátit)")
+
+                    if btn_schvalit:
                         res_r = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{q['resitel']}", headers=headers).json()
                         if res_r: 
                             z_data = res_r[0]
@@ -335,6 +342,12 @@ with tab_questy:
                         requests.patch(f"{SUPABASE_URL}/rest/v1/questy?id=eq.{q['id']}", headers=headers, json={"stav": "DOKONCENO"})
                         requests.post(f"{SUPABASE_URL}/rest/v1/bankovni_prevody", headers=headers, json={"odesilatel": "Stát", "prijemce": q['resitel'], "castka": q['odmena'], "ucel": f"Odměna za: {q['nazev']} (+ {pocet_xp} XP)"})
                         st.success("Odměna i XP body odeslány!")
+                        st.rerun()
+                        
+                    if btn_zamitnout:
+                        # Úkol se vrátí zpět do stavu VOLNY, smaže se řešitel a špatný odkaz
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/questy?id=eq.{q['id']}", headers=headers, json={"stav": "VOLNY", "resitel": None, "odkaz_vystup": ""})
+                        st.error("Úkol byl zamítnut a vrácen zpět do nabídky na Úřad práce.")
                         st.rerun()
         else:
             st.info("Žádné úkoly momentálně nečekají na schválení.")
