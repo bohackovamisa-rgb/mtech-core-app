@@ -17,6 +17,7 @@ st.markdown("""
     .status-wait { color: #fbbf24; font-weight: 700; background: rgba(245, 158, 11, 0.1); padding: 4px 8px; border-radius: 6px; }
     .status-err { color: #f87171; font-weight: 700; background: rgba(239, 68, 68, 0.1); padding: 4px 8px; border-radius: 6px; }
     .alert-box { background-color: rgba(245, 158, 11, 0.1); border: 1px solid #f59e0b; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    .info-box { background-color: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
     .asset-link { color: #00B4D8; font-weight: bold; text-decoration: none; }
     .asset-link:hover { text-decoration: underline; color: #0077B6; }
     .licence-box { background: linear-gradient(135deg, rgba(0, 180, 216, 0.15) 0%, rgba(0, 119, 182, 0.15) 100%); border: 1px solid #00B4D8; border-left: 5px solid #00B4D8; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
@@ -77,7 +78,7 @@ elif is_admin:
     """, unsafe_allow_html=True)
 
 # =========================================================================
-# 1. GLOBÁLNÍ PŘEHLED NEVYŘÍZENÝCH POLOŽEK
+# 1. ŘÍDÍCÍ PANEL (ACTION CENTER) - NOTIFIKACE PRO UČITELE
 # =========================================================================
 if is_admin:
     res_moje_tridy_global = requests.get(f"{SUPABASE_URL}/rest/v1/tridy?select=nazev_tridy", headers=headers).json()
@@ -92,7 +93,7 @@ if is_admin:
 else:
     moje_firmy_global = [f for f in (vsechny_firmy_skoly if isinstance(vsechny_firmy_skoly, list) else []) if f.get("trida_nazev") in moje_tridy_nazvy_global]
 
-vsichni_zaci_skoly = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&role=neq.ucitel&select=jmeno,trida_nazev", headers=headers).json()
+vsichni_zaci_skoly = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&role=neq.ucitel&select=jmeno,trida_nazev,role", headers=headers).json()
 if is_admin:
     moji_zaci_global = vsichni_zaci_skoly if isinstance(vsichni_zaci_skoly, list) else []
 else:
@@ -110,20 +111,50 @@ g_priznani_cekajici = [p for p in (res_priznani_all if isinstance(res_priznani_a
 res_kalk_all = requests.get(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?schvaleno_uradem=eq.false", headers=headers).json()
 g_kalkulace_cekajici = [k for k in (res_kalk_all if isinstance(res_kalk_all, list) else []) if any(f['id'] == k.get('firma_id') for f in moje_firmy_global)]
 
-g_pocet_celkem_restu = len(g_firmy_cekajici) + len(g_questy_cekajici) + len(g_priznani_cekajici) + len(g_kalkulace_cekajici)
+res_uvery_all = requests.get(f"{SUPABASE_URL}/rest/v1/bankovni_uvery?stav=eq.ZADOST", headers=headers).json()
+g_uvery_cekajici = [u for u in (res_uvery_all if isinstance(res_uvery_all, list) else []) if any(f['id'] == u.get('firma_id') for f in moje_firmy_global)]
 
-if g_pocet_celkem_restu > 0:
+g_pocet_celkem_restu = len(g_firmy_cekajici) + len(g_questy_cekajici) + len(g_priznani_cekajici) + len(g_kalkulace_cekajici) + len(g_uvery_cekajici)
+
+pocet_zaku_celkem = len(moji_zaci_global)
+pocet_zaku_zakladni_role = len([z for z in moji_zaci_global if z.get("role") == "zak"])
+
+col_dash1, col_dash2 = st.columns(2)
+
+with col_dash1:
     st.markdown(f"""
-    <div class='alert-box'>
-        <h4 style='margin:0; color:#f59e0b;'>Nevyřízené úkoly napříč vašimi třídami ({g_pocet_celkem_restu})</h4>
-        <ul style='margin-bottom:0; color:#cbd5e1; font-size: 14px; margin-top: 10px;'>
-            {"<li><b>Nové žádosti o registraci firmy:</b> " + str(len(g_firmy_cekajici)) + " (Zkontrolujte v záložce 1. Spis)</li>" if g_firmy_cekajici else ""}
-            {"<li><b>Odevzdané úkoly ke kontrole a přidělení XP:</b> " + str(len(g_questy_cekajici)) + " (Záložka 5. Úřad práce)</li>" if g_questy_cekajici else ""}
-            {"<li><b>Kalkulace produktů pro E-shop ke schválení:</b> " + str(len(g_kalkulace_cekajici)) + " (Záložka 4. E-shop)</li>" if g_kalkulace_cekajici else ""}
-            {"<li><b>Odevzdaná daňová přiznání k auditu:</b> " + str(len(g_priznani_cekajici)) + " (Záložka 6. Státní pokladna)</li>" if g_priznani_cekajici else ""}
-        </ul>
+    <div class='info-box'>
+        <h4 style='margin:0; color:#10b981;'>Stav registrací žáků</h4>
+        <p style='margin: 5px 0 0 0; color:#cbd5e1; font-size: 15px;'>
+            Ve vašich třídách je aktuálně registrováno celkem <b>{pocet_zaku_celkem} žáků</b>.<br>
+            Z toho <b>{pocet_zaku_zakladni_role} žáků</b> má zatím jen základní roli. Zkontrolujte je ve Správě žáků a přidělte jim podnikatelská oprávnění.
+        </p>
     </div>
     """, unsafe_allow_html=True)
+
+with col_dash2:
+    if g_pocet_celkem_restu > 0:
+        st.markdown(f"""
+        <div class='alert-box'>
+            <h4 style='margin:0; color:#f59e0b;'>Nevyřízené úkoly a audity ({g_pocet_celkem_restu})</h4>
+            <ul style='margin-bottom:0; color:#cbd5e1; font-size: 14px; margin-top: 5px;'>
+                {"<li><b>Žádosti o registraci firmy:</b> " + str(len(g_firmy_cekajici)) + " (Záložka 1. Spis)</li>" if g_firmy_cekajici else ""}
+                {"<li><b>Odevzdané úkoly ke kontrole:</b> " + str(len(g_questy_cekajici)) + " (Záložka 5. Úřad práce)</li>" if g_questy_cekajici else ""}
+                {"<li><b>Kalkulace produktů pro E-shop:</b> " + str(len(g_kalkulace_cekajici)) + " (Záložka 4. E-shop)</li>" if g_kalkulace_cekajici else ""}
+                {"<li><b>Odevzdaná daňová přiznání:</b> " + str(len(g_priznani_cekajici)) + " (Záložka 6. Státní pokladna)</li>" if g_priznani_cekajici else ""}
+                {"<li><b>Žádosti firem o bankovní úvěr:</b> " + str(len(g_uvery_cekajici)) + " (Záložka 7. Banka)</li>" if g_uvery_cekajici else ""}
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class='info-box' style='background-color: rgba(52, 211, 153, 0.05); border-color: #34d399;'>
+            <h4 style='margin:0; color:#34d399;'>Čistý stůl</h4>
+            <p style='margin: 5px 0 0 0; color:#cbd5e1; font-size: 14px;'>Žádné firmy ani úkoly nečekají na váš audit a schválení.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+st.write("---")
 
 # =========================================================================
 # SPRÁVA A VÝBĚR TŘÍDY VYUČUJÍCÍHO
@@ -135,7 +166,7 @@ else:
 
 moje_tridy = res_tridy if (isinstance(res_tridy, list) and res_tridy) else []
 
-with st.expander("Správa mých tříd a skupin"):
+with st.expander("Založení a správa mých tříd / skupin"):
     col_t1, col_t2 = st.columns([2, 1])
     with col_t1:
         nova_trida_nazev = st.text_input("Název nové třídy (např. 3.A nebo Seminář Pondělí):")
@@ -490,6 +521,35 @@ with tab_banka:
                 })
                 st.success("Pravidla uložena.")
                 st.rerun()
+        
+        st.write("---")
+        st.markdown("#### Žádosti o firemní úvěry")
+        res_uvery_all = requests.get(f"{SUPABASE_URL}/rest/v1/bankovni_uvery?stav=eq.ZADOST", headers=headers).json()
+        uvery = [u for u in (res_uvery_all if isinstance(res_uvery_all, list) else []) if any(f['id'] == u.get('firma_id') for f in moje_firmy_global)]
+        
+        if uvery:
+            for u in uvery:
+                f_jmeno = next((f['nazev_firmy'] for f in firmy if f['id'] == u['firma_id']), "Neznámá firma")
+                with st.container(border=True):
+                    st.markdown(f"**Žadatel:** {f_jmeno} | Částka: {u['castka']} M-K (Úrok: {u['urok_pct']} %)")
+                    st.write(f"Účel: {u['ucel']}")
+                    col_u_btn1, col_u_btn2 = st.columns(2)
+                    with col_u_btn1:
+                        if st.button("Schválit úvěr", key=f"uv_ok_{u['id']}"):
+                            f_ceo = next((f['ceo_jmeno'] for f in firmy if f['id'] == u['firma_id']), None)
+                            celkem_vratit = u['castka'] * (1 + (u['urok_pct'] / 100.0))
+                            requests.patch(f"{SUPABASE_URL}/rest/v1/bankovni_uvery?id=eq.{u['id']}", headers=headers, json={"stav": "SCHVALENO", "zbyva_splatit": celkem_vratit})
+                            res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f_ceo}", headers=headers).json()
+                            if res_ceo:
+                                requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f_ceo}", headers=headers, json={"kredity": res_ceo[0]['kredity'] + u['castka']})
+                            requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": u['firma_id'], "typ_transakce": "PRIJEM", "titul": f"Bankovní úvěr: {u['ucel']}", "castka": u['castka'], "auditovano": True})
+                            st.rerun()
+                    with col_u_btn2:
+                        if st.button("Zamítnout", key=f"uv_ne_{u['id']}"):
+                            requests.patch(f"{SUPABASE_URL}/rest/v1/bankovni_uvery?id=eq.{u['id']}", headers=headers, json={"stav": "ZAMITNUTO"})
+                            st.rerun()
+        else:
+            st.info("Žádné čekající žádosti o podnikatelský úvěr.")
 
 # ==========================================
 # ZÁLOŽKA 8: HODNOCENÍ ŽÁKŮ TŘÍDY
