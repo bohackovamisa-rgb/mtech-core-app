@@ -46,13 +46,14 @@ uzivatel = st.session_state.get("uzivatel", "")
 skolni_kod = st.session_state.get("skolni_kod", "")
 trida_nazev = st.session_state.get("trida_nazev", "")
 
-if (not skolni_kod or not trida_nazev) and uzivatel:
-    res_u = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers).json()
-    if res_u and isinstance(res_u, list):
-        skolni_kod = res_u[0].get("skolni_kod", "")
-        trida_nazev = res_u[0].get("trida_nazev", "")
-        st.session_state.skolni_kod = skolni_kod
-        st.session_state.trida_nazev = trida_nazev
+# Pro jistotu vždy načteme aktuální zůstatek přímo z databáze (aby měl žák přesná čísla, i když zrovna dostal zaplaceno)
+res_akt_u = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers).json()
+if res_akt_u and isinstance(res_akt_u, list):
+    aktualni_zustatek_zaka = float(res_akt_u[0].get("kredity", 0))
+    if not skolni_kod: skolni_kod = res_akt_u[0].get("skolni_kod", "")
+    if not trida_nazev: trida_nazev = res_akt_u[0].get("trida_nazev", "")
+else:
+    aktualni_zustatek_zaka = float(st.session_state.get("kredity", 0))
 
 res_vsechny = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{skolni_kod}&select=*&order=id.desc", headers=headers).json()
 vsechny_firmy = res_vsechny if isinstance(res_vsechny, list) else []
@@ -89,13 +90,12 @@ if isinstance(nastaveni_res, list) and len(nastaveni_res) > 0:
     kurz_kc = float(nastaveni_res[0].get('kurz_kc', 10.0))
 
 # =========================================================================
-# 1. ZALOŽENÍ FIRMY (VÝBĚR ZE VŠECH SPOLUŽÁKŮ V TÉŽE TŘÍDĚ)
+# 1. ZALOŽENÍ FIRMY
 # =========================================================================
 if not moje_firma:
     st.info(f"Vítejte v podnikatelském akcelerátoru M-TECH (Třída: {trida_nazev or 'Vaše třída'}).")
     st.markdown("Získali jste oprávnění k založení startupu. Vyplňte níže zakladatelský zápis u Notáře a odešlete spis ke schválení na Kontrolní úřad.")
     
-    # OPRAVA: Odstraněno role=eq.firma, nyní načítá VŠECHNY spolužáky ze třídy kromě učitele
     res_spoluzaci = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.{trida_nazev}&role=neq.ucitel", headers=headers).json()
     seznam_spoluzaku = [u['jmeno'] for u in res_spoluzaci if u['jmeno'] != uzivatel] if isinstance(res_spoluzaci, list) else []
 
@@ -112,9 +112,17 @@ if not moje_firma:
         with col_n2: st.session_state.reg_data["cfo"] = st.selectbox("CFO (Finanční ředitel):", ["-- Neobsazeno --"] + seznam_spoluzaku)
         with col_n3: st.session_state.reg_data["cto"] = st.selectbox("CTO (Technický ředitel):", ["-- Neobsazeno --"] + seznam_spoluzaku)
         st.session_state.reg_data["jednani"] = st.selectbox("Způsob jednání statutárních orgánů:", ["Každý jednatel samostatně", "Společně"])
+        
         col_k1, col_k2 = st.columns(2)
-        with col_k1: st.session_state.reg_data["vklad"] = st.number_input("Základní kapitál zakladatelů (M-K):", min_value=10, value=100)
-        with col_k2: st.session_state.reg_data["podily_popis"] = st.text_area("Rozdělení podílů (%):", value="CEO: 100 %")
+        with col_k1: 
+            if aktualni_zustatek_zaka < 10.0:
+                st.error(f"❌ Váš osobní zůstatek je pouze {aktualni_zustatek_zaka:.2f} M-K. Pro založení firmy potřebujete minimálně 10 M-K. Jděte do Moje peněženka -> Úřad práce a splňte úkoly od vyučujícího, abyste získali kapitál!")
+                vklad_hodnota = 0.0
+            else:
+                vklad_hodnota = st.number_input(f"Základní kapitál zakladatelů (Maximum je váš aktuální zůstatek: {aktualni_zustatek_zaka} M-K):", min_value=10.0, max_value=aktualni_zustatek_zaka, value=min(100.0, aktualni_zustatek_zaka))
+            st.session_state.reg_data["vklad"] = vklad_hodnota
+        with col_k2: 
+            st.session_state.reg_data["podily_popis"] = st.text_area("Rozdělení podílů (%):", value="CEO: 100 %")
 
     with u_zivnost:
         st.session_state.reg_data["druh_zivnosti"] = st.radio("Druh živnosti:", ["Volná", "Řemeslná", "Vázaná"], horizontal=True)
@@ -145,6 +153,8 @@ if not moje_firma:
             
             if not nazev:
                 st.error("Vyplňte prosím název firmy v záložce Notářský zápis.")
+            elif aktualni_zustatek_zaka < 10.0:
+                st.error("Nemáte dostatek finančních prostředků (min. 10 M-K) na založení firmy.")
             else:
                 cfo_val = None if d.get("cfo") == "-- Neobsazeno --" else d.get("cfo")
                 cto_val = None if d.get("cto") == "-- Neobsazeno --" else d.get("cto")
@@ -160,7 +170,7 @@ if not moje_firma:
                     "cfo_jmeno": cfo_val,
                     "cto_jmeno": cto_val,
                     "podnikatelsky_zamer": zamer_str,
-                    "pocatecni_kapital": int(d.get("vklad", 100)),
+                    "pocatecni_kapital": int(d.get("vklad", 10)),
                     "stave_licence": "CEKA_NA_SCHVALENI",
                     "duvod_zamitnuti": ""
                 }
@@ -309,7 +319,7 @@ if tab_vyvoj:
                 st.rerun()
 
 # ==========================================
-# ZÁLOŽKA 4: TÝM A HR (PŘIJÍMÁNÍ ZE VŠECH VE TŘÍDĚ)
+# ZÁLOŽKA 4: TÝM A HR
 # ==========================================
 if tab_hr:
     with tab_hr:
@@ -336,7 +346,6 @@ if tab_hr:
 
         st.markdown("#### Přijmout nového pracovníka do týmu")
         
-        # OPRAVA: Odstraněno role=eq.firma, může přijmout kohokoliv ze třídy
         res_zaci_tridy = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.{trida_nazev}&role=neq.ucitel", headers=headers).json()
         jmena_v_tyme = [z['jmeno_zamestnance'].lower() for z in zamestnanci]
         if moje_firma.get('ceo_jmeno'): jmena_v_tyme.append(moje_firma['ceo_jmeno'].lower())
@@ -393,7 +402,7 @@ if tab_hr:
                     kredity_ceo = res_ceo[0]['kredity'] if res_ceo else 0
                     
                     if hruba > kredity_ceo:
-                        st.error("Nedostatek peněz na firemním účtu.")
+                        st.error("Nedostatek peněz na firemním účtu (na účtu CEO).")
                     else:
                         requests.patch(f"{SUPABASE_URL}/rest/v1/zamestnanci?id=eq.{vybrany_z['id']}", headers=headers, json={"vyplaceno_celkem": vybrany_z.get("vyplaceno_celkem", 0) + cista})
                         requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"kredity": kredity_ceo - hruba})
