@@ -42,7 +42,6 @@ ucitel_jmeno = st.session_state.get("uzivatel", "")
 skolni_kod = st.session_state.get("skolni_kod", "")
 is_admin = str(st.session_state.get("role")).upper() == "ADMIN"
 
-# Bezpečné načtení údajů o vyučujícím
 if not skolni_kod and ucitel_jmeno:
     res_ucitel = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ucitel_jmeno}", headers=headers).json()
     if isinstance(res_ucitel, list) and len(res_ucitel) > 0:
@@ -85,7 +84,7 @@ elif is_admin:
     """, unsafe_allow_html=True)
 
 # =========================================================================
-# 1. ŘÍDÍCÍ PANEL (ACTION CENTER)
+# 1. ŘÍDÍCÍ PANEL (ACTION CENTER) - NOTIFIKACE PRO UČITELE
 # =========================================================================
 if is_admin:
     res_moje_tridy_global = requests.get(f"{SUPABASE_URL}/rest/v1/tridy?select=nazev_tridy", headers=headers).json()
@@ -153,7 +152,7 @@ with col_dash2:
         st.markdown("""
         <div class='info-box' style='background-color: rgba(52, 211, 153, 0.05); border-color: #34d399;'>
             <h4 style='margin:0; color:#34d399;'>Čistý stůl</h4>
-            <p style='margin: 5px 0 0 0; color:#cbd5e1; font-size: 14px;'>Žádné firmy ani úkoly nečekají na váš audit.</p>
+            <p style='margin: 5px 0 0 0; color:#cbd5e1; font-size: 14px;'>Žádné firmy ani úkoly nečekají na váš audit a schválení.</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -230,6 +229,40 @@ with st.expander("Založení nové třídy / skupiny"):
                 })
                 st.success(f"Třída {nova_trida_nazev} byla vytvořena.")
                 st.rerun()
+
+# --- NOVINKA: DETEKCE NEZAŘAZENÝCH ŽÁKŮ ---
+res_nezarazeni = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.Nezařazeno&role=neq.ucitel", headers=headers).json()
+nezarazeni_zaci = res_nezarazeni if isinstance(res_nezarazeni, list) else []
+
+if nezarazeni_zaci:
+    st.markdown("""
+    <div class='alert-box' style='border-color: #ef4444; background-color: rgba(239, 68, 68, 0.1); margin-top: 15px;'>
+        <h4 style='margin:0; color:#ef4444;'>⚠️ Nezařazení žáci (Čekají na zařazení do třídy)</h4>
+        <p style='margin: 5px 0 0 0; color:#cbd5e1; font-size: 14px;'>Tito žáci se zaregistrovali výukovým kódem dříve, než jste založili třídu. Přiřaďte je níže.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    with st.expander("Přiřadit nezařazené žáky do vaší třídy", expanded=True):
+        df_nez = pd.DataFrame([{"Jméno žáka": z["jmeno"], "Role": z.get("role", "zak"), "Zůstatek": z.get("kredity", 0)} for z in nezarazeni_zaci])
+        st.dataframe(df_nez, use_container_width=True)
+        
+        if moje_tridy:
+            with st.form("form_zaradit_nezarazene"):
+                col_nz1, col_nz2, col_nz3 = st.columns([2, 2, 1])
+                with col_nz1:
+                    nz_vyber = st.selectbox("Vyberte žáka:", [z["jmeno"] for z in nezarazeni_zaci])
+                with col_nz2:
+                    nz_cilova_trida = st.selectbox("Zařadit do třídy:", [t["nazev_tridy"] for t in moje_tridy])
+                with col_nz3:
+                    st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                    if st.form_submit_button("Přesunout žáka"):
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{nz_vyber}", headers=headers, json={"trida_nazev": nz_cilova_trida})
+                        st.success(f"Žák {nz_vyber} byl přesunut do třídy {nz_cilova_trida}.")
+                        st.rerun()
+        else:
+            st.info("Založte si nejprve výše svou první třídu, abyste do ní mohli žáky zařadit.")
+            
+st.write("---")
 
 if not moje_tridy:
     st.info("Zatím jste si nezaložili žádnou třídu. Vytvořte prosím svou první třídu výše, aby se do ní mohli žáci registrovat a zakládat firmy.")
