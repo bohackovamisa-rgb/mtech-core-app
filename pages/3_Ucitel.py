@@ -298,9 +298,21 @@ with tab_questy:
     with col_q2:
         st.markdown("#### Práce ke kontrole")
         res_q_check = requests.get(f"{SUPABASE_URL}/rest/v1/questy?stav=eq.K_KONTROLE", headers=headers).json()
-        if res_q_check:
+        if isinstance(res_q_check, list) and len(res_q_check) > 0:
             for q in res_q_check:
-                st.markdown(f"<div class='card-box'><h5>{q['nazev']}</h5><p>Zhotovitel: {q['resitel']} <br> <a href='{q['odkaz_vystup']}' target='_blank'>Výstup k posouzení</a></p></div>", unsafe_allow_html=True)
+                
+                # --- BEZPEČNÉ ZPRACOVÁNÍ ODKAZU/TEXTU ---
+                odkaz = q.get('odkaz_vystup', '')
+                if not odkaz:
+                    vystup_html = "<span style='color:#64748b;'><i>Žák neposkytl žádný text ani odkaz, pouze označil jako hotové.</i></span>"
+                elif str(odkaz).startswith("http://") or str(odkaz).startswith("https://"):
+                    vystup_html = f"<a href='{odkaz}' target='_blank' style='color:#0ea5e9; font-weight:bold;'>🔗 Otevřít odkaz na práci žáka</a>"
+                else:
+                    vystup_html = f"<b>Komentář žáka:</b> <i>{odkaz}</i>"
+                # ----------------------------------------
+                
+                st.markdown(f"<div class='card-box'><h5>{q['nazev']}</h5><p>Zhotovitel: <b>{q['resitel']}</b><br><br>{vystup_html}</p></div>", unsafe_allow_html=True)
+                
                 with st.form(f"schvaleni_{q['id']}"):
                     kategorie_xp = st.selectbox("Typ XP bodů:", ["IT a Technologie", "Marketing a Kreativita", "Byznys a Finance"])
                     pocet_xp = st.number_input("Počet XP:", min_value=0, max_value=50, value=10)
@@ -325,7 +337,7 @@ with tab_questy:
                         st.success("Odměna i XP body odeslány!")
                         st.rerun()
         else:
-            st.info("Žádné úkoly nečekají na schválení.")
+            st.info("Žádné úkoly momentálně nečekají na schválení.")
 
 # ==========================================
 # ZÁLOŽKA 6: STÁTNÍ POKLADNA A AI DAŇOVÝ AUDIT
