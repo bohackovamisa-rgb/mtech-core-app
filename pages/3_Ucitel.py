@@ -297,6 +297,8 @@ with tab_questy:
                 st.rerun()
     with col_q2:
         st.markdown("#### Práce ke kontrole")
+        st.caption("Úkoly, které žáci odevzdali. Schválením jim automaticky odešlete sjednané M-Kredity a zároveň jim přidělíte XP body (zkušenosti) pro vylepšení jejich známky.")
+        
         res_q_check = requests.get(f"{SUPABASE_URL}/rest/v1/questy?stav=eq.K_KONTROLE", headers=headers).json()
         if isinstance(res_q_check, list) and len(res_q_check) > 0:
             for q in res_q_check:
@@ -304,22 +306,37 @@ with tab_questy:
                 # Bezpečné zpracování odkazu proti pádu
                 odkaz = q.get('odkaz_vystup', '')
                 if not odkaz:
-                    vystup_html = "<span style='color:#64748b;'><i>Žák neposkytl žádný text ani odkaz, pouze označil jako hotové.</i></span>"
+                    vystup_html = "<span style='color:#64748b;'><i>Žák neposkytl žádný odkaz, pouze napsal, že má hotovo.</i></span>"
                 elif str(odkaz).startswith("http://") or str(odkaz).startswith("https://"):
-                    vystup_html = f"<a href='{odkaz}' target='_blank' style='color:#0ea5e9; font-weight:bold;'>🔗 Otevřít odkaz na práci žáka</a>"
+                    vystup_html = f"<a href='{odkaz}' target='_blank' style='color:#0ea5e9; font-weight:bold;'>🔗 Otevřít odkaz na odevzdanou práci</a>"
                 else:
                     vystup_html = f"<b>Komentář žáka:</b> <i>{odkaz}</i>"
                 
-                st.markdown(f"<div class='card-box'><h5>{q['nazev']}</h5><p>Zhotovitel: <b>{q['resitel']}</b><br><br>{vystup_html}</p></div>", unsafe_allow_html=True)
+                # Spojíme informace o úkolu a formulář do jednoho vizuálního bloku
+                st.markdown(f"""
+                <div class='card-box' style='margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: none;'>
+                    <h5 style='color: #0ea5e9; margin-top: 0;'>{q['nazev']}</h5>
+                    <p style='margin-bottom: 5px;'>Zhotovitel: <b>{q['resitel']}</b></p>
+                    <p style='margin-bottom: 10px; color: #10b981; font-weight: bold;'>Sjednaná odměna k vyplacení: {q['odmena']} M-K</p>
+                    <div style='background: rgba(255,255,255,0.05); padding: 10px; border-radius: 5px;'>
+                        {vystup_html}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
                 
                 with st.form(f"schvaleni_{q['id']}"):
-                    kategorie_xp = st.selectbox("Typ XP bodů:", ["IT a Technologie", "Marketing a Kreativita", "Byznys a Finance"])
-                    pocet_xp = st.number_input("Počet XP:", min_value=0, max_value=50, value=10)
+                    st.markdown("<p style='font-size: 13px; margin-bottom: 5px; color: #cbd5e1;'>Přiřaďte žákovi bonusové XP body k odměně:</p>", unsafe_allow_html=True)
                     
-                    # Dvě tlačítka: Jedno pro schválení, druhé pro zamítnutí
+                    col_xp1, col_xp2 = st.columns([2, 1])
+                    with col_xp1:
+                        kategorie_xp = st.selectbox("Kategorie XP:", ["IT a Technologie", "Marketing a Kreativita", "Byznys a Finance"], label_visibility="collapsed")
+                    with col_xp2:
+                        pocet_xp = st.number_input("Počet XP:", min_value=0, max_value=50, value=10, label_visibility="collapsed")
+                    
+                    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
                     col_btn1, col_btn2 = st.columns(2)
                     with col_btn1:
-                        btn_schvalit = st.form_submit_button("✅ Schválit a vyplatit")
+                        btn_schvalit = st.form_submit_button(f"✅ Schválit ({q['odmena']} M-K + XP)")
                     with col_btn2:
                         btn_zamitnout = st.form_submit_button("❌ Zamítnout (Vrátit)")
 
@@ -329,12 +346,9 @@ with tab_questy:
                             z_data = res_r[0]
                             nove_kredity = z_data['kredity'] + q['odmena']
                             
-                            if kategorie_xp == "IT a Technologie":
-                                xp_col = "xp_it"
-                            elif kategorie_xp == "Marketing a Kreativita":
-                                xp_col = "xp_marketing"
-                            else:
-                                xp_col = "xp_byznys"
+                            if kategorie_xp == "IT a Technologie": xp_col = "xp_it"
+                            elif kategorie_xp == "Marketing a Kreativita": xp_col = "xp_marketing"
+                            else: xp_col = "xp_byznys"
                                 
                             nove_xp = z_data.get(xp_col, 0) + pocet_xp
                             requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{q['resitel']}", headers=headers, json={"kredity": nove_kredity, xp_col: nove_xp})
@@ -345,7 +359,6 @@ with tab_questy:
                         st.rerun()
                         
                     if btn_zamitnout:
-                        # Úkol se vrátí zpět do stavu VOLNY, smaže se řešitel a špatný odkaz
                         requests.patch(f"{SUPABASE_URL}/rest/v1/questy?id=eq.{q['id']}", headers=headers, json={"stav": "VOLNY", "resitel": None, "odkaz_vystup": ""})
                         st.error("Úkol byl zamítnut a vrácen zpět do nabídky na Úřad práce.")
                         st.rerun()
