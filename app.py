@@ -99,7 +99,7 @@ if not st.session_state.prihlasen:
                             requests.post(f"{SUPABASE_URL}/rest/v1/uzivatele", headers=headers, json={"jmeno": reg_jmeno, "heslo": reg_heslo, "role": reg_role, "kredity": start_kredity, "skolni_kod": skolni_kod, "aktivni": True})
                             st.success("Účet vytvořen. Můžete se přihlásit.")
 
-with tab_school_licence:
+    with tab_school_licence:
     st.markdown("### Správa licencí")
     st.caption("Tato sekce je určena výhradně pro správce systému.")
     
