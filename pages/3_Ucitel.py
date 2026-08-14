@@ -308,7 +308,7 @@ else:
 
             st.divider()
             
-            # --- ODMENY A POKUTY ---
+            # --- ODMENY A POKUTY (CELÁ ČÍSLA) ---
             st.markdown("##### 2. Přímé udělení odměny / stržení kreditů žákovi")
             with st.form("form_ucitel_odmena_zaka_penez_robust"):
                 col_o1, col_o2, col_o3 = st.columns([2, 1.5, 1])
@@ -363,11 +363,11 @@ else:
     else:
         firmy_labels = []
         for f in firmy:
-            status_tag = " [ČEKÁ NA SCHVÁLENÍ]" if f.get("stave_licence") == "CEKA_NA_SCHVALENI" else (" [UKONČENO]" if f.get("stave_licence") == "UKONCENO" else "")
+            status_tag = " [ČEKÁ NA SCHVÁLENÍ]" if f.get("stave_licence") == "CEKA_NA_SCHVALENI" else (" [UKONČENO]" if f.get("stave_licence") == "UKONCENO" else (" [ZAMÍTNUTO / POZASTAVENO]" if f.get("stave_licence") == "ZAMITNUTO" else ""))
             firmy_labels.append(f"{f['nazev_firmy']}{status_tag}")
 
         vybrany_label = st.selectbox("Vyberte startup k auditu:", firmy_labels)
-        vybrana_firma_nazev = vybrany_label.replace(" [ČEKÁ NA SCHVÁLENÍ]", "").replace(" [UKONČENO]", "")
+        vybrana_firma_nazev = vybrany_label.replace(" [ČEKÁ NA SCHVÁLENÍ]", "").replace(" [UKONČENO]", "").replace(" [ZAMÍTNUTO / POZASTAVENO]", "")
         firma = next(f for f in firmy if f["nazev_firmy"] == vybrana_firma_nazev)
         f_id = firma["id"]
 
@@ -377,12 +377,11 @@ else:
 
         with tab_legal:
             st.subheader(f"Firemní spis: {firma['nazev_firmy']} (Třída: {aktivni_trida})")
-            col_l1, col_l2 = st.columns([1.6, 1])
+            col_l1, col_l2 = st.columns([1.5, 1.2])
             with col_l1:
                 res_zamestnanci = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{f_id}", headers=headers).json()
                 zamestnanci = res_zamestnanci if isinstance(res_zamestnanci, list) else []
                 
-                # Výpočet počtu lidí
                 pocet_vedeni = 1 + (1 if firma.get('cfo_jmeno') else 0) + (1 if firma.get('cto_jmeno') else 0)
                 pocet_zam = len(zamestnanci)
                 pocet_celkem = pocet_vedeni + pocet_zam
@@ -395,49 +394,60 @@ else:
                     st.markdown(f"**Základní kapitál:** `{firma.get('pocatecni_kapital', 100)} M-K`")
                     st.divider()
                     
-                    # AUDITNÍ VÝSTRAŽNÝ BLOK PRO UČITELE
                     if pocet_celkem < planovany_pocet:
                         st.error(f"""
                         🚨 **NESOULAD SE ZAKLADATELSKOU LISTINOU**  
-                        V zakladatelském spisu firma deklarovala **{planovany_pocet} členů**, ale aktuálně má zapsáno pouze **{pocet_celkem} osob** ({pocet_vedeni} ve vedení + {pocet_zam} zaměstnanců).  
+                        Firma deklarovala **{planovany_pocet} členů**, ale má zapsáno pouze **{pocet_celkem} osob** ({pocet_vedeni} vedení + {pocet_zam} zaměstnanců).  
                         ⚠️ **Chybí registrovat a přijmout ještě {planovany_pocet - pocet_celkem} člena/členy!**
                         """)
-                    elif pocet_celkem > planovany_pocet:
-                        st.info(f"ℹ️ **Rozšířený tým:** V zakladatelském spisu bylo nahlášeno {planovany_pocet} osob, firma má aktuálně {pocet_celkem} členů.")
                     else:
                         st.success(f"✅ **Počet členů v pořádku:** Evidováno {pocet_celkem} z {planovany_pocet} nahlášených osob.")
                         
                     st.divider()
-                    st.markdown("#### Předmět podnikání a Živnost")
-                    zamer_raw = str(firma.get('podnikatelsky_zamer', ''))
-                    if "|" in zamer_raw:
-                        for p in [p.strip() for p in zamer_raw.split("|")]: st.markdown(f"* {p}")
-                    else: st.write(zamer_raw if zamer_raw else "Neuvedeno")
-                    st.divider()
-                    st.markdown("#### Statutární orgány (Vedení)")
+                    st.markdown("#### Statutární orgány a pracovníci")
                     st.markdown(f"* **CEO (Generální ředitel):** {firma.get('ceo_jmeno', 'Neobsazeno')}")
                     st.markdown(f"* **CFO (Finanční ředitel):** {firma.get('cfo_jmeno', 'Neobsazeno')}")
                     st.markdown(f"* **CTO (Technický ředitel):** {firma.get('cto_jmeno', 'Neobsazeno')}")
-                    st.divider()
-                    st.markdown("#### Zaměstnanci a pracovníci")
                     if zamestnanci:
                         for z in zamestnanci: st.markdown(f"* **{z['jmeno_zamestnance']}** — {z.get('pozice', 'Pracovník')} ({z.get('hodinova_sazba', 0)} M-K/hod)")
                     else: st.info("Firma zatím nemá žádné řadové zaměstnance.")
+            
             with col_l2:
                 stav = firma.get('stave_licence', 'CEKA_NA_SCHVALENI')
                 stav_tridy = 'status-ok' if stav == 'SCHVALENO' else ('status-err' if stav in ['ZAMITNUTO', 'UKONCENO'] else 'status-wait')
                 with st.container(border=True):
-                    st.markdown("#### Stav zápisu do rejstříku")
-                    st.markdown(f"Aktuální stav: <span class='{stav_tridy}'>{stav}</span>", unsafe_allow_html=True)
+                    st.markdown("#### Správa licence a rozhodnutí úřadu")
+                    st.markdown(f"Aktuální právní stav: <span class='{stav_tridy}'>{stav}</span>", unsafe_allow_html=True)
                     if firma.get('duvod_zamitnuti'):
-                        st.caption(f"Poznámka / Likvidace: {firma.get('duvod_zamitnuti')}")
-                
-                if stav == "CEKA_NA_SCHVALENI":
-                    if st.button("Schválit zápis do rejstříku a povolit činnost", type="primary"):
+                        st.caption(f"**Důvod / Zpráva pro firmu:** {firma.get('duvod_zamitnuti')}")
+
+                # --- 1. MOŽNOST: SCHVÁLIT / OBNOVIT ČINNOST ---
+                if stav != "SCHVALENO":
+                    if st.button("✅ Schválit zápis do rejstříku a povolit činnost", type="primary"):
                         requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{f_id}", headers=headers, json={"stave_licence": "SCHVALENO", "duvod_zamitnuti": ""})
                         st.success(f"Firma {firma['nazev_firmy']} byla zapsána do rejstříku.")
                         time.sleep(1.5)
                         st.rerun()
+
+                # --- 2. MOŽNOST: VRÁTIT K DOPRACOVÁNÍ / POZASTAVIT (ZAMÍTNOUT) ---
+                with st.expander("⚠️ Vrátit k dopracování / Pozastavit licenci (Zamítnout)", expanded=(stav == "SCHVALENO" and pocet_celkem < planovany_pocet)):
+                    with st.form("form_zamitnout_firmu_ucitel"):
+                        duvod_default = f"Nesoulad se zakladatelskou listinou: chybí {planovany_pocet - pocet_celkem} člen/členové týmu." if pocet_celkem < planovany_pocet else "Doplňte náležitosti."
+                        duvod_zam = st.text_area("Důvod vrácení / pokyny pro CEO:", value=duvod_default)
+                        if st.form_submit_button("Odebrat licenci / Vrátit k přepracování"):
+                            requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{f_id}", headers=headers, json={"stave_licence": "ZAMITNUTO", "duvod_zamitnuti": duvod_zam.strip()})
+                            st.warning(f"Firma {firma['nazev_firmy']} byla vrácena k přepracování.")
+                            time.sleep(1.5)
+                            st.rerun()
+
+                # --- 3. MOŽNOST: NUCENÝ VÝMAZ / LIKVIDACE ---
+                if stav != "UKONCENO":
+                    with st.expander("🛑 Nucený výmaz z rejstříku (Zrušení firmy)"):
+                        if st.button("Definitivně vymazat firmu z rejstříku"):
+                            requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{f_id}", headers=headers, json={"stave_licence": "UKONCENO", "duvod_zamitnuti": "[NUCENÝ VÝMAZ KONTROLNÍM ÚŘADEM]"})
+                            st.error(f"Firma {firma['nazev_firmy']} byla zrušena.")
+                            time.sleep(1.5)
+                            st.rerun()
 
         with tab_aktiva:
             canvas = requests.get(f"{SUPABASE_URL}/rest/v1/lean_canvas?firma_id=eq.{f_id}", headers=headers).json()
