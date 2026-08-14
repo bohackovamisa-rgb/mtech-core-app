@@ -3,6 +3,7 @@ import requests
 import datetime
 import pandas as pd
 import json
+import re
 
 st.set_page_config(page_title="Startup Hub a Dashboard", layout="wide")
 
@@ -16,17 +17,22 @@ st.markdown("""
     .card-box { background-color: #1e293b; padding: 20px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 15px; }
     .status-badge-ok { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid #10b981; padding: 10px; border-radius: 8px; font-weight: 700; text-align: center; font-size: 12px; }
     .status-badge-wait { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid #f59e0b; padding: 10px; border-radius: 8px; font-weight: 700; text-align: center; font-size: 12px; }
+    .status-badge-err { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid #ef4444; padding: 10px; border-radius: 8px; font-weight: 700; text-align: center; font-size: 12px; }
     .kanban-col-header { text-align: center; font-weight: 800; padding: 12px; border-radius: 8px; margin-bottom: 15px; color: #fff; text-transform: uppercase; font-size: 14px; }
     .header-todo { background: linear-gradient(45deg, #475569, #334155); }
     .header-ip { background: linear-gradient(45deg, #f59e0b, #d97706); }
     .header-done { background: linear-gradient(45deg, #10b981, #059669); }
-    .kanban-card { background-color: #0f172a; padding: 15px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid #00B4D8; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-    .sp-badge { float: right; background-color: #334155; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; color: #cbd5e1; }
     .status-ok { color: #34d399; font-weight: 700; }
     .status-wait { color: #fbbf24; font-weight: 700; }
     .status-err { color: #f87171; font-weight: 700; }
     </style>
 """, unsafe_allow_html=True)
+
+def parse_planovany_pocet(zamer_text):
+    if not zamer_text: return 4
+    match = re.search(r'Nahlášený počet členů týmu:\s*(\d+)', str(zamer_text))
+    if match: return int(match.group(1))
+    return 4
 
 if not st.session_state.get("prihlasen"):
     st.warning("Pro zobrazení Dashboardu se musíte přihlásit na hlavní obrazovce.")
@@ -89,7 +95,7 @@ if isinstance(nastaveni_res, list) and len(nastaveni_res) > 0:
     kurz_kc = float(nastaveni_res[0].get('kurz_kc', 10.0))
 
 # =========================================================================
-# 1. ZALOŽENÍ FIRMY (POKUD FIRMA NEEXISTUJE)
+# 1. ZALOŽENÍ FIRMY (S EXPLICITNÍM POČTEM ČLENŮ)
 # =========================================================================
 if not moje_firma:
     st.info(f"Vítejte v podnikatelském akcelerátoru M-TECH (Třída: {trida_nazev or 'Vaše třída'}).")
@@ -115,11 +121,11 @@ if not moje_firma:
         col_k1, col_k2 = st.columns(2)
         with col_k1: 
             if aktualni_zustatek_zaka < 10.0:
-                st.error(f"Váš osobní zůstatek je pouze {aktualni_zustatek_zaka:.2f} M-K. Pro založení firmy potřebujete minimálně 10 M-K. Jděte do Moje peněženka -> Úřad práce a splňte úkoly od vyučujícího!")
-                vklad_hodnota = 0.0
+                st.error(f"Váš osobní zůstatek je pouze {aktualni_zustatek_zaka:.2f} M-K. Pro založení firmy potřebujete minimálně 10 M-K. Jděte do Moje peněženka -> Úřad práce!")
+                vklad_hodnota = 0
             else:
                 vklad_hodnota = st.number_input(
-                    f"Vklad základního kapitálu (Máte k dispozici: {aktualni_zustatek_zaka:.2f} M-K):",
+                    f"Vklad základního kapitálu (K dispozici: {aktualni_zustatek_zaka} M-K):",
                     min_value=10, max_value=int(aktualni_zustatek_zaka), value=min(100, int(aktualni_zustatek_zaka)), step=5
                 )
             st.session_state.reg_data["vklad"] = vklad_hodnota
@@ -141,7 +147,7 @@ if not moje_firma:
         st.session_state.reg_data["zdanovaci_obdobi"] = st.selectbox("Zdaňovací období:", ["Měsíční", "Čtvrtletní"])
 
     with u_cssz:
-        st.session_state.reg_data["pocet_zakladatelu"] = st.number_input("Předpokládaný celkový počet členů týmu:", min_value=1, value=4)
+        st.session_state.reg_data["pocet_zakladatelu"] = st.number_input("Celkový nahlášený počet členů firmy (Vedení + Zaměstnanci):", min_value=1, max_value=20, value=4, step=1)
         st.session_state.reg_data["bozp_prohlaseni"] = st.checkbox("Čestně prohlašuji, že pracoviště splňuje bezpečnostní předpisy BOZP.", value=True)
 
     with u_rejstrik:
@@ -163,7 +169,9 @@ if not moje_firma:
             else:
                 cfo_val = None if d.get("cfo") == "-- Neobsazeno --" else d.get("cfo")
                 cto_val = None if d.get("cto") == "-- Neobsazeno --" else d.get("cto")
-                zamer_str = f"Druh živnosti: {d.get('druh_zivnosti')} | Obor: {d.get('zivnost_detail', '')} | Předmět: {d.get('predmet', '')} | Garant BOZP: {d.get('bozp_garant', '')} | Provozovna: {d.get('provozovna', '')}"
+                
+                plan_clenove = int(d.get('pocet_zakladatelu', 4))
+                zamer_str = f"Nahlášený počet členů týmu: {plan_clenove} | Druh živnosti: {d.get('druh_zivnosti')} | Obor: {d.get('zivnost_detail', '')} | Předmět: {d.get('predmet', '')} | Garant BOZP: {d.get('bozp_garant', '')} | Provozovna: {d.get('provozovna', '')}"
                 
                 novy_osobni_zustatek = int(aktualni_zustatek_zaka - vklad_k_prevodu)
                 requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers, json={"kredity": novy_osobni_zustatek})
@@ -192,17 +200,35 @@ if not moje_firma:
 # 2. HLAVNÍ STRÁNKA FIRMY
 # =========================================================================
 st.subheader(f"Entita: {moje_firma['nazev_firmy']} (Vaše role: {moje_role})")
-col_s1, col_s2, col_s3, col_s4, col_s5 = st.columns(5)
 
+res_zam_global = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{moje_firma['id']}&select=*", headers=headers).json()
+zamestnanci_firmy = res_zam_global if isinstance(res_zam_global, list) else []
+
+pocet_vedeni = 1 + (1 if moje_firma.get('cfo_jmeno') else 0) + (1 if moje_firma.get('cto_jmeno') else 0)
+pocet_zam = len(zamestnanci_firmy)
+pocet_celkem_tym = pocet_vedeni + pocet_zam
+planovany_pocet_clenu = parse_planovany_pocet(moje_firma.get('podnikatelsky_zamer', ''))
+
+col_s1, col_s2, col_s3, col_s4, col_s5 = st.columns(5)
 stav_text = "Rejstřík OK" if moje_firma["stave_licence"] == "SCHVALENO" else ("Ukončeno" if moje_firma["stave_licence"] == "UKONCENO" else ("Zamítnuto" if moje_firma["stave_licence"] == "ZAMITNUTO" else "Čeká na audit"))
 badge_class = "status-badge-ok" if moje_firma["stave_licence"] == "SCHVALENO" else "status-badge-wait"
 
+tym_badge_class = "status-badge-ok" if pocet_celkem_tym >= planovany_pocet_clenu else "status-badge-err"
+
 with col_s1: st.markdown(f'<div class="{badge_class}">{stav_text}</div>', unsafe_allow_html=True)
-with col_s2: st.markdown('<div class="status-badge-ok">Brand a Vize</div>', unsafe_allow_html=True)
+with col_s2: st.markdown(f'<div class="{tym_badge_class}">Tým: {pocet_celkem_tym} / {planovany_pocet_clenu} osob</div>', unsafe_allow_html=True)
 with col_s3: st.markdown('<div class="status-badge-ok">Agilní Vývoj</div>', unsafe_allow_html=True)
-with col_s4: st.markdown('<div class="status-badge-ok">HR a Úřady</div>', unsafe_allow_html=True)
+with col_s4: st.markdown('<div class="status-badge-ok">HR a Mzdy</div>', unsafe_allow_html=True)
 with col_s5: st.markdown('<div class="status-badge-ok">Finance</div>', unsafe_allow_html=True)
 st.write("---")
+
+# Upozornění na neshodu počtu členů se spisem
+if pocet_celkem_tym < planovany_pocet_clenu:
+    st.error(f"""
+    🚨 **NESOULAD SE ZAKLADATELSKOU LISTINOU (Chybí členové týmu):**  
+    V zakladatelském spisu máte nahlášeno **{planovany_pocet_clenu} členů**, ale reálně máte v systému zapsáno pouze **{pocet_celkem_tym} osob** ({pocet_vedeni} vedení + {pocet_zam} zaměstnanců).  
+    👉 Přejděte do záložky **4. Tým a HR** a doplňte zbývajícího zaměstnance, jinak Kontrolní úřad neschválí váš audit!
+    """)
 
 if moje_firma["stave_licence"] == "CEKA_NA_SCHVALENI":
     st.warning("Vaše firma byla odeslána na Kontrolní úřad a čeká na posouzení vyučujícím.")
@@ -233,12 +259,8 @@ else:
     ])
     tab_brand = tab_vyvoj = tab_hr = tab_kalkulace = tab_ucto = tab_burza = tab_likvidace = None
 
-# Načteme zaměstnance firmy pro všechny záložky
-res_zam_global = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{moje_firma['id']}&select=*", headers=headers).json()
-zamestnanci_firmy = res_zam_global if isinstance(res_zam_global, list) else []
-
 # ==========================================
-# ZÁLOŽKA 1: SPIS (A DODATEČNÉ OBSAZENÍ VEDENÍ)
+# ZÁLOŽKA 1: SPIS (A DODATEČNÁ SPRÁVA VEDENÍ)
 # ==========================================
 with tab_zalozeni:
     st.subheader("Registrační spis a Právní status")
@@ -248,14 +270,16 @@ with tab_zalozeni:
     with st.container(border=True):
         st.markdown(f"**Obchodní firma:** `{moje_firma['nazev_firmy']}`")
         st.markdown(f"**Třída:** `{moje_firma.get('trida_nazev', trida_nazev)}`")
-        st.markdown(f"**CEO (Ředitel):** `{moje_firma.get('ceo_jmeno', 'Neobsazeno')}` | **CFO:** `{moje_firma.get('cfo_jmeno', 'Neobsazeno')}` | **CTO:** `{moje_firma.get('cto_jmeno', 'Neobsazeno')}`")
-        st.markdown(f"**Počet zaměstnanců:** `{len(zamestnanci_firmy)} pracovníků`")
+        st.markdown(f"**CEO (Generální ředitel):** `{moje_firma.get('ceo_jmeno', 'Neobsazeno')}`")
+        st.markdown(f"**CFO (Finanční ředitel):** `{moje_firma.get('cfo_jmeno', 'Neobsazeno')}`")
+        st.markdown(f"**CTO (Technický ředitel):** `{moje_firma.get('cto_jmeno', 'Neobsazeno')}`")
+        st.markdown(f"**Zaměstnanci:** `{len(zamestnanci_firmy)} evidovaných pracovníků`")
+        st.markdown(f"**Nahlášená kapacita v zakladatelské listině:** `{planovany_pocet_clenu} osob`")
         st.markdown(f"**Základní kapitál:** `{moje_firma.get('pocatecni_kapital', 100)} M-K`")
         st.divider()
         st.markdown("**Předmět podnikání a záměr:**")
         st.write(moje_firma.get('podnikatelsky_zamer', 'Neuvedeno'))
         
-    # Umožnění CEO dodatečně obsadit nebo upravit CFO / CTO (pokud se spolužáci registrovali později)
     if moje_role == "CEO":
         with st.expander("Aktualizovat statutární vedení (CFO / CTO)", expanded=False):
             st.caption("Pokud se vaši spolužáci zaregistrovali až po založení firmy, můžete jim zde přiřadit vedení.")
@@ -377,7 +401,8 @@ if tab_vyvoj:
 # ==========================================
 if tab_hr:
     with tab_hr:
-        st.markdown("#### Seznam zaměstnanců firmy")
+        st.markdown(f"#### Obsazenost týmu: `{pocet_celkem_tym} / {planovany_pocet_clenu} osob`")
+        
         if zamestnanci_firmy:
             df_zam = pd.DataFrame(zamestnanci_firmy)
             zobrazit_sloupce = [c for c in ['jmeno_zamestnance', 'pozice', 'hodinova_sazba', 'vyplaceno_celkem'] if c in df_zam.columns]
@@ -388,8 +413,7 @@ if tab_hr:
 
         st.divider()
         st.markdown("#### Přijmout nového zaměstnance do firmy")
-        st.caption("Zde se zobrazují všichni žáci ze třídy, kteří ještě nejsou ve vaší firmě.")
-
+        
         # Všichni žáci ve třídě
         res_zaci_tridy = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.{trida_nazev}&role=neq.ucitel", headers=headers).json()
         
@@ -541,7 +565,7 @@ if tab_denik:
                     st.info("Firma zatím nemá žádné zápisy z porad.")
 
 # ==========================================
-# ZÁLOŽKA 9: LIKVIDACE A UKONČENÍ FIRMY (VRÁCENO)
+# ZÁLOŽKA 9: LIKVIDACE A UKONČENÍ FIRMY
 # ==========================================
 if tab_likvidace:
     with tab_likvidace:
