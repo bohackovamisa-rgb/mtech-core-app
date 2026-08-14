@@ -120,7 +120,7 @@ with tab_school_licence:
         elif master_password != "":
             st.error("Nesprávné heslo!")
 
-else:
+    else:
     if st.session_state.role == "zak": pg = st.navigation([zaci_page, trh_page, zebricky_page])
     elif st.session_state.role == "firma": pg = st.navigation([firma_page, zaci_page, trh_page, zebricky_page])
     elif st.session_state.role == "ucitel": pg = st.navigation([ucitel_page, trh_page, zebricky_page])
