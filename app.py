@@ -38,6 +38,15 @@ ucitel_page = st.Page("pages/3_Ucitel.py", title="Kontrolní úřad")
 trh_page = st.Page("pages/4_Trh.py", title="Tržiště produktů")
 zebricky_page = st.Page("pages/5_Zebricky.py", title="Síň slávy")
 
+# Živá synchronizace aktuální role žáka přímo z databáze
+if st.session_state.prihlasen and st.session_state.uzivatel:
+    res_live = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{st.session_state.uzivatel}&select=role,kredity,trida_nazev,skolni_kod", headers=headers).json()
+    if res_live and isinstance(res_live, list) and len(res_live) > 0:
+        st.session_state.role = str(res_live[0]["role"]).lower()
+        st.session_state.kredity = res_live[0]["kredity"]
+        st.session_state.trida_nazev = res_live[0].get("trida_nazev", "")
+        st.session_state.skolni_kod = res_live[0].get("skolni_kod", "")
+
 if not st.session_state.prihlasen:
     st.markdown("""
         <div class="hero-card">
@@ -58,7 +67,7 @@ if not st.session_state.prihlasen:
     # ZÁLOŽKA 1: PŘIHLÁŠENÍ DO SYSTÉMU
     # ----------------------------------------------------
     with tab_login:
-        with st.form("login_form"):
+        with st.form("main_login_form"):
             jmeno = st.text_input("Přihlašovací jméno:")
             heslo = st.text_input("Heslo:", type="password")
             if st.form_submit_button("Vstoupit do ekosystému"):
@@ -76,11 +85,10 @@ if not st.session_state.prihlasen:
                         st.error("Nesprávné přihlašovací údaje.")
                 else:
                     st.warning("Vyplňte obě pole.")
-        
         st.caption("Zapomněli jste heslo? Žáci požádají svého vyučujícího o reset. Učitelé kontaktují správce systému.")
 
     # ----------------------------------------------------
-    # ZÁLOŽKA 2: REGISTRACE PRO ŽÁKY A UČITELE
+    # ZÁLOŽKA 2: REGISTRACE ÚČTU
     # ----------------------------------------------------
     with tab_user_reg:
         st.info("Zadejte přístupový kód školy, který jste obdrželi.")
@@ -92,12 +100,14 @@ if not st.session_state.prihlasen:
         dostupne_tridy = []
         
         if vstupni_kod:
+            # 1. Zkusíme zjistit, zda jde o zákaznický kód
             res_nast = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?zakaznicky_kod=eq.{vstupni_kod}", headers=headers).json()
             if res_nast and isinstance(res_nast, list) and len(res_nast) > 0:
                 is_customer = True
                 skolni_kod_actual = res_nast[0]['skolni_kod']
                 start_kredit_zakaznik = res_nast[0].get('start_kredit_zakaznik', 50)
             else:
+                # 2. Nebo zda jde o výukový kód
                 res_lic = requests.get(f"{SUPABASE_URL}/rest/v1/licencovane_skoly?licencni_kod=eq.{vstupni_kod}", headers=headers).json()
                 if res_lic and isinstance(res_lic, list) and len(res_lic) > 0:
                     skolni_kod_actual = vstupni_kod
@@ -105,7 +115,7 @@ if not st.session_state.prihlasen:
                     if isinstance(res_tridy, list) and res_tridy:
                         dostupne_tridy = res_tridy
 
-        with st.form("user_reg_form"):
+        with st.form("main_user_reg_form"):
             reg_jmeno = st.text_input("Uživatelské jméno:")
             reg_heslo = st.text_input("Heslo:", type="password")
             
@@ -169,7 +179,7 @@ if not st.session_state.prihlasen:
             adm_tab1, adm_tab2 = st.tabs(["Generování licencí pro školy", "Správa hesel vyučujících"])
             
             with adm_tab1:
-                with st.form("school_admin_form"):
+                with st.form("form_admin_generate_school"):
                     nazev_skoly = st.text_input("Název vzdělávací instituce:")
                     kontakt_email = st.text_input("Kontaktní e-mail zástupce školy:")
                     
@@ -194,7 +204,7 @@ if not st.session_state.prihlasen:
                 st.markdown("#### Reset hesla pro vyučujícího")
                 res_ucitele = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.ucitel", headers=headers).json()
                 if res_ucitele and isinstance(res_ucitele, list):
-                    with st.form("form_admin_reset_ucitele"):
+                    with st.form("form_admin_reset_pw_teacher"):
                         ucitel_reset_jmeno = st.selectbox("Vyberte vyučujícího:", [f"{u['jmeno']} (Kód školy: {u.get('skolni_kod', '')})" for u in res_ucitele])
                         nove_heslo_ucitele = st.text_input("Zadejte nové heslo:", value="1234")
                         if st.form_submit_button("Nastavit nové heslo učiteli"):
@@ -207,6 +217,9 @@ if not st.session_state.prihlasen:
             st.error("Nesprávné administrátorské heslo!")
 
 else:
+    # ----------------------------------------------------
+    # MENU PŘIHLÁŠENÉHO UŽIVATELE (POSTRANNÍ PANEL)
+    # ----------------------------------------------------
     with st.sidebar:
         st.markdown(f"Uživatel: **{st.session_state.uzivatel}**")
         role_zobr = "Učitel" if st.session_state.role == "ucitel" else ("Podnikatel" if st.session_state.role == "firma" else ("Běžný žák" if st.session_state.role == "zak" else "Hlavní Admin"))
@@ -216,7 +229,7 @@ else:
         st.markdown(f"Zůstatek: **{st.session_state.kredity} M-K**")
         
         with st.expander("Změnit mé heslo"):
-            with st.form("form_zmena_vlastniho_hesla"):
+            with st.form("app_sidebar_change_pwd_form"):
                 moje_nove_heslo = st.text_input("Nové heslo:", type="password")
                 if st.form_submit_button("Uložit nové heslo"):
                     if moje_nove_heslo.strip():
@@ -229,6 +242,7 @@ else:
             st.session_state.clear()
             st.rerun()
             
+    # Navigace do konkrétních stránek podle role
     if st.session_state.role == "zak": pg = st.navigation([zaci_page, trh_page, zebricky_page])
     elif st.session_state.role == "firma": pg = st.navigation([firma_page, zaci_page, trh_page, zebricky_page])
     elif st.session_state.role == "ucitel": pg = st.navigation([ucitel_page, trh_page, zebricky_page])
