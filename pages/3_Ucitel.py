@@ -42,7 +42,50 @@ res_ucitel = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{st.sessio
 skolni_kod_ucitele = res_ucitel[0].get("skolni_kod", "") if res_ucitel else ""
 is_admin = str(st.session_state.get("role")).upper() == "ADMIN"
 
-# Načtení firem – ADMIN vidí vše, UČITEL POUZE svou školu
+# =========================================================================
+# 🎓 SEKCIE PRO SPRÁVU ŽÁKŮ A PŘIDĚLOVÁNÍ PODNIKATELSKÝCH OPRÁVNĚNÍ
+# =========================================================================
+with st.expander("🎓 Správa žáků & Udělování oprávnění k založení firmy", expanded=True):
+    st.caption("Zde vidíte všechny registrované žáky vaší školy. Můžete vybrat studenty, kterým povolíte přístup k zakládání a vedení startupu.")
+    
+    if is_admin:
+        zaci_skoly = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=neq.ucitel&order=id.desc", headers=headers).json()
+    else:
+        zaci_skoly = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod_ucitele}&role=neq.ucitel&order=id.desc", headers=headers).json()
+    
+    if not zaci_skoly or not isinstance(zaci_skoly, list):
+        st.info("💡 Ve vaší škole zatím nejsou zaregistrováni žádní žáci.")
+        st.caption(f"Předejte žákům licenční kód: **{skolni_kod_ucitele}**. Jakmile se zaregistrují, uvidíte je v této tabulce.")
+    else:
+        tabulka_zaku = []
+        for z in zaci_skoly:
+            role_text = "Podnikatel (Může založit firmu)" if z.get("role") == "firma" else "Běžný žák (Práce a nákup)"
+            tabulka_zaku.append({
+                "Uživatelské jméno": z.get("jmeno"),
+                "Aktuální role": role_text,
+                "Zůstatek (M-K)": z.get("kredity", 0)
+            })
+        st.dataframe(pd.DataFrame(tabulka_zaku), use_container_width=True)
+        
+        st.markdown("##### Změnit oprávnění žáka:")
+        col_z1, col_z2, col_z3 = st.columns([2, 2, 1])
+        with col_z1:
+            vybrany_zak = st.selectbox("Vyberte žáka:", [z["jmeno"] for z in zaci_skoly])
+        with col_z2:
+            nova_role = st.selectbox("Nastavit oprávnění:", ["firma (Podnikatel / Zakladatel)", "zak (Běžný žák)"])
+        with col_z3:
+            st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+            if st.button("Uložit roli"):
+                role_kod = "firma" if "firma" in nova_role else "zak"
+                requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_zak}", headers=headers, json={"role": role_kod})
+                st.success(f"Žákovi {vybrany_zak} byla nastavena nová role.")
+                st.rerun()
+
+st.write("---")
+
+# =========================================================================
+# AUDIT FIREM (POKUD NĚJAKÁ EXISTUJE)
+# =========================================================================
 if is_admin:
     res_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?select=*&order=id.desc", headers=headers).json()
 else:
@@ -51,8 +94,8 @@ else:
 firmy = res_firmy if (isinstance(res_firmy, list) and res_firmy) else []
 
 if not firmy:
-    st.info("💡 Ve vaší škole zatím žádný žák nezaložil startup.")
-    st.caption(f"Váš licenční kód školy je: **{skolni_kod_ucitele}**. Jakmile žák projde notářem a odešle firmu ke schválení, objeví se vám zde.")
+    st.info("💡 Ve vaší škole zatím žádný žák neodeslal žádost o registraci firmy.")
+    st.caption("Jakmile žák s rolí 'Podnikatel' projde notářem a odešle firmu ke schválení, otevře se vám zde kompletní auditní panel (Lean Canvas, E-shop, Účetnictví, Daně atd.).")
     st.stop()
 
 vybrana_firma_nazev = st.selectbox("Vyberte startup k auditu:", [f["nazev_firmy"] for f in firmy])
