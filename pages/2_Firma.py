@@ -229,6 +229,7 @@ if moje_firma["stave_licence"] == "CEKA_NA_SCHVALENI":
 if moje_firma["stave_licence"] == "ZAMITNUTO":
     st.error(f"Žádost o zápis do rejstříku byla Kontrolním úřadem vrácena k přepracování.\n\n**Důvod zamítnutí:** {moje_firma.get('duvod_zamitnuti', 'Bez udání důvodu.')}")
 
+# Rozdělení záložek podle role
 if moje_role == "CEO":
     tab_zalozeni, tab_brand, tab_vyvoj, tab_hr, tab_kalkulace, tab_ucto, tab_burza, tab_denik = st.tabs([
         "1. Zakladatelský Spis", "2. Brand a AI Tank", "3. Řízení (Agile)", "4. Tým a HR", "5. Cenotvorba", "6. Účetnictví a Daně", "7. Burza", "8. Výkazy práce"
@@ -245,7 +246,7 @@ elif moje_role == "CTO":
     tab_hr = tab_ucto = tab_burza = None
 else:
     tab_zalozeni, tab_denik = st.tabs([
-        "1. Můj profil a Moje firma", "2. Výkaz odpracované práce a Tým"
+        "1. Můj profil a Moje firma", "2. Výkazy práce"
     ])
     tab_brand = tab_vyvoj = tab_hr = tab_kalkulace = tab_ucto = tab_burza = None
 
@@ -512,14 +513,32 @@ if tab_burza:
 # ==========================================
 if tab_denik:
     with tab_denik:
-        st.subheader("Deník práce")
+        st.subheader("Deník práce a Výkazy")
+        st.markdown("Zde evidujte, na čem jste konkrétně pracovali. Tyto výkazy slouží pro vyučujícího k hodnocení vaší aktivity.")
+        
         with st.form("form_denik_prace_safe"):
-            dp_popis = st.text_area("Popis práce:")
-            dp_hodiny = st.number_input("Počet hodin:", min_value=0.5, max_value=12.0, value=1.0, step=0.5)
+            dp_popis = st.text_area("Co přesně jste udělali / odpracovali:")
+            dp_hodiny = st.number_input("Počet odpracovaných hodin:", min_value=0.5, max_value=12.0, value=1.0, step=0.5)
             if st.form_submit_button("Uložit do výkazu"):
                 if dp_popis.strip():
-                    requests.post(f"{SUPABASE_URL}/rest/v1/denik_prace", headers=headers, json={"jmeno_zaka": uzivatel, "firma_id": moje_firma['id'], "popis_prace": dp_popis.strip(), "hodiny": dp_hodiny})
-                    st.success("Záznam uložen.")
+                    requests.post(f"{SUPABASE_URL}/rest/v1/denik_prace", headers=headers, json={
+                        "jmeno_zaka": uzivatel, 
+                        "firma_id": moje_firma['id'], 
+                        "popis_prace": dp_popis.strip(), 
+                        "hodiny": dp_hodiny
+                    })
+                    st.success("Záznam byl úspěšně uložen.")
                     st.rerun()
                 else:
                     st.error("Vyplňte popis práce.")
+        
+        st.divider()
+        st.markdown("#### Historie odvedené práce ve firmě")
+        res_denik = requests.get(f"{SUPABASE_URL}/rest/v1/denik_prace?firma_id=eq.{moje_firma['id']}&order=id.desc", headers=headers).json()
+        if isinstance(res_denik, list) and len(res_denik) > 0:
+            df_denik = pd.DataFrame(res_denik)
+            zobrazit = [c for c in ['datum', 'jmeno_zaka', 'popis_prace', 'hodiny'] if c in df_denik.columns]
+            df_show = df_denik[zobrazit].rename(columns={'datum': 'Datum', 'jmeno_zaka': 'Pracovník', 'popis_prace': 'Popis činnosti', 'hodiny': 'Hodiny'})
+            st.dataframe(df_show, use_container_width=True)
+        else:
+            st.info("Zatím nebyly zaznamenány žádné pracovní výkazy.")
