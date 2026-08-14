@@ -66,48 +66,84 @@ st.markdown(f"""
     </div>
 """, unsafe_allow_html=True)
 
-tab_banka, tab_questy, tab_burza, tab_profil = st.tabs(["1. Banka a Převody", "2. Úřad práce", "3. Burza", "4. M-TECH ID (Certifikát)"])
+tab_banka, tab_questy, tab_burza, tab_profil = st.tabs(["1. Platba firmě & Převody", "2. Úřad práce", "3. Burza", "4. M-TECH ID (Certifikát)"])
 
+# =========================================================================
+# ZÁLOŽKA 1: PLATBA STUDENTSKÉ FIRMĚ ZA ZBOŽÍ A SLUŽBY
+# =========================================================================
 with tab_banka:
     col1, col2 = st.columns([1, 1.5])
     with col1:
-        st.subheader("Přímá platba (P2P)")
+        st.subheader("Platba studentské firmě")
+        st.caption("Zde platíte za zakázky, zboží nebo služby přímo do účetnictví firem.")
         
-        # Načteme POUZE spolužáky ze stejné školy (učitelé, admini a cizí školy jsou vyloučeni)
-        res_vse = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&role=neq.ucitel&select=jmeno,role", headers=headers).json()
-        spoluzaci = [u['jmeno'] for u in res_vse if u['jmeno'] != uzivatel and str(u.get('role')).lower() != 'admin'] if isinstance(res_vse, list) else []
+        # Načteme POUZE schválené firmy z dané školy
+        res_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{skolni_kod}&stave_licence=eq.SCHVALENO", headers=headers).json()
+        firmy_k_platbe = res_firmy if (isinstance(res_firmy, list) and res_firmy) else []
         
-        if not spoluzaci:
-            st.info("💡 Ve vaší škole zatím nejsou registrováni žádní další spolužáci pro převod peněz.")
+        if not firmy_k_platbe:
+            st.info("💡 Ve vaší škole zatím není žádná schválená aktivní firma, které by bylo možné poslat platbu.")
         else:
-            with st.form("platba_form"):
-                prijemce = st.selectbox("Komu posíláte platbu:", spoluzaci)
-                castka = st.number_input("Částka (M-K):", min_value=1.0, value=10.0)
-                ucel = st.text_input("Účel platby:")
-                if st.form_submit_button("Odeslat peníze"):
+            seznam_firem_nazvy = [f["nazev_firmy"] for f in firmy_k_platbe]
+            with st.form("platba_firme_form"):
+                vybrana_firma = st.selectbox("Vyberte firmu příjemce:", seznam_firem_nazvy)
+                castka = st.number_input("Částka k úhradě (M-K):", min_value=1.0, value=10.0)
+                ucel = st.text_input("Zakoupený produkt / Důvod platby:", placeholder="Např. Zakázkový 3D tisk, grafický návrh...")
+                
+                if st.form_submit_button("Zaplatit firmě"):
                     if castka > aktualni_kredity:
-                        st.error("Nedostatek prostředků!")
-                    elif prijemce:
-                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers, json={"kredity": aktualni_kredity - castka})
-                        res_prijemce = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{prijemce}", headers=headers).json()
-                        if res_prijemce:
-                            requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{prijemce}", headers=headers, json={"kredity": res_prijemce[0]['kredity'] + castka})
-                        requests.post(f"{SUPABASE_URL}/rest/v1/bankovni_prevody", headers=headers, json={"odesilatel": uzivatel, "prijemce": prijemce, "castka": castka, "ucel": ucel})
-                        st.rerun()
+                        st.error("Nedostatek prostředků na vašem účtu!")
+                    elif not ucel.strip():
+                        st.warning("Vyplňte, za jaké zboží nebo službu platíte.")
+                    else:
+                        firma_obj = next((f for f in firmy_k_platbe if f["nazev_firmy"] == vybrana_firma), None)
+                        if firma_obj:
+                            # 1. Stržení kreditu žákovi
+                            requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers, json={"kredity": aktualni_kredity - castka})
+                            
+                            # 2. Připsání kreditu na účet CEO firmy
+                            ceo_jmeno = firma_obj.get("ceo_jmeno")
+                            if ceo_jmeno:
+                                res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ceo_jmeno}", headers=headers).json()
+                                if res_ceo:
+                                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ceo_jmeno}", headers=headers, json={"kredity": res_ceo[0]['kredity'] + castka})
+                            
+                            # 3. Zápis do firemní účetní knihy (aby to učitel i firma viděli v auditu tržeb)
+                            requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={
+                                "firma_id": firma_obj["id"],
+                                "typ_transakce": "PRIJEM",
+                                "titul": f"Tržba od {uzivatel}: {ucel}",
+                                "castka": castka,
+                                "auditovano": False
+                            })
+                            
+                            # 4. Záznam do historie plateb
+                            requests.post(f"{SUPABASE_URL}/rest/v1/bankovni_prevody", headers=headers, json={
+                                "odesilatel": uzivatel,
+                                "prijemce": f"Firma: {vybrana_firma}",
+                                "castka": castka,
+                                "ucel": ucel
+                            })
+                            
+                            st.success(f"Platba {castka} M-K byla úspěšně odeslána firmě {vybrana_firma}!")
+                            st.rerun()
                         
     with col2:
-        st.subheader("Historie transakcí")
+        st.subheader("Historie mých plateb")
         res_trans = requests.get(f"{SUPABASE_URL}/rest/v1/bankovni_prevody?or=(odesilatel.eq.{uzivatel},prijemce.eq.{uzivatel})&order=datum.desc", headers=headers).json()
         if res_trans and isinstance(res_trans, list):
             for t in res_trans[:10]:
                 datum = t['datum'][:10]
                 if t['odesilatel'] == uzivatel:
-                    st.markdown(f"<div class='card-box' style='padding: 10px;'><div style='display:flex; justify-content:space-between;'><div><small>{datum} | Pro: {t['prijemce']}</small><br><span>{t['ucel']}</span></div><div class='transaction-minus'>- {t['castka']} M-K</div></div></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='card-box' style='padding: 10px;'><div style='display:flex; justify-content:space-between;'><div><small>{datum} | Příjemce: {t['prijemce']}</small><br><span>{t['ucel']}</span></div><div class='transaction-minus'>- {t['castka']} M-K</div></div></div>", unsafe_allow_html=True)
                 else:
-                    st.markdown(f"<div class='card-box' style='padding: 10px; border-left: 4px solid #10b981;'><div style='display:flex; justify-content:space-between;'><div><small>{datum} | Od: {t['odesilatel']}</small><br><span>{t['ucel']}</span></div><div class='transaction-plus'>+ {t['castka']} M-K</div></div></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='card-box' style='padding: 10px; border-left: 4px solid #10b981;'><div style='display:flex; justify-content:space-between;'><div><small>{datum} | Odesílatel: {t['odesilatel']}</small><br><span>{t['ucel']}</span></div><div class='transaction-plus'>+ {t['castka']} M-K</div></div></div>", unsafe_allow_html=True)
         else:
             st.info("Zatím jste neprovedli žádné transakce.")
 
+# =========================================================================
+# ZÁLOŽKA 2: ÚŘAD PRÁCE
+# =========================================================================
 with tab_questy:
     st.subheader("Nástěnka úkolů")
     res_questy = requests.get(f"{SUPABASE_URL}/rest/v1/questy?order=datum_zadani.desc", headers=headers).json()
@@ -141,6 +177,9 @@ with tab_questy:
                 elif q['stav'] == 'K_KONTROLE':
                     st.markdown(f"<div class='quest-card' style='border-color:#34d399;'><h4>{q['nazev']}</h4><p>Stav: <b>Čeká na schválení učitelem</b></p></div>", unsafe_allow_html=True)
 
+# =========================================================================
+# ZÁLOŽKA 3: BURZA
+# =========================================================================
 with tab_burza:
     st.subheader("Investiční Burza")
     col_b1, col_b2 = st.columns([1.5, 1])
@@ -191,6 +230,9 @@ with tab_burza:
             for p in port:
                 st.markdown(f"<div class='card-box'><b>{firmy_dict.get(p['firma_id'], 'Neznámá firma')}</b><br>Vlastníte: {p['pocet_akcii']} ks</div>", unsafe_allow_html=True)
 
+# =========================================================================
+# ZÁLOŽKA 4: PROFIL A CERTIFIKÁT
+# =========================================================================
 with tab_profil:
     col_p1, col_p2 = st.columns([1, 1])
     
