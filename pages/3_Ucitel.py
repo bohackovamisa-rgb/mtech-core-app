@@ -1,236 +1,441 @@
 import streamlit as st
 import requests
-import random
-import string
+import pandas as pd
+import json
 
-st.set_page_config(page_title="M-TECH CORE", layout="wide")
+st.set_page_config(page_title="Kontrolní úřad a Audit", layout="wide")
 
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&display=swap');
     html, body, [class*="css"] { font-family: 'Montserrat', sans-serif !important; }
-    h1, h2, h3 { background: -webkit-linear-gradient(45deg, #00B4D8, #0077B6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800 !important; }
-    .stButton>button { border-radius: 8px; transition: all 0.3s ease; border: 1px solid #00B4D8; }
-    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 180, 216, 0.4); border-color: #00B4D8; }
-    .hero-card { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 25px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 20px; }
-    .feature-box { background: #1e293b; padding: 15px; border-radius: 8px; border-left: 4px solid #00B4D8; margin-bottom: 10px; }
+    h1, h2, h3, h4 { background: -webkit-linear-gradient(45deg, #00B4D8, #0077B6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 800 !important; }
+    .stButton>button { border-radius: 8px; transition: all 0.3s ease; border: 1px solid #00B4D8; width: 100%; font-weight: 600; }
+    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0, 180, 216, 0.4); border-color: #00B4D8; background-color: #0f172a; color: white;}
+    .card-box { background-color: #1e293b; padding: 20px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 15px; }
+    .status-ok { color: #34d399; font-weight: 700; background: rgba(16, 185, 129, 0.1); padding: 4px 8px; border-radius: 6px; }
+    .status-wait { color: #fbbf24; font-weight: 700; background: rgba(245, 158, 11, 0.1); padding: 4px 8px; border-radius: 6px; }
+    .status-err { color: #f87171; font-weight: 700; background: rgba(239, 68, 68, 0.1); padding: 4px 8px; border-radius: 6px; }
+    .alert-box { background-color: rgba(245, 158, 11, 0.1); border: 1px solid #f59e0b; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    .info-box { background-color: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    .licence-box { background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%); border: 1px solid #334155; padding: 20px; border-radius: 12px; margin-bottom: 25px; }
+    .licence-card { background: rgba(15, 23, 42, 0.6); padding: 15px; border-radius: 8px; border: 1px solid #334155; }
+    .licence-val { font-family: monospace; font-size: 1.5em; font-weight: bold; padding: 4px 10px; border-radius: 5px; display: inline-block; margin-top: 5px; }
     </style>
 """, unsafe_allow_html=True)
+
+if not st.session_state.get("prihlasen") or str(st.session_state.get("role")).upper() not in ["UCITEL", "ADMIN"]:
+    st.error("Přístup odepřen. Sekce pouze pro vyučující.")
+    st.stop()
 
 try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"].rstrip("/")
     SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
     headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json", "Prefer": "return=representation"}
 except Exception:
-    st.error("Chybí konfigurace v Secrets!")
+    st.error("Chybí konfigurace databáze.")
     st.stop()
 
-if "prihlasen" not in st.session_state: st.session_state.prihlasen = False
-if "role" not in st.session_state: st.session_state.role = None
-if "kredity" not in st.session_state: st.session_state.kredity = 0
-if "uzivatel" not in st.session_state: st.session_state.uzivatel = None
-if "skolni_kod" not in st.session_state: st.session_state.skolni_kod = None
-if "trida_nazev" not in st.session_state: st.session_state.trida_nazev = None
+ucitel_jmeno = st.session_state.get("uzivatel", "")
+skolni_kod = st.session_state.get("skolni_kod", "")
+is_admin = str(st.session_state.get("role")).upper() == "ADMIN"
 
-zaci_page = st.Page("pages/1_Zaci.py", title="Moje peněženka")
-firma_page = st.Page("pages/2_Firma.py", title="Firemní Dashboard")
-ucitel_page = st.Page("pages/3_Ucitel.py", title="Kontrolní úřad")
-trh_page = st.Page("pages/4_Trh.py", title="Tržiště produktů")
-zebricky_page = st.Page("pages/5_Zebricky.py", title="Síň slávy")
+if not skolni_kod and ucitel_jmeno:
+    res_ucitel = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ucitel_jmeno}", headers=headers).json()
+    if isinstance(res_ucitel, list) and len(res_ucitel) > 0:
+        skolni_kod = res_ucitel[0].get("skolni_kod", "")
+        st.session_state.skolni_kod = skolni_kod
 
-# Živá synchronizace aktuální role žáka přímo z databáze
-if st.session_state.prihlasen and st.session_state.uzivatel:
-    res_live = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{st.session_state.uzivatel}&select=role,kredity,trida_nazev,skolni_kod", headers=headers).json()
-    if res_live and isinstance(res_live, list) and len(res_live) > 0:
-        st.session_state.role = str(res_live[0]["role"]).lower()
-        st.session_state.kredity = res_live[0]["kredity"]
-        st.session_state.trida_nazev = res_live[0].get("trida_nazev", "")
-        st.session_state.skolni_kod = res_live[0].get("skolni_kod", "")
-
-if not st.session_state.prihlasen:
+# =========================================================================
+# 0. ZOBRAZENÍ OBOU LICENČNÍCH KÓDŮ ŠKOLY (VÝUKA + ZÁKAZNÍCI)
+# =========================================================================
+if skolni_kod and skolni_kod != "SYSTEM":
+    res_nazev_skoly = requests.get(f"{SUPABASE_URL}/rest/v1/licencovane_skoly?licencni_kod=eq.{skolni_kod}", headers=headers).json()
+    nazev_skoly_zobrazeni = res_nazev_skoly[0].get('nazev_skoly', 'Neznámá instituce') if (isinstance(res_nazev_skoly, list) and len(res_nazev_skoly) > 0) else 'Neznámá instituce'
+    
+    akt_nast = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{skolni_kod}", headers=headers).json()
+    z_kod = akt_nast[0].get('zakaznicky_kod', 'NENASTAVENO') if (isinstance(akt_nast, list) and len(akt_nast) > 0) else 'NENASTAVENO'
+    
+    st.markdown(f"""
+        <div class="licence-box">
+            <h4 style="margin: 0 0 15px 0; color: #f8fafc; font-size: 1.15em;">Přístupové kódy školy: {nazev_skoly_zobrazeni}</h4>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 280px;" class="licence-card">
+                    <span style="font-size: 11px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px;">Výukový kód (Pro žáky ve třídách a učitele)</span>
+                    <div style="color: #cbd5e1; font-size: 13px; margin: 4px 0 8px 0;">Zadávají žáci ve vašich hodinách pro založení firmy a práci ve třídě.</div>
+                    <div class="licence-val" style="background: rgba(14, 165, 233, 0.15); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4);">{skolni_kod}</div>
+                </div>
+                <div style="flex: 1; min-width: 280px;" class="licence-card">
+                    <span style="font-size: 11px; font-weight: 700; color: #34d399; text-transform: uppercase; letter-spacing: 0.5px;">Zákaznický kód (Pro ostatní žáky školy)</span>
+                    <div style="color: #cbd5e1; font-size: 13px; margin: 4px 0 8px 0;">Tento kód předejte ostatním žákům školy, aby mohli na E-shopu nakupovat.</div>
+                    <div class="licence-val" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);">{z_kod}</div>
+                </div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+elif is_admin:
     st.markdown("""
-        <div class="hero-card">
-            <h1 style="margin:0; font-size: 2.5em;">M-TECH CORE</h1>
-            <p style="color: #94a3b8; font-size: 1.2em; margin-top: 5px;">
-                Digitální ekosystém pro propojení škol, žáků a reálných firemních zakázek.
-            </p>
+        <div class="licence-box">
+            <h4 style="margin: 0; color: #cbd5e1;">Režim: Hlavní Administrátor</h4>
+            <p style="margin: 5px 0 0 0; font-size: 0.9em; color: #94a3b8;">Máte neomezený přístup napříč všemi školami v systému.</p>
         </div>
     """, unsafe_allow_html=True)
 
-    tab_login, tab_user_reg, tab_admin_licence = st.tabs([
-        "Přihlášení do systému", 
-        "Registrace účtu (Žáci a Učitelé)", 
-        "Správa licencí (Pouze Administrátor)"
-    ])
-    
-    with tab_login:
-        with st.form("main_login_form"):
-            jmeno = st.text_input("Přihlašovací jméno:")
-            heslo = st.text_input("Heslo:", type="password")
-            if st.form_submit_button("Vstoupit do ekosystému"):
-                if jmeno and heslo:
-                    res = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{jmeno}&heslo=eq.{heslo}&select=*", headers=headers).json()
-                    if res and isinstance(res, list) and len(res) > 0:
-                        st.session_state.prihlasen = True
-                        st.session_state.role = str(res[0]["role"]).lower()
-                        st.session_state.kredity = res[0]["kredity"]
-                        st.session_state.uzivatel = res[0]["jmeno"]
-                        st.session_state.skolni_kod = res[0].get("skolni_kod", "")
-                        st.session_state.trida_nazev = res[0].get("trida_nazev", "")
-                        st.rerun()
-                    else:
-                        st.error("Nesprávné přihlašovací údaje.")
-                else:
-                    st.warning("Vyplňte obě pole.")
-        st.caption("Zapomněli jste heslo? Žáci požádají svého vyučujícího o reset. Učitelé kontaktují správce systému.")
-
-    with tab_user_reg:
-        st.info("Zadejte přístupový kód školy, který jste obdrželi.")
-        vstupni_kod = st.text_input("Kód školy (Výukový nebo Zákaznický):", key="reg_kod").upper().strip()
-        
-        is_customer = False
-        skolni_kod_actual = None
-        start_kredit_zakaznik = 50
-        dostupne_tridy = []
-        
-        if vstupni_kod:
-            res_nast = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?zakaznicky_kod=eq.{vstupni_kod}", headers=headers).json()
-            if res_nast and isinstance(res_nast, list) and len(res_nast) > 0:
-                is_customer = True
-                skolni_kod_actual = res_nast[0]['skolni_kod']
-                start_kredit_zakaznik = res_nast[0].get('start_kredit_zakaznik', 50)
-            else:
-                res_lic = requests.get(f"{SUPABASE_URL}/rest/v1/licencovane_skoly?licencni_kod=eq.{vstupni_kod}", headers=headers).json()
-                if res_lic and isinstance(res_lic, list) and len(res_lic) > 0:
-                    skolni_kod_actual = vstupni_kod
-                    res_tridy = requests.get(f"{SUPABASE_URL}/rest/v1/tridy?skolni_kod=eq.{skolni_kod_actual}&select=*", headers=headers).json()
-                    if isinstance(res_tridy, list) and res_tridy:
-                        dostupne_tridy = res_tridy
-
-        with st.form("main_user_reg_form"):
-            reg_jmeno = st.text_input("Uživatelské jméno:")
-            reg_heslo = st.text_input("Heslo:", type="password")
-            
-            vybrana_role = "zak"
-            vybrana_trida_str = None
-            
-            if skolni_kod_actual and not is_customer:
-                vybrana_role_radio = st.radio("Registruji se jako:", ["Žák", "Učitel"], horizontal=True)
-                vybrana_role = "ucitel" if vybrana_role_radio == "Učitel" else "zak"
-                
-                if vybrana_role == "zak":
-                    if dostupne_tridy:
-                        moznosti_trid = [f"{t['nazev_tridy']} (Vyučující: {t['ucitel_jmeno']})" for t in dostupne_tridy]
-                        vybrana_trida_str = st.selectbox("Vyberte svou třídu:", moznosti_trid)
-                    else:
-                        st.warning("Vyučující zatím nezaložil žádnou třídu. Třídu vám učitel přiřadí později.")
-            elif is_customer:
-                st.success("Byl zadán zákaznický kód. Budete registrováni jako Zákazník školy.")
-            
-            if st.form_submit_button("Vytvořit účet"):
-                if skolni_kod_actual and reg_jmeno and reg_heslo:
-                    if requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{reg_jmeno}", headers=headers).json():
-                        st.error("Toto uživatelské jméno je již obsazené.")
-                    else:
-                        if is_customer:
-                            requests.post(f"{SUPABASE_URL}/rest/v1/uzivatele", headers=headers, json={
-                                "jmeno": reg_jmeno, "heslo": reg_heslo, "role": "zak",
-                                "kredity": start_kredit_zakaznik, "skolni_kod": skolni_kod_actual,
-                                "trida_nazev": "Zákazník", "aktivni": True
-                            })
-                            st.success("Zákaznický účet byl vytvořen. Nyní se můžete přihlásit.")
-                        elif vybrana_role == "ucitel":
-                            requests.post(f"{SUPABASE_URL}/rest/v1/uzivatele", headers=headers, json={
-                                "jmeno": reg_jmeno, "heslo": reg_heslo, "role": "ucitel",
-                                "kredity": 500, "skolni_kod": skolni_kod_actual,
-                                "trida_nazev": None, "aktivni": True
-                            })
-                            st.success("Učitelský účet byl vytvořen. Nyní se můžete přihlásit a založit své třídy.")
-                        else:
-                            t_nazev = vybrana_trida_str.split(" (")[0] if vybrana_trida_str else "Nezařazeno"
-                            nastaveni = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{skolni_kod_actual}", headers=headers).json()
-                            start_kredity = nastaveni[0]['start_kredit_zak'] if nastaveni else 100
-                            requests.post(f"{SUPABASE_URL}/rest/v1/uzivatele", headers=headers, json={
-                                "jmeno": reg_jmeno, "heslo": reg_heslo, "role": "zak",
-                                "kredity": start_kredity, "skolni_kod": skolni_kod_actual,
-                                "trida_nazev": t_nazev, "aktivni": True
-                            })
-                            st.success("Žákovský účet byl vytvořen. Nyní se můžete přihlásit.")
-                else:
-                    st.warning("Vyplňte platný kód školy, jméno i heslo.")
-
-    with tab_admin_licence:
-        st.markdown("### Administrátorská konzole")
-        st.caption("Sekce přístupná pouze pro hlavního administrátora platformy.")
-        master_password = st.text_input("Zadejte administrátorské heslo:", type="password")
-        
-        if master_password == "MtechAdmin2026": 
-            adm_tab1, adm_tab2 = st.tabs(["Generování licencí pro školy", "Správa hesel vyučujících"])
-            
-            with adm_tab1:
-                with st.form("form_admin_generate_school"):
-                    nazev_skoly = st.text_input("Název vzdělávací instituce:")
-                    kontakt_email = st.text_input("Kontaktní e-mail zástupce školy:")
-                    
-                    if st.form_submit_button("Vygenerovat novou školu a licenční kódy"):
-                        if nazev_skoly and kontakt_email:
-                            kod_vyuka = "SKOLA-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-                            kod_zakaznik = "KUPUJ-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-                            
-                            requests.post(f"{SUPABASE_URL}/rest/v1/licencovane_skoly", headers=headers, json={
-                                "nazev_skoly": nazev_skoly, "kontaktni_email": kontakt_email, "licencni_kod": kod_vyuka, "zaplaceno": False
-                            })
-                            requests.post(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni", headers=headers, json={
-                                "skolni_kod": kod_vyuka, "zakaznicky_kod": kod_zakaznik, "start_kredit_zakaznik": 50
-                            })
-                            
-                            st.success(f"Škola **{nazev_skoly}** byla úspěšně založena!")
-                            st.info(f"Výukový kód: **{kod_vyuka}**\n\nZákaznický kód: **{kod_zakaznik}**")
-                        else:
-                            st.warning("Vyplňte název školy i e-mail.")
-
-            with adm_tab2:
-                st.markdown("#### Reset hesla pro vyučujícího")
-                res_ucitele = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.ucitel", headers=headers).json()
-                if res_ucitele and isinstance(res_ucitele, list):
-                    with st.form("form_admin_reset_pw_teacher"):
-                        ucitel_reset_jmeno = st.selectbox("Vyberte vyučujícího:", [f"{u['jmeno']} (Kód školy: {u.get('skolni_kod', '')})" for u in res_ucitele])
-                        nove_heslo_ucitele = st.text_input("Zadejte nové heslo:", value="1234")
-                        if st.form_submit_button("Nastavit nové heslo učiteli"):
-                            cilovy_ucitel = ucitel_reset_jmeno.split(" (")[0]
-                            requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{cilovy_ucitel}", headers=headers, json={"heslo": nove_heslo_ucitele})
-                            st.success(f"Učiteli **{cilovy_ucitel}** bylo nastaveno nové heslo.")
-                else:
-                    st.info("V systému zatím nejsou žádní učitelé.")
-        elif master_password != "":
-            st.error("Nesprávné administrátorské heslo!")
-
+# =========================================================================
+# 1. ŘÍDÍCÍ PANEL (ACTION CENTER)
+# =========================================================================
+if is_admin:
+    res_moje_tridy_global = requests.get(f"{SUPABASE_URL}/rest/v1/tridy?select=nazev_tridy", headers=headers).json()
 else:
-    with st.sidebar:
-        st.markdown(f"Uživatel: **{st.session_state.uzivatel}**")
-        role_zobr = "Učitel" if st.session_state.role == "ucitel" else ("Podnikatel" if st.session_state.role == "firma" else ("Běžný žák" if st.session_state.role == "zak" else "Hlavní Admin"))
-        st.caption(f"Role: **{role_zobr}**")
-        if st.session_state.trida_nazev:
-            st.caption(f"Třída: **{st.session_state.trida_nazev}**")
-        st.markdown(f"Zůstatek: **{st.session_state.kredity} M-K**")
-        
-        with st.expander("Změnit mé heslo"):
-            with st.form("sidebar_form_change_own_password"):
-                moje_nove_heslo = st.text_input("Nové heslo:", type="password")
-                if st.form_submit_button("Uložit nové heslo"):
-                    if moje_nove_heslo.strip():
-                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{st.session_state.uzivatel}", headers=headers, json={"heslo": moje_nove_heslo.strip()})
-                        st.success("Vaše heslo bylo úspěšně změněno.")
-                    else:
-                        st.error("Heslo nesmí být prázdné.")
+    res_moje_tridy_global = requests.get(f"{SUPABASE_URL}/rest/v1/tridy?skolni_kod=eq.{skolni_kod}&ucitel_jmeno=eq.{ucitel_jmeno}&select=nazev_tridy", headers=headers).json()
 
-        if st.button("Odhlásit se"):
-            st.session_state.clear()
-            st.rerun()
-            
-    if st.session_state.role == "zak": pg = st.navigation([zaci_page, trh_page, zebricky_page])
-    elif st.session_state.role == "firma": pg = st.navigation([firma_page, zaci_page, trh_page, zebricky_page])
-    elif st.session_state.role == "ucitel": pg = st.navigation([ucitel_page, trh_page, zebricky_page])
-    elif st.session_state.role == "admin": pg = st.navigation([zaci_page, firma_page, ucitel_page, trh_page, zebricky_page])
+moje_tridy_nazvy_global = [t["nazev_tridy"] for t in res_moje_tridy_global] if isinstance(res_moje_tridy_global, list) else []
+
+vsechny_firmy_skoly = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{skolni_kod}&select=*", headers=headers).json()
+if is_admin:
+    moje_firmy_global = vsechny_firmy_skoly if isinstance(vsechny_firmy_skoly, list) else []
+else:
+    moje_firmy_global = [f for f in (vsechny_firmy_skoly if isinstance(vsechny_firmy_skoly, list) else []) if f.get("trida_nazev") in moje_tridy_nazvy_global]
+
+vsichni_zaci_skoly = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&role=neq.ucitel&select=jmeno,trida_nazev,role", headers=headers).json()
+if is_admin:
+    moji_zaci_global = vsichni_zaci_skoly if isinstance(vsichni_zaci_skoly, list) else []
+else:
+    moji_zaci_global = [z for z in (vsichni_zaci_skoly if isinstance(vsichni_zaci_skoly, list) else []) if z.get("trida_nazev") in moje_tridy_nazvy_global]
+moji_zaci_jmena_global = [z["jmeno"] for z in moji_zaci_global]
+
+g_firmy_cekajici = [f for f in moje_firmy_global if f.get("stave_licence") == "CEKA_NA_SCHVALENI"]
+res_q_all = requests.get(f"{SUPABASE_URL}/rest/v1/questy?stav=eq.K_KONTROLE", headers=headers).json()
+g_questy_cekajici = [q for q in (res_q_all if isinstance(res_q_all, list) else []) if q.get("resitel") in moji_zaci_jmena_global]
+res_priznani_all = requests.get(f"{SUPABASE_URL}/rest/v1/danova_priznani?stav=eq.ODEVZDANO", headers=headers).json()
+g_priznani_cekajici = [p for p in (res_priznani_all if isinstance(res_priznani_all, list) else []) if any(f['id'] == p.get('firma_id') for f in moje_firmy_global)]
+res_kalk_all = requests.get(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?schvaleno_uradem=eq.false", headers=headers).json()
+g_kalkulace_cekajici = [k for k in (res_kalk_all if isinstance(res_kalk_all, list) else []) if any(f['id'] == k.get('firma_id') for f in moje_firmy_global)]
+res_uvery_all = requests.get(f"{SUPABASE_URL}/rest/v1/bankovni_uvery?stav=eq.ZADOST", headers=headers).json()
+g_uvery_cekajici = [u for u in (res_uvery_all if isinstance(res_uvery_all, list) else []) if any(f['id'] == u.get('firma_id') for f in moje_firmy_global)]
+
+g_pocet_celkem_restu = len(g_firmy_cekajici) + len(g_questy_cekajici) + len(g_priznani_cekajici) + len(g_kalkulace_cekajici) + len(g_uvery_cekajici)
+
+pocet_zaku_celkem = len(moji_zaci_global)
+pocet_zaku_zakladni_role = len([z for z in moji_zaci_global if z.get("role") == "zak"])
+
+col_dash1, col_dash2 = st.columns(2)
+
+with col_dash1:
+    st.markdown(f"""
+    <div class='info-box'>
+        <h4 style='margin:0; color:#10b981;'>Stav registrací ve vašich třídách</h4>
+        <p style='margin: 5px 0 0 0; color:#cbd5e1; font-size: 15px;'>
+            Ve vašich třídách je aktuálně registrováno celkem <b>{pocet_zaku_celkem} žáků</b>.<br>
+            Z toho <b>{pocet_zaku_zakladni_role} žáků</b> má zatím jen základní roli.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col_dash2:
+    if g_pocet_celkem_restu > 0:
+        st.markdown(f"""
+        <div class='alert-box'>
+            <h4 style='margin:0; color:#f59e0b;'>Nevyřízené úkoly a audity ({g_pocet_celkem_restu})</h4>
+            <ul style='margin-bottom:0; color:#cbd5e1; font-size: 14px; margin-top: 5px;'>
+                {"<li><b>Žádosti o registraci firmy:</b> " + str(len(g_firmy_cekajici)) + "</li>" if g_firmy_cekajici else ""}
+                {"<li><b>Odevzdané úkoly ke kontrole:</b> " + str(len(g_questy_cekajici)) + "</li>" if g_questy_cekajici else ""}
+                {"<li><b>Kalkulace produktů pro E-shop:</b> " + str(len(g_kalkulace_cekajici)) + "</li>" if g_kalkulace_cekajici else ""}
+                {"<li><b>Odevzdaná daňová přiznání:</b> " + str(len(g_priznani_cekajici)) + "</li>" if g_priznani_cekajici else ""}
+                {"<li><b>Žádosti firem o bankovní úvěr:</b> " + str(len(g_uvery_cekajici)) + "</li>" if g_uvery_cekajici else ""}
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div class='info-box' style='background-color: rgba(52, 211, 153, 0.05); border-color: #34d399;'>
+            <h4 style='margin:0; color:#34d399;'>Čistý stůl</h4>
+            <p style='margin: 5px 0 0 0; color:#cbd5e1; font-size: 14px;'>Žádné firmy ani úkoly nečekají na váš audit.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+st.write("---")
+
+# =========================================================================
+# 2. DOHLED NAD ZÁKAZNÍKY ŠKOLY
+# =========================================================================
+st.subheader("Dohled nad Zákazníky školy (Konzumenty)")
+with st.expander("Seznam zákazníků školy a správa jejich peněženek (Rozbalit)", expanded=False):
+    st.caption("Tito žáci jsou registrováni pod kódem pro zákazníky a nakupují na školním E-shopu od studentských firem.")
+    res_zakaznici = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.Zákazník&role=neq.ucitel", headers=headers).json()
+    zakaznici = res_zakaznici if isinstance(res_zakaznici, list) else []
     
-    pg.run()
+    if not zakaznici:
+        st.info("Ve škole zatím nejsou registrováni žádní zákazníci.")
+    else:
+        df_zak = pd.DataFrame([{"Jméno zákazníka": z["jmeno"], "Zůstatek (M-K)": z.get("kredity", 0)} for z in zakaznici])
+        st.dataframe(df_zak, use_container_width=True)
+        
+        with st.form("form_ucitel_korekce_zakazniku_fixed"):
+            col_k1, col_k2, col_k3 = st.columns([2, 2, 1])
+            with col_k1: 
+                z_vyber = st.selectbox("Vyberte zákazníka:", [z["jmeno"] for z in zakaznici])
+            with col_k2: 
+                akce = st.selectbox("Akce:", ["Resetovat heslo na 1234", "Strhnout kredity (Pokuta)", "Přidat kredity (Bonus)", "Smazat účet (Ban)"])
+            with col_k3: 
+                hodnota = st.number_input("Částka M-K (při pokutě/bonusu):", min_value=1.0, value=50.0)
+            
+            if st.form_submit_button("Provést akci"):
+                z_target = next((z for z in zakaznici if z["jmeno"] == z_vyber), None)
+                if akce == "Resetovat heslo na 1234":
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers, json={"heslo": "1234"})
+                    st.success(f"Zákazníkovi **{z_vyber}** bylo nastaveno heslo: `1234`.")
+                elif akce == "Smazat účet (Ban)":
+                    requests.delete(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers)
+                    st.success(f"Účet zákazníka {z_vyber} byl smazán.")
+                elif akce == "Strhnout kredity (Pokuta)":
+                    novy = max(0, z_target.get("kredity", 0) - hodnota)
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers, json={"kredity": novy})
+                    st.success(f"Zákazníkovi {z_vyber} bylo strženo {hodnota} M-K.")
+                elif akce == "Přidat kredity (Bonus)":
+                    novy = z_target.get("kredity", 0) + hodnota
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers, json={"kredity": novy})
+                    st.success(f"Zákazníkovi {z_vyber} bylo přidáno {hodnota} M-K.")
+                st.rerun()
+
+st.write("---")
+
+# =========================================================================
+# 3. SPRÁVA VÝUKOVÝCH TŘÍD A FIREM
+# =========================================================================
+st.subheader("Výukové třídy a Studentské firmy")
+
+if is_admin:
+    res_tridy = requests.get(f"{SUPABASE_URL}/rest/v1/tridy?select=*&order=id.desc", headers=headers).json()
+else:
+    res_tridy = requests.get(f"{SUPABASE_URL}/rest/v1/tridy?skolni_kod=eq.{skolni_kod}&ucitel_jmeno=eq.{ucitel_jmeno}&select=*&order=id.desc", headers=headers).json()
+
+moje_tridy = res_tridy if (isinstance(res_tridy, list) and res_tridy) else []
+
+with st.expander("Založení nové třídy / skupiny"):
+    col_t1, col_t2 = st.columns([2, 1])
+    with col_t1:
+        nova_trida_nazev = st.text_input("Název nové třídy (např. 3.A nebo Seminář Pondělí):")
+    with col_t2:
+        st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+        if st.button("Založit novou třídu"):
+            if nova_trida_nazev.strip():
+                requests.post(f"{SUPABASE_URL}/rest/v1/tridy", headers=headers, json={
+                    "skolni_kod": skolni_kod,
+                    "nazev_tridy": nova_trida_nazev.strip(),
+                    "ucitel_jmeno": ucitel_jmeno
+                })
+                st.success(f"Třída {nova_trida_nazev} byla vytvořena.")
+                st.rerun()
+
+# Detekce nezařazených žáků
+res_nezarazeni = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.Nezařazeno&role=neq.ucitel", headers=headers).json()
+nezarazeni_zaci = res_nezarazeni if isinstance(res_nezarazeni, list) else []
+
+if nezarazeni_zaci:
+    st.markdown("""
+    <div class='alert-box' style='border-color: #ef4444; background-color: rgba(239, 68, 68, 0.1); margin-top: 15px;'>
+        <h4 style='margin:0; color:#ef4444;'>Nezařazení žáci (Čekají na zařazení do třídy)</h4>
+        <p style='margin: 5px 0 0 0; color:#cbd5e1; font-size: 14px;'>Tito žáci se zaregistrovali výukovým kódem dříve, než jste založili třídu. Přiřaďte je níže.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    with st.expander("Přiřadit nezařazené žáky do vaší třídy", expanded=True):
+        df_nez = pd.DataFrame([{"Jméno žáka": z["jmeno"], "Role": z.get("role", "zak"), "Zůstatek": z.get("kredity", 0)} for z in nezarazeni_zaci])
+        st.dataframe(df_nez, use_container_width=True)
+        
+        if moje_tridy:
+            with st.form("form_presun_nezarazenych_do_tridy"):
+                col_nz1, col_nz2, col_nz3 = st.columns([2, 2, 1])
+                with col_nz1:
+                    nz_vyber = st.selectbox("Vyberte žáka:", [z["jmeno"] for z in nezarazeni_zaci])
+                with col_nz2:
+                    nz_cilova_trida = st.selectbox("Zařadit do třídy:", [t["nazev_tridy"] for t in moje_tridy])
+                with col_nz3:
+                    st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                    if st.form_submit_button("Přesunout žáka"):
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{nz_vyber}", headers=headers, json={"trida_nazev": nz_cilova_trida})
+                        st.success(f"Žák {nz_vyber} byl přesunut do třídy {nz_cilova_trida}.")
+                        st.rerun()
+        else:
+            st.info("Založte si nejprve výše svou první třídu, abyste do ní mohli žáky zařadit.")
+            
+st.write("---")
+
+if not moje_tridy:
+    st.info("Zatím jste si nezaložili žádnou třídu. Vytvořte prosím svou první třídu výše, aby se do ní mohli žáci registrovat a zakládat firmy.")
+else:
+    seznam_trid_nazvy = [t["nazev_tridy"] for t in moje_tridy]
+    aktivni_trida = st.selectbox("Vyberte třídu, se kterou právě pracujete:", seznam_trid_nazvy)
+
+    # Načtení žáků a firem vybrané třídy
+    res_zaci = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.{aktivni_trida}&role=neq.ucitel&order=id.desc", headers=headers).json()
+    zaci_tridy = res_zaci if isinstance(res_zaci, list) else []
+
+    res_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.{aktivni_trida}&select=*&order=id.desc", headers=headers).json()
+    firmy = res_firmy if isinstance(res_firmy, list) else []
+
+    # Správa žáků vybrané třídy
+    with st.expander(f"Seznam žáků třídy {aktivni_trida} (Role a Reset hesel)", expanded=False):
+        if not zaci_tridy:
+            st.info(f"Ve třídě {aktivni_trida} zatím nejsou registrováni žádní žáci.")
+        else:
+            tabulka_zaku = []
+            for z in zaci_tridy:
+                role_text = "Podnikatel (Může založit firmu)" if z.get("role") == "firma" else "Běžný žák (Práce a nákup)"
+                tabulka_zaku.append({
+                    "Uživatelské jméno": z.get("jmeno"),
+                    "Aktuální role": role_text,
+                    "Zůstatek (M-K)": z.get("kredity", 0)
+                })
+            st.dataframe(pd.DataFrame(tabulka_zaku), use_container_width=True)
+            
+            st.markdown("##### Správa role žáka")
+            col_z1, col_z2, col_z3 = st.columns([2, 2, 1])
+            with col_z1:
+                vybrany_zak = st.selectbox("Vyberte žáka z této třídy:", [z["jmeno"] for z in zaci_tridy])
+            with col_z2:
+                nova_role = st.selectbox("Nastavit oprávnění:", ["firma (Podnikatel / Zakladatel)", "zak (Běžný žák)"])
+            with col_z3:
+                st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                if st.button("Uložit roli"):
+                    role_kod = "firma" if "firma" in nova_role else "zak"
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_zak}", headers=headers, json={"role": role_kod})
+                    st.success(f"Žákovi {vybrany_zak} byla nastavena role.")
+                    st.rerun()
+
+            st.divider()
+            st.markdown("##### Reset zapomenutého hesla žáka")
+            with st.form("form_ucitel_reset_hesla_zaka_tridy_unique"):
+                col_r1, col_r2 = st.columns([2, 1])
+                with col_r1:
+                    nove_heslo_pro_zaka = st.text_input("Zadejte nové heslo pro žáka:", value="1234")
+                with col_r2:
+                    st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                    if st.form_submit_button("Nastavit nové heslo žákovi"):
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_zak}", headers=headers, json={"heslo": nove_heslo_pro_zaka.strip()})
+                        st.success(f"Žákovi **{vybrany_zak}** bylo nastaveno heslo: `{nove_heslo_pro_zaka.strip()}`.")
+
+    st.write("---")
+
+    # Audit firem dané třídy
+    if not firmy:
+        st.info(f"Ve třídě {aktivni_trida} zatím žádný žák neodeslal žádost o registraci firmy.")
+    else:
+        firmy_labels = []
+        for f in firmy:
+            status_tag = " [ČEKÁ NA SCHVÁLENÍ]" if f.get("stave_licence") == "CEKA_NA_SCHVALENI" else ""
+            firmy_labels.append(f"{f['nazev_firmy']}{status_tag}")
+
+        vybrany_label = st.selectbox("Vyberte startup k auditu:", firmy_labels)
+        vybrana_firma_nazev = vybrany_label.replace(" [ČEKÁ NA SCHVÁLENÍ]", "")
+        firma = next(f for f in firmy if f["nazev_firmy"] == vybrana_firma_nazev)
+        f_id = firma["id"]
+
+        tab_legal, tab_aktiva, tab_hr, tab_finance, tab_questy, tab_stat, tab_banka, tab_hodnoceni = st.tabs([
+            "1. Spis a Notář", "2. Vize a AI", "3. HR a Tým", "4. E-shop a Zákazníci", "5. Úřad práce a XP", "6. Státní pokladna a Daně", "7. Banka a Ceník", "8. Přehled a Hodnocení"
+        ])
+
+        with tab_legal:
+            st.subheader(f"Firemní spis: {firma['nazev_firmy']} (Třída: {aktivni_trida})")
+            col_l1, col_l2 = st.columns([1.6, 1])
+            with col_l1:
+                res_zamestnanci = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{f_id}", headers=headers).json()
+                zamestnanci = res_zamestnanci if isinstance(res_zamestnanci, list) else []
+                with st.container(border=True):
+                    st.markdown("#### Identifikace společnosti")
+                    st.markdown(f"**Obchodní firma:** `{firma['nazev_firmy']}`")
+                    st.markdown(f"**Třída:** `{aktivni_trida}` | **Licenční kód:** `{firma.get('skolni_kod', '')}`")
+                    st.markdown(f"**Základní kapitál:** `{firma.get('pocatecni_kapital', 100)} M-K`")
+                    st.divider()
+                    st.markdown("#### Předmět podnikání a Živnost")
+                    zamer_raw = str(firma.get('podnikatelsky_zamer', ''))
+                    if "|" in zamer_raw:
+                        for p in [p.strip() for p in zamer_raw.split("|")]: st.markdown(f"* {p}")
+                    else: st.write(zamer_raw if zamer_raw else "Neuvedeno")
+                    st.divider()
+                    st.markdown("#### Statutární orgány (Vedení)")
+                    st.markdown(f"* **CEO:** {firma.get('ceo_jmeno', 'Neobsazeno')}")
+                    st.markdown(f"* **CFO:** {firma.get('cfo_jmeno', 'Neobsazeno')}")
+                    st.markdown(f"* **CTO:** {firma.get('cto_jmeno', 'Neobsazeno')}")
+                    st.divider()
+                    st.markdown("#### Zaměstnanci a pracovníci")
+                    if zamestnanci:
+                        for z in zamestnanci: st.markdown(f"* **{z['jmeno_zamestnance']}** — {z.get('pozice', 'Pracovník')} ({z.get('hodinova_sazba', 0)} M-K/hod)")
+                    else: st.info("Firma zatím nepřijala žádné další zaměstnance.")
+            with col_l2:
+                stav = firma.get('stave_licence', 'CEKA_NA_SCHVALENI')
+                stav_tridy = 'status-ok' if stav == 'SCHVALENO' else ('status-err' if stav in ['ZAMITNUTO', 'UKONCENO'] else 'status-wait')
+                with st.container(border=True):
+                    st.markdown("#### Stav zápisu do rejstříku")
+                    st.markdown(f"Aktuální stav: <span class='{stav_tridy}'>{stav}</span>", unsafe_allow_html=True)
+                if st.button("Schválit zápis do rejstříku a povolit činnost", type="primary"):
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{f_id}", headers=headers, json={"stave_licence": "SCHVALENO", "duvod_zamitnuti": ""})
+                    st.success(f"Firma {firma['nazev_firmy']} byla zapsána do rejstříku.")
+                    st.rerun()
+
+        with tab_aktiva:
+            canvas = requests.get(f"{SUPABASE_URL}/rest/v1/lean_canvas?firma_id=eq.{f_id}", headers=headers).json()
+            if canvas and isinstance(canvas, list):
+                with st.expander("Detail Lean Canvasu"):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.write("**1. Problém:**", canvas[0].get('problem', ''))
+                        st.write("**3. Cílová skupina:**", canvas[0].get('cilova_skupina', ''))
+                    with c2:
+                        st.write("**2. Řešení:**", canvas[0].get('reseni', ''))
+                        st.write("**4. Hodnota:**", canvas[0].get('hodnota', ''))
+            else: st.info("Firma zatím nedodala Lean Canvas.")
+
+        with tab_hr:
+            zamestnanci_full = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{f_id}", headers=headers).json()
+            if zamestnanci_full and isinstance(zamestnanci_full, list):
+                df_zam_full = pd.DataFrame(zamestnanci_full)[['jmeno_zamestnance', 'pozice', 'hodinova_sazba', 'vyplaceno_celkem']]
+                df_zam_full.columns = ['Jméno', 'Pozice', 'Sazba (M-K/hod)', 'Vyplaceno (M-K)']
+                st.dataframe(df_zam_full, use_container_width=True)
+            else: st.info("Firma neeviduje žádné zaměstnance.")
+
+        with tab_finance:
+            kalkulace = requests.get(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?firma_id=eq.{f_id}", headers=headers).json()
+            if kalkulace and isinstance(kalkulace, list):
+                for k in kalkulace:
+                    with st.container(border=True):
+                        st.markdown(f"**{k['nazev_produktu']}** (Cena: {k['konecna_cena']} M-K)")
+                        if not k['schvaleno_uradem']:
+                            if st.button(f"Schválit produkt: {k['nazev_produktu']}", key=f"kalk_{k['id']}"):
+                                requests.patch(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?id=eq.{k['id']}", headers=headers, json={"schvaleno_uradem": True})
+                                st.rerun()
+            else: st.info("Žádné kalkulace.")
+
+        with tab_questy:
+            st.subheader("Úkoly třídy")
+            with st.form("form_ucitel_pridat_novy_quest_clean"):
+                qn = st.text_input("Název úkolu:")
+                qp = st.text_area("Popis:")
+                qo = st.number_input("Odměna (M-K):", min_value=1.0, value=20.0)
+                if st.form_submit_button("Vypsat úkol"):
+                    requests.post(f"{SUPABASE_URL}/rest/v1/questy", headers=headers, json={"nazev": qn, "popis": qp, "odmena": qo, "zadavatel": ucitel_jmeno, "stav": "VOLNY"})
+                    st.rerun()
+
+        with tab_stat:
+            res_stat = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers).json()
+            stat_kredity = res_stat[0]['kredity'] if (isinstance(res_stat, list) and len(res_stat) > 0) else 0
+            st.markdown(f"### Rozpočet vybraných daní: `{stat_kredity:.2f} M-K`")
+
+        with tab_banka:
+            nastaveni_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{skolni_kod}", headers=headers).json()
+            akt_nastaveni = nastaveni_res[0] if (isinstance(nastaveni_res, list) and len(nastaveni_res) > 0) else {}
+            with st.form("form_ucitel_tisk_kreditu_banka_clean"):
+                st.markdown("#### Tisk peněz na účet vyučujícího")
+                tisk_castka = st.number_input("Částka k připsání (M-K):", min_value=100, value=1000)
+                if st.form_submit_button("Vytisknout a připsat kredity"):
+                    res_ucitel_akt = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ucitel_jmeno}", headers=headers).json()
+                    novy_zustatek = (res_ucitel_akt[0].get("kredity", 0) if res_ucitel_akt else 0) + tisk_castka
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ucitel_jmeno}", headers=headers, json={"kredity": novy_zustatek})
+                    st.session_state.kredity = novy_zustatek
+                    st.success(f"Na váš účet bylo připsáno {tisk_castka} M-K.")
+                    st.rerun()
+
+        with tab_hodnoceni:
+            if zaci_tridy:
+                st.dataframe(pd.DataFrame([{"Jméno": z['jmeno'], "Role": z.get('role', 'zak'), "Zůstatek (M-K)": z.get('kredity', 0)} for z in zaci_tridy]), use_container_width=True)
