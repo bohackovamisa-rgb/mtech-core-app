@@ -83,6 +83,8 @@ if moje_firma:
 else:
     moje_role = "CEO" if st.session_state.get("role") in ["firma", "admin"] else "ZAMESTNANEC"
 
+je_vedeni = moje_role in ["CEO", "CFO", "CTO"]
+
 akt_dan_mtech = 15.0
 akt_dan_prijem = 15.0
 kurz_kc = 10.0
@@ -235,32 +237,22 @@ if moje_firma["stave_licence"] == "ZAMITNUTO":
 if moje_firma["stave_licence"] == "UKONCENO":
     st.error("Tato společnost byla oficiálně zlikvidována a ukončena.")
 
-if moje_role == "CEO":
+# Rozdělení záložek: Vedení (CEO, CFO, CTO) má plnou správu, Zaměstnanec má pracovní pohled
+if je_vedeni:
     tab_zalozeni, tab_brand, tab_vyvoj, tab_hr, tab_kalkulace, tab_ucto, tab_burza, tab_denik, tab_likvidace = st.tabs([
         "1. Zakladatelský Spis", "2. Brand a AI Tank", "3. Řízení (Agile)", "4. Tým a HR", "5. Cenotvorba", "6. Účetnictví a Daně", "7. Burza", "8. Deník a Porady", "9. Likvidace firmy"
     ])
-elif moje_role == "CFO":
-    tab_zalozeni, tab_hr, tab_ucto, tab_denik = st.tabs([
-        "1. Spis a Rejstřík", "2. Mzdy a HR", "3. Účetnictví a Daně", "4. Deník a Porady"
-    ])
-    tab_brand = tab_vyvoj = tab_kalkulace = tab_burza = tab_likvidace = None
-elif moje_role == "CTO":
-    tab_zalozeni, tab_brand, tab_vyvoj, tab_kalkulace, tab_denik = st.tabs([
-        "1. Spis a Rejstřík", "2. Brand a Identita", "3. Řízení Vývoje", "4. Cenotvorba a E-shop", "5. Deník a Porady"
-    ])
-    tab_hr = tab_ucto = tab_burza = tab_likvidace = None
 else:
-    tab_zalozeni, tab_denik = st.tabs([
-        "1. Můj profil a Moje firma", "2. Deník a Porady"
+    tab_zalozeni, tab_vyvoj, tab_denik = st.tabs([
+        "1. O firmě a Můj tým", "2. Úkoly a Agilní vývoj", "3. Můj deník práce a Porady"
     ])
-    tab_brand = tab_vyvoj = tab_hr = tab_kalkulace = tab_ucto = tab_burza = tab_likvidace = None
+    tab_brand = tab_hr = tab_kalkulace = tab_ucto = tab_burza = tab_likvidace = None
 
-# Všichni žáci ve třídě pro roletky
 res_zaci_tridy = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.{trida_nazev}&role=neq.ucitel", headers=headers).json()
 vsechna_jmena_tridy = [u['jmeno'] for u in (res_zaci_tridy if isinstance(res_zaci_tridy, list) else [])]
 
 # ==========================================
-# ZÁLOŽKA 1: SPIS (A SPRÁVA CELÉHO TÝMU + RE-SUBMIT)
+# ZÁLOŽKA 1: SPIS A SPRÁVA TÝMU
 # ==========================================
 with tab_zalozeni:
     st.subheader("Registrační spis a Právní status")
@@ -286,20 +278,18 @@ with tab_zalozeni:
         st.markdown("**Předmět podnikání a záměr:**")
         st.write(moje_firma.get('podnikatelsky_zamer', 'Neuvedeno'))
 
-    # TLAČÍTKO PRO OPĚTOVNÉ ODESLÁNÍ K POSOUZENÍ (POKUD JE ZAMÍTNUTO)
-    if moje_role == "CEO" and moje_firma["stave_licence"] == "ZAMITNUTO":
+    if je_vedeni and moje_firma["stave_licence"] == "ZAMITNUTO":
         if st.button("🔄 Odeslat opravený spis k novému posouzení vyučujícímu", type="primary"):
             requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{moje_firma['id']}", headers=headers, json={"stave_licence": "CEKA_NA_SCHVALENI"})
             st.success("Spis byl znovu odeslán Kontrolnímu úřadu.")
             st.rerun()
 
-    if moje_role == "CEO":
+    if je_vedeni:
         st.divider()
         st.markdown("### Správa členů týmu a zaměstnanců")
         
-        # 1. ČÁST: VEDENÍ (CFO / CTO)
         with st.expander("1. Statutární vedení firmy (CFO a CTO)", expanded=False):
-            volni_kandidati_vedeni = ["-- Neobsazeno --"] + [j for j in vsechna_jmena_tridy if j != uzivatel]
+            volni_kandidati_vedeni = ["-- Neobsazeno --"] + [j for j in vsechna_jmena_tridy if j != moje_firma.get('ceo_jmeno')]
             with st.form("form_update_vedeni_ceo_main"):
                 akt_cfo = moje_firma.get('cfo_jmeno') or "-- Neobsazeno --"
                 akt_cto = moje_firma.get('cto_jmeno') or "-- Neobsazeno --"
@@ -317,7 +307,6 @@ with tab_zalozeni:
                     st.success("Vedení společnosti bylo aktualizováno.")
                     st.rerun()
 
-        # 2. ČÁST: PŘIJÍMÁNÍ BĚŽNÝCH ZAMĚSTNANCŮ
         with st.expander("2. Přijmout nového běžného zaměstnance do firmy", expanded=(pocet_celkem_tym < planovany_pocet_clenu)):
             obsazena_jmena = [z['jmeno_zamestnance'].lower() for z in zamestnanci_firmy]
             if moje_firma.get('ceo_jmeno'): obsazena_jmena.append(moje_firma['ceo_jmeno'].lower())
@@ -344,22 +333,6 @@ with tab_zalozeni:
                             })
                             st.success(f"Žák {novy_zam_jmeno} byl přijat do firmy.")
                             st.rerun()
-
-        # 3. ČÁST: ZMĚNA PLÁNOVANÉHO POČTU ČLENŮ
-        with st.expander("3. Úprava nahlášené kapacity týmu ve stanovách", expanded=False):
-            st.caption("Pokud nemůžete sehnat dalšího spolužáka a vyučující vám povolil menší tým, upravte zde nahlášený počet.")
-            with st.form("form_zmena_kapacity_stanov"):
-                nova_kapacita = st.number_input("Nový celkový počet členů týmu:", min_value=1, max_value=20, value=planovany_pocet_clenu, step=1)
-                if st.form_submit_button("Uložit změnu kapacity"):
-                    stary_zamer = str(moje_firma.get('podnikatelsky_zamer', ''))
-                    if "Nahlášený počet členů týmu:" in stary_zamer:
-                        novy_zamer = re.sub(r'Nahlášený počet členů týmu:\s*\d+', f'Nahlášený počet členů týmu: {nova_kapacita}', stary_zamer)
-                    else:
-                        novy_zamer = f"Nahlášený počet členů týmu: {nova_kapacita} | " + stary_zamer
-                    
-                    requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{moje_firma['id']}", headers=headers, json={"podnikatelsky_zamer": novy_zamer})
-                    st.success("Kapacita týmu byla ve spisu upravena.")
-                    st.rerun()
 
 # ==========================================
 # ZÁLOŽKA 2: BRAND A AI TANK
@@ -417,15 +390,15 @@ if tab_brand:
                         st.rerun()
 
 # ==========================================
-# ZÁLOŽKA 3: AGILE
+# ZÁLOŽKA 3: AGILE (VIDÍ VEDENÍ I ZAMĚSTNANCI)
 # ==========================================
 if tab_vyvoj:
     with tab_vyvoj:
         with st.form("form_novy_ukol"):
             col_u1, col_u2 = st.columns([3, 1])
-            with col_u1: u_nazev = st.text_input("Úkol:")
+            with col_u1: u_nazev = st.text_input("Nový úkol pro tým:")
             with col_u2: u_sp = st.number_input("Story Points:", min_value=1, value=3)
-            if st.form_submit_button("Přidat úkol"):
+            if st.form_submit_button("Přidat úkol do Backlogu"):
                 requests.post(f"{SUPABASE_URL}/rest/v1/projektove_ukoly", headers=headers, json={"firma_id": moje_firma["id"], "nazev_ukolu": u_nazev, "zodpovedna_osoba": uzivatel, "story_points": u_sp, "stav": "TO_DO"})
                 st.rerun()
 
@@ -455,7 +428,7 @@ if tab_vyvoj:
                     st.write(f"**{t['nazev_ukolu']}** ({t.get('story_points', 1)} SP)")
 
 # ==========================================
-# ZÁLOŽKA 4: TÝM A HR
+# ZÁLOŽKA 4: TÝM A HR (POUZE VEDENÍ)
 # ==========================================
 if tab_hr:
     with tab_hr:
@@ -531,7 +504,7 @@ if tab_burza:
                 st.rerun()
 
 # ==========================================
-# ZÁLOŽKA 8: DENÍK A PORADY
+# ZÁLOŽKA 8: DENÍK A PORADY (ZÁPIS PRO CELÉ VEDENÍ)
 # ==========================================
 if tab_denik:
     with tab_denik:
@@ -566,20 +539,23 @@ if tab_denik:
 
         with t_porady:
             st.markdown("Zde evidujte oficiální zápisy z vašich firemních schůzek a porad.")
-            if moje_role == "CEO":
+            
+            # OPRAVA: Kdokoliv z vedení (CEO, CFO, CTO) může zapsat poradu
+            if je_vedeni:
                 with st.form("form_zapis_porady"):
+                    st.caption(f"✍️ Zápis podává: **{uzivatel}** (Role: **{moje_role}**)")
                     zapis_text = st.text_area("Co se řešilo, jaké jsou úkoly a závěry z porady:", height=150)
                     if st.form_submit_button("Uložit zápis z porady"):
                         if zapis_text.strip():
                             requests.post(f"{SUPABASE_URL}/rest/v1/denik_prace", headers=headers, json={
-                                "jmeno_zaka": uzivatel, "firma_id": moje_firma['id'], "popis_prace": f"[ZÁPIS Z PORADY]\n{zapis_text.strip()}", "hodiny": 0
+                                "jmeno_zaka": f"{uzivatel} ({moje_role})", "firma_id": moje_firma['id'], "popis_prace": f"[ZÁPIS Z PORADY]\n{zapis_text.strip()}", "hodiny": 0
                             })
                             st.success("Zápis z porady byl uložen.")
                             st.rerun()
                         else:
                             st.error("Zápis nesmí být prázdný.")
             else:
-                st.info("⚠️ Zápisy z firemních porad smí do systému vkládat pouze generální ředitel (CEO).")
+                st.info("⚠️ Zápisy z firemních porad smí do systému vkládat pouze členové vedení (CEO, CFO, CTO). Zaměstnanci mohou zápisy číst a své individuální hodiny zapisovat v první podzáložce.")
             
             st.markdown("#### Historie porad")
             if isinstance(res_denik, list):
