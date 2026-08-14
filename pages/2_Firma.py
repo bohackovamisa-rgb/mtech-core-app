@@ -22,9 +22,6 @@ st.markdown("""
     .header-todo { background: linear-gradient(45deg, #475569, #334155); }
     .header-ip { background: linear-gradient(45deg, #f59e0b, #d97706); }
     .header-done { background: linear-gradient(45deg, #10b981, #059669); }
-    .status-ok { color: #34d399; font-weight: 700; }
-    .status-wait { color: #fbbf24; font-weight: 700; }
-    .status-err { color: #f87171; font-weight: 700; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -52,14 +49,16 @@ uzivatel = st.session_state.get("uzivatel", "")
 skolni_kod = st.session_state.get("skolni_kod", "")
 trida_nazev = st.session_state.get("trida_nazev", "")
 
+# 1. Načtení OSOBNÍHO zůstatku žáka
 res_akt_u = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers).json()
-if res_akt_u and isinstance(res_akt_u, list):
-    aktualni_zustatek_zaka = float(res_akt_u[0].get("kredity", 0))
+if res_akt_u and isinstance(res_akt_u, list) and len(res_akt_u) > 0:
+    osobni_zustatek_zaka = int(res_akt_u[0].get("kredity", 0))
     if not skolni_kod: skolni_kod = res_akt_u[0].get("skolni_kod", "")
     if not trida_nazev: trida_nazev = res_akt_u[0].get("trida_nazev", "")
 else:
-    aktualni_zustatek_zaka = float(st.session_state.get("kredity", 0))
+    osobni_zustatek_zaka = int(st.session_state.get("kredity", 0))
 
+# 2. Načtení firem
 res_vsechny = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{skolni_kod}&select=*&order=id.desc", headers=headers).json()
 vsechny_firmy = res_vsechny if isinstance(res_vsechny, list) else []
 
@@ -97,7 +96,7 @@ if isinstance(nastaveni_res, list) and len(nastaveni_res) > 0:
     kurz_kc = float(nastaveni_res[0].get('kurz_kc', 10.0))
 
 # =========================================================================
-# 1. ZALOŽENÍ FIRMY
+# 1. ZALOŽENÍ FIRMY (VKLAD Z OSOBNÍ PENĚŽENKY)
 # =========================================================================
 if not moje_firma:
     st.info(f"Vítejte v podnikatelském akcelerátoru M-TECH (Třída: {trida_nazev or 'Vaše třída'}).")
@@ -122,13 +121,13 @@ if not moje_firma:
         
         col_k1, col_k2 = st.columns(2)
         with col_k1: 
-            if aktualni_zustatek_zaka < 10.0:
-                st.error(f"Váš osobní zůstatek je pouze {aktualni_zustatek_zaka:.2f} M-K. Pro založení firmy potřebujete minimálně 10 M-K. Jděte do Moje peněženka -> Úřad práce!")
+            if osobni_zustatek_zaka < 10:
+                st.error(f"Váš osobní zůstatek je pouze {osobni_zustatek_zaka} M-K. Pro založení firmy potřebujete minimálně 10 M-K. Jděte do Moje peněženka -> Úřad práce!")
                 vklad_hodnota = 0
             else:
                 vklad_hodnota = st.number_input(
-                    f"Vklad základního kapitálu (K dispozici: {aktualni_zustatek_zaka} M-K):",
-                    min_value=10, max_value=int(aktualni_zustatek_zaka), value=min(100, int(aktualni_zustatek_zaka)), step=5
+                    f"Vklad základního kapitálu z vaší peněženky (K dispozici: {osobni_zustatek_zaka} M-K):",
+                    min_value=10, max_value=int(osobni_zustatek_zaka), value=min(100, int(osobni_zustatek_zaka)), step=5
                 )
             st.session_state.reg_data["vklad"] = vklad_hodnota
         with col_k2: 
@@ -158,7 +157,7 @@ if not moje_firma:
         st.write("---")
         
         vklad_k_prevodu = int(st.session_state.reg_data.get("vklad", 0))
-        st.caption(f"Odesláním žádosti bude z vaší osobní peněženky převedena částka **{vklad_k_prevodu} M-K** do základního jmění společnosti.")
+        st.caption(f"Odesláním žádosti bude z vaší osobní peněženky převedena částka **{vklad_k_prevodu} M-K** do základního kapitálu firmy.")
         
         if st.button("Převést kapitál a odeslat spis na Kontrolní úřad", type="primary"):
             d = st.session_state.reg_data
@@ -166,8 +165,8 @@ if not moje_firma:
             
             if not nazev:
                 st.error("Vyplňte prosím název firmy v záložce Notářský zápis.")
-            elif aktualni_zustatek_zaka < vklad_k_prevodu or vklad_k_prevodu < 10:
-                st.error(f"Nemáte dostatek financí ve své peněžence (Požadováno: {vklad_k_prevodu} M-K).")
+            elif osobni_zustatek_zaka < vklad_k_prevodu or vklad_k_prevodu < 10:
+                st.error(f"Nemáte dostatek financí ve své osobní peněžence (Požadováno: {vklad_k_prevodu} M-K).")
             else:
                 cfo_val = None if d.get("cfo") == "-- Neobsazeno --" else d.get("cfo")
                 cto_val = None if d.get("cto") == "-- Neobsazeno --" else d.get("cto")
@@ -175,10 +174,12 @@ if not moje_firma:
                 plan_clenove = int(d.get('pocet_zakladatelu', 4))
                 zamer_str = f"Nahlášený počet členů týmu: {plan_clenove} | Druh živnosti: {d.get('druh_zivnosti')} | Obor: {d.get('zivnost_detail', '')} | Předmět: {d.get('predmet', '')} | Garant BOZP: {d.get('bozp_garant', '')} | Provozovna: {d.get('provozovna', '')}"
                 
-                novy_osobni_zustatek = int(aktualni_zustatek_zaka - vklad_k_prevodu)
+                # 1. Stržení z osobního účtu CEO
+                novy_osobni_zustatek = int(osobni_zustatek_zaka - vklad_k_prevodu)
                 requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers, json={"kredity": novy_osobni_zustatek})
                 st.session_state.kredity = novy_osobni_zustatek
 
+                # 2. Vytvoření firmy
                 payload = {
                     "nazev_firmy": nazev, "skolni_kod": skolni_kod, "trida_nazev": trida_nazev, "uroven_projektu": 2,
                     "ceo_jmeno": uzivatel, "cfo_jmeno": cfo_val, "cto_jmeno": cto_val, "podnikatelsky_zamer": zamer_str,
@@ -189,20 +190,30 @@ if not moje_firma:
                     new_f_data = res_create.json()
                     new_f_id = new_f_data[0]['id'] if (isinstance(new_f_data, list) and len(new_f_data) > 0) else None
                     if new_f_id:
+                        # 3. Zapsání základního kapitálu na firemní účet
                         requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={
-                            "firma_id": new_f_id, "typ_transakce": "PRIJEM", "titul": f"Vklad základního kapitálu ({uzivatel})", "castka": vklad_k_prevodu, "auditovano": True
+                            "firma_id": new_f_id, "typ_transakce": "PRIJEM", "titul": f"Vklad základního kapitálu zakladatelem ({uzivatel})", "castka": vklad_k_prevodu, "auditovano": True
                         })
-                    st.success(f"Základní kapitál {vklad_k_prevodu} M-K byl převeden a žádost odeslána vyučujícímu.")
+                    st.success(f"Základní kapitál {vklad_k_prevodu} M-K byl převeden na účet firmy a žádost odeslána.")
                     st.rerun()
                 else:
                     st.error(f"Chyba při zakládání firmy: {res_create.text}")
     st.stop()
 
 # =========================================================================
-# 2. HLAVNÍ STRÁNKA FIRMY
+# 2. VÝPOČET ZŮSTATKU FIREMNÍHO ÚČTU (Z KNIHY PŘÍJMŮ A VÝDAJŮ)
 # =========================================================================
-st.subheader(f"Entita: {moje_firma['nazev_firmy']} (Vaše role: {moje_role})")
+res_kniha_calc = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{moje_firma['id']}&select=typ_transakce,castka", headers=headers).json()
+prijmy_firmy = sum(float(tx.get('castka', 0)) for tx in (res_kniha_calc if isinstance(res_kniha_calc, list) else []) if str(tx.get('typ_transakce','')).upper() in ['PRIJEM', 'PŘÍJEM'])
+vydaje_firmy = sum(float(tx.get('castka', 0)) for tx in (res_kniha_calc if isinstance(res_kniha_calc, list) else []) if str(tx.get('typ_transakce','')).upper() in ['VYDEJ', 'VÝDEJ'])
 
+# Pokud firma ještě nemá transakce, výchozí zůstatek je počáteční kapitál
+if not res_kniha_calc or len(res_kniha_calc) == 0:
+    firemni_zustatek = int(moje_firma.get('pocatecni_kapital', 100))
+else:
+    firemni_zustatek = int(prijmy_firmy - vydaje_firmy)
+
+# Načtení zaměstnanců
 res_zam_global = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{moje_firma['id']}&select=*", headers=headers).json()
 zamestnanci_firmy = res_zam_global if isinstance(res_zam_global, list) else []
 
@@ -211,18 +222,28 @@ pocet_zam = len(zamestnanci_firmy)
 pocet_celkem_tym = pocet_vedeni + pocet_zam
 planovany_pocet_clenu = parse_planovany_pocet(moje_firma.get('podnikatelsky_zamer', ''))
 
-col_s1, col_s2, col_s3, col_s4, col_s5 = st.columns(5)
-stav_text = "Rejstřík OK" if moje_firma["stave_licence"] == "SCHVALENO" else ("Ukončeno" if moje_firma["stave_licence"] == "UKONCENO" else ("Zamítnuto" if moje_firma["stave_licence"] == "ZAMITNUTO" else "Čeká na audit"))
-badge_class = "status-badge-ok" if moje_firma["stave_licence"] == "SCHVALENO" else ("status-badge-err" if moje_firma["stave_licence"] == "ZAMITNUTO" else "status-badge-wait")
+# =========================================================================
+# HLAVNÍ METRIKY: DVA ODDĚLENÉ ÚČTY (FIREMNÍ vs. OSOBNÍ)
+# =========================================================================
+st.subheader(f"Dashboard: {moje_firma['nazev_firmy']} (Vaše pozice: {moje_role})")
 
-tym_badge_class = "status-badge-ok" if pocet_celkem_tym >= planovany_pocet_clenu else "status-badge-err"
+col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+with col_m1:
+    st.metric(label="💼 Firemní pokladna (Účet firmy)", value=f"{firemni_zustatek} M-K", help="Peníze společnosti určené na výplaty, materiál a provoz.")
+with col_m2:
+    st.metric(label="👤 Můj osobní účet (Soukromé)", value=f"{osobni_zustatek_zaka} M-K", help="Vaše soukromé kapesné a výdělky.")
+with col_m3:
+    st.metric(label="👥 Členové týmu", value=f"{pocet_celkem_tym} / {planovany_pocet_clenu} osob")
+with col_m4:
+    st.metric(label="🏛️ Status rejstříku", value=moje_firma['stave_licence'])
 
-with col_s1: st.markdown(f'<div class="{badge_class}">{stav_text}</div>', unsafe_allow_html=True)
-with col_s2: st.markdown(f'<div class="{tym_badge_class}">Tým: {pocet_celkem_tym} / {planovany_pocet_clenu} osob</div>', unsafe_allow_html=True)
-with col_s3: st.markdown('<div class="status-badge-ok">Agilní Vývoj</div>', unsafe_allow_html=True)
-with col_s4: st.markdown('<div class="status-badge-ok">HR a Mzdy</div>', unsafe_allow_html=True)
-with col_s5: st.markdown('<div class="status-badge-ok">Finance</div>', unsafe_allow_html=True)
 st.write("---")
+
+if pocet_celkem_tym < planovany_pocet_clenu:
+    st.error(f"""
+    🚨 **NESOULAD SE ZAKLADATELSKOU LISTINOU:** V zakladatelském spisu máte nahlášeno **{planovany_pocet_clenu} členů**, ale reálně máte zapsáno pouze **{pocet_celkem_tym} osob**.  
+    👉 V záložce **1. Zakladatelský Spis** nebo **4. Tým a HR** doplňte zbývajícího člena, jinak Kontrolní úřad neschválí licenci!
+    """)
 
 if moje_firma["stave_licence"] == "CEKA_NA_SCHVALENI":
     st.warning("⏳ Vaše firma byla odeslána na Kontrolní úřad a čeká na posouzení vyučujícím.")
@@ -231,13 +252,12 @@ if moje_firma["stave_licence"] == "ZAMITNUTO":
     st.error(f"""
     ❌ **ŽÁDOST BYLA KONTROLNÍM ÚŘADEM ZAMÍTNUTA / VRÁCENA K PŘEPRACOVÁNÍ**  
     **Důvod od vyučujícího:** {moje_firma.get('duvod_zamitnuti', 'Doplňte náležitosti spisu.')}  
-    👉 Upravte níže složení týmu nebo přijměte chybějící zaměstnance a klikněte na tlačítko **Odeslat k novému posouzení**.
+    👉 Upravte níže složení týmu a klikněte na tlačítko **Odeslat k novému posouzení**.
     """)
 
 if moje_firma["stave_licence"] == "UKONCENO":
     st.error("Tato společnost byla oficiálně zlikvidována a ukončena.")
 
-# Rozdělení záložek: Vedení (CEO, CFO, CTO) má plnou správu, Zaměstnanec má pracovní pohled
 if je_vedeni:
     tab_zalozeni, tab_brand, tab_vyvoj, tab_hr, tab_kalkulace, tab_ucto, tab_burza, tab_denik, tab_likvidace = st.tabs([
         "1. Zakladatelský Spis", "2. Brand a AI Tank", "3. Řízení (Agile)", "4. Tým a HR", "5. Cenotvorba", "6. Účetnictví a Daně", "7. Burza", "8. Deník a Porady", "9. Likvidace firmy"
@@ -335,7 +355,7 @@ with tab_zalozeni:
                             st.rerun()
 
 # ==========================================
-# ZÁLOŽKA 2: BRAND A AI TANK
+# ZÁLOŽKA 2: BRAND A AI TANK (PŘÍJEM DO FIREMNÍ KASY)
 # ==========================================
 if tab_brand:
     with tab_brand:
@@ -374,23 +394,25 @@ if tab_brand:
             res_pitches = requests.get(f"{SUPABASE_URL}/rest/v1/ai_pitches?firma_id=eq.{moje_firma['id']}&order=datum.desc", headers=headers).json()
             ma_uspesnou_investici = any(p.get('schvaleno_investovano', False) for p in res_pitches) if isinstance(res_pitches, list) else False
             if ma_uspesnou_investici:
-                st.success("Získali jste Seed investici od AI Shark Tanku.")
+                st.success("Získali jste Seed investici od AI Shark Tanku na firemní účet.")
             else:
                 with st.form("form_pitch"):
                     p_nazev = st.text_input("Název prezentace:")
                     p_popis = st.text_area("Detailní pitch:")
                     col_p1, col_p2 = st.columns(2)
-                    with col_p1: p_castka = st.number_input("Požadovaný kapitál (M-K):", min_value=50, value=200)
+                    with col_p1: p_castka = st.number_input("Požadovaný kapitál pro firmu (M-K):", min_value=50, value=200, step=10)
                     with col_p2: p_akcie = st.number_input("Nabízené akcie (ks):", min_value=5, value=20)
                     if st.form_submit_button("Spustit AI Pitching"):
                         requests.post(f"{SUPABASE_URL}/rest/v1/ai_pitches", headers=headers, json={"firma_id": moje_firma['id'], "nazev_pitchu": p_nazev, "popis_projektu": p_popis, "zadana_castka": p_castka, "nabizene_akcie": p_akcie, "hodnoceni_ostry": "[SCHVALENO]", "hodnoceni_vizionarka": "[SCHVALENO]", "hodnoceni_rychly": "[SCHVALENO]", "schvaleno_investovano": True, "investovana_castka": p_castka})
-                        r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers).json()
-                        if r_ceo: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"kredity": int(r_ceo[0]['kredity'] + p_castka)})
-                        requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "PRIJEM", "titul": f"AI Shark Tank: {p_nazev}", "castka": p_castka, "auditovano": True})
+                        # PŘIPSÁNÍ NA FIREMNÍ ÚČET (KNIHA PŘÍJMŮ A VÝDAJŮ)
+                        requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={
+                            "firma_id": moje_firma["id"], "typ_transakce": "PRIJEM", "titul": f"AI Shark Tank: {p_nazev}", "castka": int(p_castka), "auditovano": True
+                        })
+                        st.success(f"Investice {p_castka} M-K byla připsána do firemní pokladny!")
                         st.rerun()
 
 # ==========================================
-# ZÁLOŽKA 3: AGILE (VIDÍ VEDENÍ I ZAMĚSTNANCI)
+# ZÁLOŽKA 3: AGILE
 # ==========================================
 if tab_vyvoj:
     with tab_vyvoj:
@@ -428,7 +450,7 @@ if tab_vyvoj:
                     st.write(f"**{t['nazev_ukolu']}** ({t.get('story_points', 1)} SP)")
 
 # ==========================================
-# ZÁLOŽKA 4: TÝM A HR (POUZE VEDENÍ)
+# ZÁLOŽKA 4: TÝM A HR (VÝPLATA Z FIREMNÍHO ÚČTU)
 # ==========================================
 if tab_hr:
     with tab_hr:
@@ -444,25 +466,47 @@ if tab_hr:
 
         if zamestnanci_firmy:
             st.divider()
-            st.markdown("#### Výplata mezd")
+            st.markdown("#### Výplata mezd (Hrazeno z firemní pokladny)")
+            st.caption(f"Disponibilní zůstatek na firemním účtu: **{firemni_zustatek} M-K**")
+            
             with st.form("form_mzdy_vyplata_tab4"):
                 vybrany_z_jmeno = st.selectbox("Komu chcete vyplatit mzdu:", [z["jmeno_zamestnance"] for z in zamestnanci_firmy])
                 hodiny = st.number_input("Počet odpracovaných hodin:", min_value=1.0, value=4.0, step=0.5)
-                if st.form_submit_button("Odeslat výplatu"):
+                
+                if st.form_submit_button("Odeslat výplatu z firemní pokladny"):
                     vybrany_z = next((z for z in zamestnanci_firmy if z["jmeno_zamestnance"] == vybrany_z_jmeno), None)
-                    hruba = hodiny * vybrany_z["hodinova_sazba"]
-                    dan_castka = hruba * (akt_dan_prijem / 100.0)
+                    hruba = int(hodiny * float(vybrany_z["hodinova_sazba"]))
+                    dan_castka = int(hruba * (akt_dan_prijem / 100.0))
                     cista = hruba - dan_castka
-                    res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers).json()
-                    kredity_ceo = res_ceo[0]['kredity'] if res_ceo else 0
-                    if hruba > kredity_ceo:
-                        st.error("Nedostatek peněz na firemním účtu CEO.")
+                    
+                    if hruba > firemni_zustatek:
+                        st.error(f"Nedostatek financí na firemním účtu! (Požadováno: {hruba} M-K, k dispozici: {firemni_zustatek} M-K)")
                     else:
-                        requests.patch(f"{SUPABASE_URL}/rest/v1/zamestnanci?id=eq.{vybrany_z['id']}", headers=headers, json={"vyplaceno_celkem": vybrany_z.get("vyplaceno_celkem", 0) + cista})
-                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"kredity": int(kredity_ceo - hruba)})
+                        # 1. Výdaj z firemní pokladny
+                        requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={
+                            "firma_id": moje_firma['id'],
+                            "typ_transakce": "VYDEJ",
+                            "titul": f"Výplata mzdy: {vybrany_z_jmeno} ({hodiny} hod, srážka daně {dan_castka} M-K)",
+                            "castka": hruba,
+                            "auditovano": True
+                        })
+                        
+                        # 2. Připsání čisté mzdy do OSOBNÍ peněženky zaměstnance
                         res_zam_ucet = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_z['jmeno_zamestnance']}", headers=headers).json()
-                        if res_zam_ucet: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_z['jmeno_zamestnance']}", headers=headers, json={"kredity": int(res_zam_ucet[0]['kredity'] + cista)})
-                        st.success("Mzda odeslána.")
+                        if res_zam_ucet:
+                            novy_zam_bal = int(res_zam_ucet[0].get('kredity', 0) + cista)
+                            requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_z['jmeno_zamestnance']}", headers=headers, json={"kredity": novy_zam_bal})
+                        
+                        # 3. Odvod daně do státní pokladny
+                        res_stat = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers).json()
+                        if res_stat:
+                            novy_stat_bal = int(res_stat[0].get('kredity', 0) + dan_castka)
+                            requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers, json={"kredity": novy_stat_bal})
+                        
+                        # 4. Aktualizace statistik zaměstnance
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/zamestnanci?id=eq.{vybrany_z['id']}", headers=headers, json={"vyplaceno_celkem": vybrany_z.get("vyplaceno_celkem", 0) + cista})
+                        
+                        st.success(f"Mzda {cista} M-K byla vyplacena zaměstnanci {vybrany_z_jmeno} z firemního účtu (odvedena daň {dan_castka} M-K).")
                         st.rerun()
 
 # ==========================================
@@ -486,9 +530,13 @@ if tab_kalkulace:
 # ==========================================
 if tab_ucto:
     with tab_ucto:
+        st.subheader("Účetnictví a Kniha transakcí firmy")
+        st.caption(f"Celkové příjmy: **{prijmy_firmy:.2f} M-K** | Celkové výdaje: **{vydaje_firmy:.2f} M-K** | Disponibilní zůstatek: **{firemni_zustatek} M-K**")
         res_kniha = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{moje_firma['id']}&order=datum.desc", headers=headers).json()
         if isinstance(res_kniha, list) and len(res_kniha) > 0: 
             st.dataframe(pd.DataFrame(res_kniha)[['datum', 'typ_transakce', 'titul', 'castka']], use_container_width=True)
+        else:
+            st.info("Kniha transakcí je prázdná.")
 
 # ==========================================
 # ZÁLOŽKA 7: BURZA
@@ -504,7 +552,7 @@ if tab_burza:
                 st.rerun()
 
 # ==========================================
-# ZÁLOŽKA 8: DENÍK A PORADY (ZÁPIS PRO CELÉ VEDENÍ)
+# ZÁLOŽKA 8: DENÍK A PORADY
 # ==========================================
 if tab_denik:
     with tab_denik:
@@ -540,7 +588,6 @@ if tab_denik:
         with t_porady:
             st.markdown("Zde evidujte oficiální zápisy z vašich firemních schůzek a porad.")
             
-            # OPRAVA: Kdokoliv z vedení (CEO, CFO, CTO) může zapsat poradu
             if je_vedeni:
                 with st.form("form_zapis_porady"):
                     st.caption(f"✍️ Zápis podává: **{uzivatel}** (Role: **{moje_role}**)")
@@ -555,7 +602,7 @@ if tab_denik:
                         else:
                             st.error("Zápis nesmí být prázdný.")
             else:
-                st.info("⚠️ Zápisy z firemních porad smí do systému vkládat pouze členové vedení (CEO, CFO, CTO). Zaměstnanci mohou zápisy číst a své individuální hodiny zapisovat v první podzáložce.")
+                st.info("⚠️ Zápisy z firemních porad smí do systému vkládat pouze členové vedení (CEO, CFO, CTO). Zaměstnanci mohou zápisy číst.")
             
             st.markdown("#### Historie porad")
             if isinstance(res_denik, list):
@@ -575,11 +622,6 @@ if tab_denik:
 if tab_likvidace:
     with tab_likvidace:
         st.subheader("Ukončení a likvidace společnosti")
-        st.markdown("""
-        Pokud projekt dospěl ke svému závěru nebo se společnost rozhodla ukončit svou činnost, 
-        zde můžete zahájit proces dobrovolné likvidace.
-        """)
-        
         with st.container(border=True):
             st.markdown("#### Právní kroky likvidace:")
             st.markdown("1. **Vypořádání závazků:** Vyplacení všech mezd zaměstnancům a zaplacení daní.")
