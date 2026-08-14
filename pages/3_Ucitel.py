@@ -3,6 +3,7 @@ import requests
 import pandas as pd
 import json
 import time
+import re
 
 st.set_page_config(page_title="Kontrolní úřad a Audit", layout="wide")
 
@@ -22,6 +23,12 @@ h1, h2, h3, h4 { background: -webkit-linear-gradient(45deg, #00B4D8, #0077B6); -
 .licence-val { font-family: monospace; font-size: 1.5em; font-weight: bold; padding: 4px 10px; border-radius: 5px; display: inline-block; margin-top: 5px; }
 </style>
 """, unsafe_allow_html=True)
+
+def parse_planovany_pocet(zamer_text):
+    if not zamer_text: return 4
+    match = re.search(r'Nahlášený počet členů týmu:\s*(\d+)', str(zamer_text))
+    if match: return int(match.group(1))
+    return 4
 
 if not st.session_state.get("prihlasen") or str(st.session_state.get("role")).upper() not in ["UCITEL", "ADMIN"]:
     st.error("Přístup odepřen. Sekce pouze pro vyučující.")
@@ -301,7 +308,7 @@ else:
 
             st.divider()
             
-            # --- ODMENY A POKUTY (OPRAVENO: POUZE CELÁ ČÍSLA PRO DATABÁZI) ---
+            # --- ODMENY A POKUTY ---
             st.markdown("##### 2. Přímé udělení odměny / stržení kreditů žákovi")
             with st.form("form_ucitel_odmena_zaka_penez_robust"):
                 col_o1, col_o2, col_o3 = st.columns([2, 1.5, 1])
@@ -375,17 +382,31 @@ else:
                 res_zamestnanci = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{f_id}", headers=headers).json()
                 zamestnanci = res_zamestnanci if isinstance(res_zamestnanci, list) else []
                 
-                # Výpočet celkového počtu lidí ve firmě
+                # Výpočet počtu lidí
                 pocet_vedeni = 1 + (1 if firma.get('cfo_jmeno') else 0) + (1 if firma.get('cto_jmeno') else 0)
-                pocet_zamestnancu = len(zamestnanci)
-                pocet_celkem_tym = pocet_vedeni + pocet_zamestnancu
+                pocet_zam = len(zamestnanci)
+                pocet_celkem = pocet_vedeni + pocet_zam
+                planovany_pocet = parse_planovany_pocet(firma.get('podnikatelsky_zamer', ''))
 
                 with st.container(border=True):
                     st.markdown("#### Identifikace společnosti")
                     st.markdown(f"**Obchodní firma:** `{firma['nazev_firmy']}`")
                     st.markdown(f"**Třída:** `{aktivni_trida}` | **Licenční kód:** `{firma.get('skolni_kod', '')}`")
                     st.markdown(f"**Základní kapitál:** `{firma.get('pocatecni_kapital', 100)} M-K`")
-                    st.info(f"👥 **Celkem v týmu firmy:** **{pocet_celkem_tym} osob** ({pocet_vedeni} ve vedení + {pocet_zamestnancu} zaměstnanci)")
+                    st.divider()
+                    
+                    # AUDITNÍ VÝSTRAŽNÝ BLOK PRO UČITELE
+                    if pocet_celkem < planovany_pocet:
+                        st.error(f"""
+                        🚨 **NESOULAD SE ZAKLADATELSKOU LISTINOU**  
+                        V zakladatelském spisu firma deklarovala **{planovany_pocet} členů**, ale aktuálně má zapsáno pouze **{pocet_celkem} osob** ({pocet_vedeni} ve vedení + {pocet_zam} zaměstnanců).  
+                        ⚠️ **Chybí registrovat a přijmout ještě {planovany_pocet - pocet_celkem} člena/členy!**
+                        """)
+                    elif pocet_celkem > planovany_pocet:
+                        st.info(f"ℹ️ **Rozšířený tým:** V zakladatelském spisu bylo nahlášeno {planovany_pocet} osob, firma má aktuálně {pocet_celkem} členů.")
+                    else:
+                        st.success(f"✅ **Počet členů v pořádku:** Evidováno {pocet_celkem} z {planovany_pocet} nahlášených osob.")
+                        
                     st.divider()
                     st.markdown("#### Předmět podnikání a Živnost")
                     zamer_raw = str(firma.get('podnikatelsky_zamer', ''))
@@ -394,7 +415,7 @@ else:
                     else: st.write(zamer_raw if zamer_raw else "Neuvedeno")
                     st.divider()
                     st.markdown("#### Statutární orgány (Vedení)")
-                    st.markdown(f"* **CEO (Ředitel):** {firma.get('ceo_jmeno', 'Neobsazeno')}")
+                    st.markdown(f"* **CEO (Generální ředitel):** {firma.get('ceo_jmeno', 'Neobsazeno')}")
                     st.markdown(f"* **CFO (Finanční ředitel):** {firma.get('cfo_jmeno', 'Neobsazeno')}")
                     st.markdown(f"* **CTO (Technický ředitel):** {firma.get('cto_jmeno', 'Neobsazeno')}")
                     st.divider()
