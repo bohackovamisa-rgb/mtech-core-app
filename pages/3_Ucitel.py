@@ -18,10 +18,9 @@ st.markdown("""
     .status-err { color: #f87171; font-weight: 700; background: rgba(239, 68, 68, 0.1); padding: 4px 8px; border-radius: 6px; }
     .alert-box { background-color: rgba(245, 158, 11, 0.1); border: 1px solid #f59e0b; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
     .info-box { background-color: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-    .asset-link { color: #00B4D8; font-weight: bold; text-decoration: none; }
-    .asset-link:hover { text-decoration: underline; color: #0077B6; }
-    .licence-box { background: linear-gradient(135deg, rgba(0, 180, 216, 0.15) 0%, rgba(0, 119, 182, 0.15) 100%); border: 1px solid #00B4D8; border-left: 5px solid #00B4D8; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
-    .licence-code { font-family: monospace; font-size: 1.4em; font-weight: bold; color: #0ea5e9; background: rgba(0,0,0,0.3); padding: 5px 15px; border-radius: 5px; }
+    .licence-box { background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%); border: 1px solid #334155; padding: 20px; border-radius: 12px; margin-bottom: 25px; }
+    .licence-card { background: rgba(15, 23, 42, 0.6); padding: 15px; border-radius: 8px; border: 1px solid #334155; }
+    .licence-val { font-family: monospace; font-size: 1.5em; font-weight: bold; padding: 4px 10px; border-radius: 5px; display: inline-block; margin-top: 5px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -51,29 +50,37 @@ if not skolni_kod and ucitel_jmeno:
         st.session_state.skolni_kod = skolni_kod
 
 # =========================================================================
-# 0. ZOBRAZENÍ LICENČNÍHO KÓDU HNED NAHOŘE
+# 0. ZOBRAZENÍ OBOU LICENČNÍCH KÓDŮ ŠKOLY (VÝUKA + ZÁKAZNÍCI)
 # =========================================================================
 if skolni_kod and skolni_kod != "SYSTEM":
     res_nazev_skoly = requests.get(f"{SUPABASE_URL}/rest/v1/licencovane_skoly?licencni_kod=eq.{skolni_kod}", headers=headers).json()
     nazev_skoly_zobrazeni = res_nazev_skoly[0].get('nazev_skoly', 'Neznámá instituce') if (isinstance(res_nazev_skoly, list) and len(res_nazev_skoly) > 0) else 'Neznámá instituce'
     
+    akt_nast = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{skolni_kod}", headers=headers).json()
+    z_kod = akt_nast[0].get('zakaznicky_kod', 'NENASTAVENO') if (isinstance(akt_nast, list) and len(akt_nast) > 0) else 'NENASTAVENO'
+    
     st.markdown(f"""
         <div class="licence-box">
-            <div>
-                <h4 style="margin: 0; color: #cbd5e1;">Vaše škola: {nazev_skoly_zobrazeni}</h4>
-                <p style="margin: 0; font-size: 0.9em; color: #94a3b8;">Tento kód předejte žákům pro registraci do systému a vaší třídy.</p>
+            <h4 style="margin: 0 0 15px 0; color: #f8fafc; font-size: 1.15em;">Přístupové kódy školy: {nazev_skoly_zobrazeni}</h4>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 280px;" class="licence-card">
+                    <span style="font-size: 11px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px;">Výukový kód (Pro žáky ve třídách a učitele)</span>
+                    <div style="color: #cbd5e1; font-size: 13px; margin: 4px 0 8px 0;">Zadávají žáci ve vašich hodinách pro založení firmy a práci ve třídě.</div>
+                    <div class="licence-val" style="background: rgba(14, 165, 233, 0.15); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4);">{skolni_kod}</div>
+                </div>
+                <div style="flex: 1; min-width: 280px;" class="licence-card">
+                    <span style="font-size: 11px; font-weight: 700; color: #34d399; text-transform: uppercase; letter-spacing: 0.5px;">Zákaznický kód (Pro ostatní žáky školy)</span>
+                    <div style="color: #cbd5e1; font-size: 13px; margin: 4px 0 8px 0;">Tento kód předejte ostatním žákům školy, aby mohli na E-shopu nakupovat.</div>
+                    <div class="licence-val" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);">{z_kod}</div>
+                </div>
             </div>
-            <div class="licence-code">{skolni_kod}</div>
         </div>
     """, unsafe_allow_html=True)
 elif is_admin:
     st.markdown("""
         <div class="licence-box">
-            <div>
-                <h4 style="margin: 0; color: #cbd5e1;">Režim: Hlavní Administrátor</h4>
-                <p style="margin: 0; font-size: 0.9em; color: #94a3b8;">Máte neomezený přístup napříč všemi školami.</p>
-            </div>
-            <div class="licence-code">SUPERADMIN</div>
+            <h4 style="margin: 0; color: #cbd5e1;">Režim: Hlavní Administrátor</h4>
+            <p style="margin: 5px 0 0 0; font-size: 0.9em; color: #94a3b8;">Máte neomezený přístup napříč všemi školami v systému.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -101,16 +108,12 @@ else:
 moji_zaci_jmena_global = [z["jmeno"] for z in moji_zaci_global]
 
 g_firmy_cekajici = [f for f in moje_firmy_global if f.get("stave_licence") == "CEKA_NA_SCHVALENI"]
-
 res_q_all = requests.get(f"{SUPABASE_URL}/rest/v1/questy?stav=eq.K_KONTROLE", headers=headers).json()
 g_questy_cekajici = [q for q in (res_q_all if isinstance(res_q_all, list) else []) if q.get("resitel") in moji_zaci_jmena_global]
-
 res_priznani_all = requests.get(f"{SUPABASE_URL}/rest/v1/danova_priznani?stav=eq.ODEVZDANO", headers=headers).json()
 g_priznani_cekajici = [p for p in (res_priznani_all if isinstance(res_priznani_all, list) else []) if any(f['id'] == p.get('firma_id') for f in moje_firmy_global)]
-
 res_kalk_all = requests.get(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?schvaleno_uradem=eq.false", headers=headers).json()
 g_kalkulace_cekajici = [k for k in (res_kalk_all if isinstance(res_kalk_all, list) else []) if any(f['id'] == k.get('firma_id') for f in moje_firmy_global)]
-
 res_uvery_all = requests.get(f"{SUPABASE_URL}/rest/v1/bankovni_uvery?stav=eq.ZADOST", headers=headers).json()
 g_uvery_cekajici = [u for u in (res_uvery_all if isinstance(res_uvery_all, list) else []) if any(f['id'] == u.get('firma_id') for f in moje_firmy_global)]
 
@@ -124,7 +127,7 @@ col_dash1, col_dash2 = st.columns(2)
 with col_dash1:
     st.markdown(f"""
     <div class='info-box'>
-        <h4 style='margin:0; color:#10b981;'>Stav registrací žáků</h4>
+        <h4 style='margin:0; color:#10b981;'>Stav registrací ve vašich třídách</h4>
         <p style='margin: 5px 0 0 0; color:#cbd5e1; font-size: 15px;'>
             Ve vašich třídách je aktuálně registrováno celkem <b>{pocet_zaku_celkem} žáků</b>.<br>
             Z toho <b>{pocet_zaku_zakladni_role} žáků</b> má zatím jen základní roli. Zkontrolujte je ve Správě žáků a přidělte jim podnikatelská oprávnění.
@@ -192,6 +195,46 @@ aktivni_trida = st.selectbox("Vyberte třídu, se kterou právě pracujete:", se
 st.write("---")
 
 # =========================================================================
+# SPRÁVA ZÁKAZNÍKŮ ŠKOLY (DOHLED NAD BĚŽNÝMI ŽÁKY)
+# =========================================================================
+with st.expander("Bezpečnostní dohled nad Zákazníky školy (Korekce peněženek)", expanded=False):
+    st.caption("Tito žáci nespadají do žádné konkrétní třídy. Fungují pouze jako konzumenti a zákazníci e-shopu.")
+    res_zakaznici = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.Zákazník&role=neq.ucitel", headers=headers).json()
+    zakaznici = res_zakaznici if isinstance(res_zakaznici, list) else []
+    
+    if not zakaznici:
+        st.info("Ve škole zatím nejsou registrováni žádní čistí zákazníci.")
+    else:
+        df_zak = pd.DataFrame([{"Jméno zákazníka": z["jmeno"], "Aktuální zůstatek": z.get("kredity", 0)} for z in zakaznici])
+        st.dataframe(df_zak, use_container_width=True)
+        
+        with st.form("korekce_zakazniku"):
+            col_k1, col_k2, col_k3 = st.columns([2, 2, 1])
+            with col_k1: 
+                z_vyber = st.selectbox("Vyberte zákazníka:", [z["jmeno"] for z in zakaznici])
+            with col_k2: 
+                akce = st.selectbox("Akce:", ["Strhnout kredity (Pokuta)", "Přidat kredity (Bonus)", "Smazat účet (Ban)"])
+            with col_k3: 
+                hodnota = st.number_input("Částka M-K:", min_value=1.0, value=50.0)
+            
+            if st.form_submit_button("Provést bezpečnostní akci"):
+                z_target = next((z for z in zakaznici if z["jmeno"] == z_vyber), None)
+                if akce == "Smazat účet (Ban)":
+                    requests.delete(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers)
+                    st.success(f"Účet zákazníka {z_vyber} byl nenávratně smazán.")
+                elif akce == "Strhnout kredity (Pokuta)":
+                    novy = max(0, z_target.get("kredity", 0) - hodnota)
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers, json={"kredity": novy})
+                    st.success(f"Zákazníkovi {z_vyber} bylo strženo {hodnota} M-K.")
+                elif akce == "Přidat kredity (Bonus)":
+                    novy = z_target.get("kredity", 0) + hodnota
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers, json={"kredity": novy})
+                    st.success(f"Zákazníkovi {z_vyber} bylo přidáno {hodnota} M-K.")
+                st.rerun()
+
+st.write("---")
+
+# =========================================================================
 # NAČTENÍ ŽÁKŮ A FIREM VYBRANÉ TŘÍDY
 # =========================================================================
 res_zaci = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.{aktivni_trida}&role=neq.ucitel&order=id.desc", headers=headers).json()
@@ -219,7 +262,7 @@ with st.expander(f"Seznam žáků třídy {aktivni_trida} a udělování podnika
         
         col_z1, col_z2, col_z3 = st.columns([2, 2, 1])
         with col_z1:
-            vybrany_zak = st.selectbox("Vyberte žáka:", [z["jmeno"] for z in zaci_tridy])
+            vybrany_zak = st.selectbox("Vyberte žáka z této třídy:", [z["jmeno"] for z in zaci_tridy])
         with col_z2:
             nova_role = st.selectbox("Nastavit oprávnění:", ["firma (Podnikatel / Zakladatel)", "zak (Běžný žák)"])
         with col_z3:
@@ -345,7 +388,7 @@ with tab_legal:
                 st.rerun()
 
 # ==========================================
-# ZÁLOŽKA 2: VIZE
+# ZÁLOŽKA 2: VIZE A AI
 # ==========================================
 with tab_aktiva:
     canvas = requests.get(f"{SUPABASE_URL}/rest/v1/lean_canvas?firma_id=eq.{f_id}", headers=headers).json()
@@ -366,7 +409,7 @@ with tab_aktiva:
         st.info("Firma zatím nedodala Lean Canvas.")
 
 # ==========================================
-# ZÁLOŽKA 3: HR
+# ZÁLOŽKA 3: HR A TÝM
 # ==========================================
 with tab_hr:
     st.markdown("#### Personální audit týmu")
@@ -514,42 +557,14 @@ with tab_banka:
             n_kurz = st.number_input("Kurz M-Kreditu k CZK (1 M-K = X Kč):", min_value=1.0, value=float(akt_nastaveni.get('kurz_kc', 10.0)))
             n_dan = st.number_input("M-TECH Daň pro e-shop (%):", min_value=0.0, max_value=50.0, value=float(akt_nastaveni.get('mtech_dan_pct', 15.0)))
             n_dan_prijem = st.number_input("Daň z příjmu zaměstnanců (%):", min_value=0.0, max_value=50.0, value=float(akt_nastaveni.get('dan_prijem_pct', 15.0)))
+            n_zakaznik = st.number_input("Startovací kredit pro ZÁKAZNÍKA (M-K):", min_value=0.0, value=float(akt_nastaveni.get('start_kredit_zakaznik', 50.0)))
             n_cenik = st.text_area("Globální ceník školy:", value=str(akt_nastaveni.get('globalni_cenik', '')), height=150)
             if st.form_submit_button("Uložit makroekonomická pravidla"):
                 requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{skolni_kod}", headers=headers, json={
-                    "kurz_kc": n_kurz, "globalni_cenik": n_cenik, "mtech_dan_pct": n_dan, "dan_prijem_pct": n_dan_prijem
+                    "kurz_kc": n_kurz, "globalni_cenik": n_cenik, "mtech_dan_pct": n_dan, "dan_prijem_pct": n_dan_prijem, "start_kredit_zakaznik": n_zakaznik
                 })
                 st.success("Pravidla uložena.")
                 st.rerun()
-        
-        st.write("---")
-        st.markdown("#### Žádosti o firemní úvěry")
-        res_uvery_all = requests.get(f"{SUPABASE_URL}/rest/v1/bankovni_uvery?stav=eq.ZADOST", headers=headers).json()
-        uvery = [u for u in (res_uvery_all if isinstance(res_uvery_all, list) else []) if any(f['id'] == u.get('firma_id') for f in moje_firmy_global)]
-        
-        if uvery:
-            for u in uvery:
-                f_jmeno = next((f['nazev_firmy'] for f in firmy if f['id'] == u['firma_id']), "Neznámá firma")
-                with st.container(border=True):
-                    st.markdown(f"**Žadatel:** {f_jmeno} | Částka: {u['castka']} M-K (Úrok: {u['urok_pct']} %)")
-                    st.write(f"Účel: {u['ucel']}")
-                    col_u_btn1, col_u_btn2 = st.columns(2)
-                    with col_u_btn1:
-                        if st.button("Schválit úvěr", key=f"uv_ok_{u['id']}"):
-                            f_ceo = next((f['ceo_jmeno'] for f in firmy if f['id'] == u['firma_id']), None)
-                            celkem_vratit = u['castka'] * (1 + (u['urok_pct'] / 100.0))
-                            requests.patch(f"{SUPABASE_URL}/rest/v1/bankovni_uvery?id=eq.{u['id']}", headers=headers, json={"stav": "SCHVALENO", "zbyva_splatit": celkem_vratit})
-                            res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f_ceo}", headers=headers).json()
-                            if res_ceo:
-                                requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f_ceo}", headers=headers, json={"kredity": res_ceo[0]['kredity'] + u['castka']})
-                            requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": u['firma_id'], "typ_transakce": "PRIJEM", "titul": f"Bankovní úvěr: {u['ucel']}", "castka": u['castka'], "auditovano": True})
-                            st.rerun()
-                    with col_u_btn2:
-                        if st.button("Zamítnout", key=f"uv_ne_{u['id']}"):
-                            requests.patch(f"{SUPABASE_URL}/rest/v1/bankovni_uvery?id=eq.{u['id']}", headers=headers, json={"stav": "ZAMITNUTO"})
-                            st.rerun()
-        else:
-            st.info("Žádné čekající žádosti o podnikatelský úvěr.")
 
 # ==========================================
 # ZÁLOŽKA 8: HODNOCENÍ ŽÁKŮ TŘÍDY
