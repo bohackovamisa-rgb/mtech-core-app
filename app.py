@@ -61,6 +61,38 @@ if st.session_state.prihlasen and st.session_state.uzivatel:
         st.session_state.trida_nazev = res_live[0].get("trida_nazev", "")
         st.session_state.skolni_kod = res_live[0].get("skolni_kod", "")
 
+# KONTROLA, ZDA ŽÁK PATŘÍ K NĚJAKÉ FIRMĚ (CEO, CFO, CTO NEBO ZAMĚSTNANEC)
+ma_pristup_k_firme = False
+moje_firemni_pozice = None
+
+if st.session_state.prihlasen and st.session_state.uzivatel and st.session_state.role in ["zak", "firma"]:
+    u_name = str(st.session_state.uzivatel).strip()
+    sk_kod = st.session_state.get("skolni_kod", "")
+    
+    # 1. Kontrola vedení (CEO, CFO, CTO)
+    r_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{sk_kod}&select=*", headers=headers).json()
+    if r_firmy and isinstance(r_firmy, list):
+        for f in r_firmy:
+            if str(f.get('ceo_jmeno','')).lower() == u_name.lower():
+                ma_pristup_k_firme = True
+                moje_firemni_pozice = "CEO"
+                break
+            elif str(f.get('cfo_jmeno','')).lower() == u_name.lower():
+                ma_pristup_k_firme = True
+                moje_firemni_pozice = "CFO"
+                break
+            elif str(f.get('cto_jmeno','')).lower() == u_name.lower():
+                ma_pristup_k_firme = True
+                moje_firemni_pozice = "CTO"
+                break
+                
+    # 2. Kontrola zaměstnanců
+    if not ma_pristup_k_firme:
+        r_zam = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?jmeno_zamestnance=eq.{u_name}&select=*", headers=headers).json()
+        if r_zam and isinstance(r_zam, list) and len(r_zam) > 0:
+            ma_pristup_k_firme = True
+            moje_firemni_pozice = r_zam[0].get("pozice", "Zaměstnanec")
+
 if not st.session_state.prihlasen:
     st.markdown("""
         <div class="hero-card">
@@ -95,7 +127,7 @@ if not st.session_state.prihlasen:
                         st.session_state.skolni_kod = res[0].get("skolni_kod", "")
                         st.session_state.trida_nazev = res[0].get("trida_nazev", "")
                         
-                        # ULOŽENÍ DO URL PRO PŘEŽITÍ F5
+                        # Uložení do URL pro přežití F5
                         st.query_params["user"] = res[0]["jmeno"]
                         st.rerun()
                     else:
@@ -175,7 +207,8 @@ if not st.session_state.prihlasen:
                             start_kredity = nastaveni[0]['start_kredit_zak'] if nastaveni else 100
                             requests.post(f"{SUPABASE_URL}/rest/v1/uzivatele", headers=headers, json={
                                 "jmeno": reg_jmeno, "heslo": reg_heslo, "role": "zak",
-                                "kredity": start_kredity, "skolni_kod": skolni_kod_actual,
+                                "kredity": start_kredit_zakaznik if is_customer else start_kredity,
+                                "skolni_kod": skolni_kod_actual,
                                 "trida_nazev": t_nazev, "aktivni": True
                             })
                             st.success("Žákovský účet byl vytvořen. Nyní se můžete přihlásit.")
@@ -237,7 +270,18 @@ else:
     # ----------------------------------------------------
     with st.sidebar:
         st.markdown(f"Uživatel: **{st.session_state.uzivatel}**")
-        role_zobr = "Učitel" if st.session_state.role == "ucitel" else ("Podnikatel" if st.session_state.role == "firma" else ("Běžný žák" if st.session_state.role == "zak" else "Hlavní Admin"))
+        
+        if st.session_state.role == "ucitel":
+            role_zobr = "Učitel"
+        elif st.session_state.role == "admin":
+            role_zobr = "Hlavní Admin"
+        elif moje_firemni_pozice:
+            role_zobr = f"{moje_firemni_pozice}"
+        elif st.session_state.role == "firma":
+            role_zobr = "Podnikatel (Zakladatel)"
+        else:
+            role_zobr = "Běžný žák"
+            
         st.caption(f"Role: **{role_zobr}**")
         if st.session_state.trida_nazev:
             st.caption(f"Třída: **{st.session_state.trida_nazev}**")
@@ -253,16 +297,21 @@ else:
                     else:
                         st.error("Heslo nesmí být prázdné.")
 
-        # BEZPEČNÉ ODHLÁŠENÍ S VYČIŠTĚNÍM URL
         if st.button("Odhlásit se"):
             st.query_params.clear()
             st.session_state.clear()
             st.rerun()
             
-    # Navigace do konkrétních stránek podle role
-    if st.session_state.role == "zak": pg = st.navigation([zaci_page, trh_page, zebricky_page])
-    elif st.session_state.role == "firma": pg = st.navigation([firma_page, zaci_page, trh_page, zebricky_page])
-    elif st.session_state.role == "ucitel": pg = st.navigation([ucitel_page, trh_page, zebricky_page])
-    elif st.session_state.role == "admin": pg = st.navigation([zaci_page, firma_page, ucitel_page, trh_page, zebricky_page])
+    # =========================================================================
+    # CHYTRÁ NAVIGACE: POKUD JE ŽÁK VE FIRMĚ, MÁ AUTOMATICKY PŘÍSTUP K DASHBOARDU
+    # =========================================================================
+    if st.session_state.role == "ucitel":
+        pg = st.navigation([ucitel_page, trh_page, zebricky_page])
+    elif st.session_state.role == "admin":
+        pg = st.navigation([zaci_page, firma_page, ucitel_page, trh_page, zebricky_page])
+    elif st.session_state.role == "firma" or ma_pristup_k_firme:
+        pg = st.navigation([firma_page, zaci_page, trh_page, zebricky_page])
+    else:
+        pg = st.navigation([zaci_page, trh_page, zebricky_page])
     
     pg.run()
