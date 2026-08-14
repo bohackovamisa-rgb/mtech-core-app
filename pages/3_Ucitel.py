@@ -297,13 +297,13 @@ with tab_questy:
                 st.rerun()
     with col_q2:
         st.markdown("#### Práce ke kontrole")
-        st.caption("Úkoly, které žáci odevzdali. Schválením jim automaticky odešlete sjednané M-Kredity a zároveň jim přidělíte XP body (zkušenosti) pro vylepšení jejich známky.")
+        st.caption("U odevzdaných úkolů je M-K odměna pevně daná. Vy pouze hodnotíte kvalitu práce pomocí XP bodů.")
         
         res_q_check = requests.get(f"{SUPABASE_URL}/rest/v1/questy?stav=eq.K_KONTROLE", headers=headers).json()
         if isinstance(res_q_check, list) and len(res_q_check) > 0:
             for q in res_q_check:
                 
-                # Bezpečné zpracování odkazu proti pádu
+                # Bezpečné zpracování odkazu
                 odkaz = q.get('odkaz_vystup', '')
                 if not odkaz:
                     vystup_html = "<span style='color:#64748b;'><i>Žák neposkytl žádný odkaz, pouze napsal, že má hotovo.</i></span>"
@@ -312,33 +312,34 @@ with tab_questy:
                 else:
                     vystup_html = f"<b>Komentář žáka:</b> <i>{odkaz}</i>"
                 
-                # Spojíme informace o úkolu a formulář do jednoho vizuálního bloku
+                # Vizuální oddělení - Informace o úkolu a penězích
                 st.markdown(f"""
                 <div class='card-box' style='margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: none;'>
                     <h5 style='color: #0ea5e9; margin-top: 0;'>{q['nazev']}</h5>
                     <p style='margin-bottom: 5px;'>Zhotovitel: <b>{q['resitel']}</b></p>
-                    <p style='margin-bottom: 10px; color: #10b981; font-weight: bold;'>Sjednaná odměna k vyplacení: {q['odmena']} M-K</p>
+                    <p style='margin-bottom: 10px; color: #64748b;'>Pevná odměna: <b style='color: #10b981;'>{q['odmena']} M-K</b> <i>(Odešle se automaticky při schválení)</i></p>
                     <div style='background: rgba(255,255,255,0.05); padding: 10px; border-radius: 5px;'>
                         {vystup_html}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
                 
+                # Formulář pouze pro hodnocení XP
                 with st.form(f"schvaleni_{q['id']}"):
-                    st.markdown("<p style='font-size: 13px; margin-bottom: 5px; color: #cbd5e1;'>Přiřaďte žákovi bonusové XP body k odměně:</p>", unsafe_allow_html=True)
+                    st.markdown("<p style='font-size: 14px; font-weight: bold; margin-bottom: 5px;'>Ohodnoťte kvalitu práce (XP body pro AI návrh známky):</p>", unsafe_allow_html=True)
                     
                     col_xp1, col_xp2 = st.columns([2, 1])
                     with col_xp1:
-                        kategorie_xp = st.selectbox("Kategorie XP:", ["IT a Technologie", "Marketing a Kreativita", "Byznys a Finance"], label_visibility="collapsed")
+                        kategorie_xp = st.selectbox("Oblast dovednosti:", ["IT a Technologie", "Marketing a Kreativita", "Byznys a Finance"], label_visibility="collapsed")
                     with col_xp2:
                         pocet_xp = st.number_input("Počet XP:", min_value=0, max_value=50, value=10, label_visibility="collapsed")
                     
                     st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
                     col_btn1, col_btn2 = st.columns(2)
                     with col_btn1:
-                        btn_schvalit = st.form_submit_button(f"✅ Schválit ({q['odmena']} M-K + XP)")
+                        btn_schvalit = st.form_submit_button("✅ Schválit úkol a odeslat odměnu")
                     with col_btn2:
-                        btn_zamitnout = st.form_submit_button("❌ Zamítnout (Vrátit)")
+                        btn_zamitnout = st.form_submit_button("❌ Zamítnout (Vrátit k přepracování)")
 
                     if btn_schvalit:
                         res_r = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{q['resitel']}", headers=headers).json()
@@ -364,7 +365,6 @@ with tab_questy:
                         st.rerun()
         else:
             st.info("Žádné úkoly momentálně nečekají na schválení.")
-
 # ==========================================
 # ZÁLOŽKA 6: STÁTNÍ POKLADNA A AI DAŇOVÝ AUDIT
 # ==========================================
