@@ -129,13 +129,13 @@ else:
     elif st.session_state.role == "ucitel": pg = st.navigation([ucitel_page, trh_page, zebricky_page])
     elif st.session_state.role == "admin": pg = st.navigation([zaci_page, firma_page, ucitel_page, trh_page, zebricky_page])
     
-    pg.run()
-    
     with st.sidebar:
         st.divider()
         st.markdown(f"Uživatel: **{st.session_state.uzivatel}**")
-        st.caption(f"Role: **{st.session_state.role.upper()}**")
+        st.caption(f"Role: **{str(st.session_state.role).upper()}**")
         st.markdown(f"Zůstatek: **{st.session_state.kredity} M-K**")
         if st.button("Odhlásit se", icon=":material/logout:"):
             st.session_state.clear()
             st.rerun()
+
+    pg.run()
