@@ -30,6 +30,7 @@ if "role" not in st.session_state: st.session_state.role = None
 if "kredity" not in st.session_state: st.session_state.kredity = 0
 if "uzivatel" not in st.session_state: st.session_state.uzivatel = None
 if "skolni_kod" not in st.session_state: st.session_state.skolni_kod = None
+if "trida_nazev" not in st.session_state: st.session_state.trida_nazev = None
 
 zaci_page = st.Page("pages/1_Zaci.py", title="Moje peněženka", icon=":material/wallet:")
 firma_page = st.Page("pages/2_Firma.py", title="Firemní Dashboard", icon=":material/insights:")
@@ -69,6 +70,7 @@ if not st.session_state.prihlasen:
                         st.session_state.kredity = res[0]["kredity"]
                         st.session_state.uzivatel = res[0]["jmeno"]
                         st.session_state.skolni_kod = res[0].get("skolni_kod", "")
+                        st.session_state.trida_nazev = res[0].get("trida_nazev", "")
                         st.rerun()
                     else:
                         st.error("Nesprávné přihlašovací údaje.")
@@ -77,34 +79,55 @@ if not st.session_state.prihlasen:
 
     with tab_user_reg:
         st.info("Pro registraci zadejte licenční kód vaší školy.")
+        skolni_kod_input = st.text_input("Licenční kód školy:", key="reg_kod").upper().strip()
+        
+        dostupne_tridy = []
+        if skolni_kod_input:
+            res_tridy = requests.get(f"{SUPABASE_URL}/rest/v1/tridy?skolni_kod=eq.{skolni_kod_input}&select=*", headers=headers).json()
+            if isinstance(res_tridy, list) and res_tridy:
+                dostupne_tridy = res_tridy
+        
         with st.form("user_reg_form"):
-            skolni_kod = st.text_input("Licenční kód školy:").upper().strip()
             reg_jmeno = st.text_input("Uživatelské jméno:")
             reg_heslo = st.text_input("Heslo:", type="password")
-            reg_role = st.selectbox("Typ účtu:", ["zak", "firma", "ucitel"])
+            reg_role = st.selectbox("Typ účtu:", ["zak", "ucitel"])
+            
+            vybrana_trida_str = None
+            if reg_role == "zak":
+                if dostupne_tridy:
+                    moznosti_trid = [f"{t['nazev_tridy']} (Vyučující: {t['ucitel_jmeno']})" for t in dostupne_tridy]
+                    vybrana_trida_str = st.selectbox("Vyberte svou třídu / skupinu:", moznosti_trid)
+                else:
+                    st.warning("Učitel pro tento školní kód zatím nezaložil žádnou třídu. Můžete se registrovat a třída vám bude přiřazena později.")
+            
             if st.form_submit_button("Vytvořit účet"):
-                if skolni_kod and reg_jmeno and reg_heslo:
-                    lic_res = requests.get(f"{SUPABASE_URL}/rest/v1/licencovane_skoly?licencni_kod=eq.{skolni_kod}", headers=headers).json()
+                if skolni_kod_input and reg_jmeno and reg_heslo:
+                    lic_res = requests.get(f"{SUPABASE_URL}/rest/v1/licencovane_skoly?licencni_kod=eq.{skolni_kod_input}", headers=headers).json()
                     if not lic_res:
-                        st.error("Neplatný licenční kód.")
+                        st.error("Neplatný licenční kód školy.")
                     else:
                         if requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{reg_jmeno}", headers=headers).json():
-                            st.error("Jméno je již obsazené.")
+                            st.error("Uživatelské jméno je již obsazené.")
                         else:
-                            # Získání makroekonomického nastavení školy
-                            nastaveni = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{skolni_kod}", headers=headers).json()
-                            if nastaveni:
-                                start_kredity = nastaveni[0]['start_kredit_zak'] if reg_role == "zak" else nastaveni[0]['start_kredit_firma']
-                            else:
-                                start_kredity = 100 if reg_role == "zak" else 300
+                            nastaveni = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{skolni_kod_input}", headers=headers).json()
+                            start_kredity = nastaveni[0]['start_kredit_zak'] if (nastaveni and reg_role == "zak") else (100 if reg_role == "zak" else 300)
+                            
+                            t_nazev = None
+                            if reg_role == "zak" and vybrana_trida_str:
+                                t_nazev = vybrana_trida_str.split(" (")[0]
                                 
-                            requests.post(f"{SUPABASE_URL}/rest/v1/uzivatele", headers=headers, json={"jmeno": reg_jmeno, "heslo": reg_heslo, "role": reg_role, "kredity": start_kredity, "skolni_kod": skolni_kod, "aktivni": True})
-                            st.success("Účet vytvořen. Můžete se přihlásit.")
+                            requests.post(f"{SUPABASE_URL}/rest/v1/uzivatele", headers=headers, json={
+                                "jmeno": reg_jmeno, "heslo": reg_heslo, "role": reg_role,
+                                "kredity": start_kredity, "skolni_kod": skolni_kod_input,
+                                "trida_nazev": t_nazev, "aktivni": True
+                            })
+                            st.success("Účet byl úspěšně vytvořen. Můžete se přihlásit.")
+                else:
+                    st.warning("Vyplňte kód školy, jméno i heslo.")
 
     with tab_school_licence:
         st.markdown("### Správa licencí")
-        st.caption("Tato sekce je určena výhradně pro správce systému.")
-        
+        st.caption("Sekce výhradně pro správce systému.")
         master_password = st.text_input("Zadejte administrátorské heslo:", type="password")
         
         if master_password == "MtechAdmin2026": 
@@ -115,27 +138,25 @@ if not st.session_state.prihlasen:
                     if nazev_skoly and email:
                         kod = "SKOLA-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
                         requests.post(f"{SUPABASE_URL}/rest/v1/licencovane_skoly", headers=headers, json={"nazev_skoly": nazev_skoly, "kontaktni_email": email, "licencni_kod": kod, "zaplaceno": False})
-                        # Vytvoření defaultního nastavení pro novou školu
                         requests.post(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni", headers=headers, json={"skolni_kod": kod})
-                        st.success(f"Poptávka zaznamenána. Licenční kód: {kod}")
-                    else:
-                        st.error("Vyplňte název školy i e-mail.")
+                        st.success(f"Licence vytvořena! Kód: {kod}")
         elif master_password != "":
             st.error("Nesprávné heslo!")
 
 else:
+    with st.sidebar:
+        st.markdown(f"Uživatel: **{st.session_state.uzivatel}**")
+        st.caption(f"Role: **{str(st.session_state.role).upper()}**")
+        if st.session_state.trida_nazev:
+            st.caption(f"Třída: **{st.session_state.trida_nazev}**")
+        st.markdown(f"Zůstatek: **{st.session_state.kredity} M-K**")
+        if st.button("Odhlásit se", icon=":material/logout:"):
+            st.session_state.clear()
+            st.rerun()
+            
     if st.session_state.role == "zak": pg = st.navigation([zaci_page, trh_page, zebricky_page])
     elif st.session_state.role == "firma": pg = st.navigation([firma_page, zaci_page, trh_page, zebricky_page])
     elif st.session_state.role == "ucitel": pg = st.navigation([ucitel_page, trh_page, zebricky_page])
     elif st.session_state.role == "admin": pg = st.navigation([zaci_page, firma_page, ucitel_page, trh_page, zebricky_page])
     
-    with st.sidebar:
-        st.divider()
-        st.markdown(f"Uživatel: **{st.session_state.uzivatel}**")
-        st.caption(f"Role: **{str(st.session_state.role).upper()}**")
-        st.markdown(f"Zůstatek: **{st.session_state.kredity} M-K**")
-        if st.button("Odhlásit se", icon=":material/logout:"):
-            st.session_state.clear()
-            st.rerun()
-
     pg.run()
