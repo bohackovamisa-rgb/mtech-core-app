@@ -297,7 +297,7 @@ with tab_questy:
                 st.rerun()
     with col_q2:
         st.markdown("#### Práce ke kontrole")
-        st.caption("U odevzdaných úkolů je M-K odměna pevně daná. Vy pouze hodnotíte kvalitu práce pomocí XP bodů.")
+        st.caption("Návod: Zkontrolujte odevzdanou práci, vyberte oblast dovednosti, přiřaďte žákovi XP body za kvalitu a klikněte na Schválit (nebo Zamítnout).")
         
         res_q_check = requests.get(f"{SUPABASE_URL}/rest/v1/questy?stav=eq.K_KONTROLE", headers=headers).json()
         if isinstance(res_q_check, list) and len(res_q_check) > 0:
