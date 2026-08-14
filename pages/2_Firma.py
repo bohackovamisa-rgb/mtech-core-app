@@ -89,7 +89,7 @@ if isinstance(nastaveni_res, list) and len(nastaveni_res) > 0:
     kurz_kc = float(nastaveni_res[0].get('kurz_kc', 10.0))
 
 # =========================================================================
-# 1. ZALOŽENÍ FIRMY (PŘEVOD KAPITÁLU Z OSOBNÍHO ÚČTU)
+# 1. ZALOŽENÍ FIRMY
 # =========================================================================
 if not moje_firma:
     st.info(f"Vítejte v podnikatelském akcelerátoru M-TECH (Třída: {trida_nazev or 'Vaše třída'}).")
@@ -168,12 +168,10 @@ if not moje_firma:
                 
                 zamer_str = f"Druh živnosti: {d.get('druh_zivnosti')} | Obor: {d.get('zivnost_detail', '')} | Předmět: {d.get('predmet', '')} | Garant BOZP: {d.get('bozp_garant', '')} | Provozovna: {d.get('provozovna', '')}"
                 
-                # 1. Stržení peněz z osobní peněženky CEO
                 novy_osobni_zustatek = aktualni_zustatek_zaka - vklad_k_prevodu
                 requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers, json={"kredity": novy_osobni_zustatek})
                 st.session_state.kredity = novy_osobni_zustatek
 
-                # 2. Vytvoření firmy v databázi
                 payload = {
                     "nazev_firmy": nazev,
                     "skolni_kod": skolni_kod,
@@ -191,17 +189,11 @@ if not moje_firma:
                 if res_create.status_code in [200, 201]:
                     new_f_data = res_create.json()
                     new_f_id = new_f_data[0]['id'] if (isinstance(new_f_data, list) and len(new_f_data) > 0) else None
-                    
-                    # 3. Zaevidování prvního vkladu do firemní knihy
                     if new_f_id:
                         requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={
-                            "firma_id": new_f_id,
-                            "typ_transakce": "PRIJEM",
-                            "titul": f"Vklad základního kapitálu zakladatelem ({uzivatel})",
-                            "castka": vklad_k_prevodu,
-                            "auditovano": True
+                            "firma_id": new_f_id, "typ_transakce": "PRIJEM", "titul": f"Vklad základního kapitálu ({uzivatel})", "castka": vklad_k_prevodu, "auditovano": True
                         })
-                    st.success(f"Základní kapitál {vklad_k_prevodu} M-K byl úspěšně převeden a žádost odeslána vyučujícímu.")
+                    st.success(f"Základní kapitál {vklad_k_prevodu} M-K byl převeden a žádost odeslána vyučujícímu.")
                     st.rerun()
                 else:
                     st.error(f"Chyba při zakládání firmy: {res_create.text}")
@@ -229,24 +221,23 @@ if moje_firma["stave_licence"] == "CEKA_NA_SCHVALENI":
 if moje_firma["stave_licence"] == "ZAMITNUTO":
     st.error(f"Žádost o zápis do rejstříku byla Kontrolním úřadem vrácena k přepracování.\n\n**Důvod zamítnutí:** {moje_firma.get('duvod_zamitnuti', 'Bez udání důvodu.')}")
 
-# Rozdělení záložek podle role
 if moje_role == "CEO":
     tab_zalozeni, tab_brand, tab_vyvoj, tab_hr, tab_kalkulace, tab_ucto, tab_burza, tab_denik = st.tabs([
-        "1. Zakladatelský Spis", "2. Brand a AI Tank", "3. Řízení (Agile)", "4. Tým a HR", "5. Cenotvorba", "6. Účetnictví a Daně", "7. Burza", "8. Výkazy práce"
+        "1. Zakladatelský Spis", "2. Brand a AI Tank", "3. Řízení (Agile)", "4. Tým a HR", "5. Cenotvorba", "6. Účetnictví a Daně", "7. Burza", "8. Deník a Porady"
     ])
 elif moje_role == "CFO":
     tab_zalozeni, tab_hr, tab_ucto, tab_denik = st.tabs([
-        "1. Spis a Rejstřík", "2. Mzdy a HR", "3. Účetnictví a Daně", "4. Výkazy práce"
+        "1. Spis a Rejstřík", "2. Mzdy a HR", "3. Účetnictví a Daně", "4. Deník a Porady"
     ])
     tab_brand = tab_vyvoj = tab_kalkulace = tab_burza = None
 elif moje_role == "CTO":
     tab_zalozeni, tab_brand, tab_vyvoj, tab_kalkulace, tab_denik = st.tabs([
-        "1. Spis a Rejstřík", "2. Brand a Identita", "3. Řízení Vývoje", "4. Cenotvorba a E-shop", "5. Výkazy práce"
+        "1. Spis a Rejstřík", "2. Brand a Identita", "3. Řízení Vývoje", "4. Cenotvorba a E-shop", "5. Deník a Porady"
     ])
     tab_hr = tab_ucto = tab_burza = None
 else:
     tab_zalozeni, tab_denik = st.tabs([
-        "1. Můj profil a Moje firma", "2. Výkazy práce"
+        "1. Můj profil a Moje firma", "2. Deník a Porady"
     ])
     tab_brand = tab_vyvoj = tab_hr = tab_kalkulace = tab_ucto = tab_burza = None
 
@@ -282,25 +273,20 @@ if tab_brand:
                     st.rerun()
 
         with t_lean:
-            st.subheader("Kompletní Lean Canvas")
             res_c = requests.get(f"{SUPABASE_URL}/rest/v1/lean_canvas?firma_id=eq.{moje_firma['id']}", headers=headers).json()
             exist_canvas = res_c[0] if isinstance(res_c, list) and len(res_c) > 0 else None
-            
             with st.form("form_full_canvas"):
                 c1, c2, c3 = st.columns(3)
                 with c1: prob = st.text_area("1. Problém", value=exist_canvas.get("problem","") if exist_canvas else "", height=150)
                 with c2: hodnota = st.text_area("2. Unikátní Hodnota", value=exist_canvas.get("hodnota","") if exist_canvas else "", height=150)
                 with c3: cilovka = st.text_area("3. Cílová Skupina", value=exist_canvas.get("cilova_skupina","") if exist_canvas else "", height=150)
-                    
                 c4, c5, c6 = st.columns(3)
                 with c4: sol = st.text_area("4. Řešení", value=exist_canvas.get("reseni","") if exist_canvas else "", height=150)
                 with c5: kanaly = st.text_area("5. Prodejní Kanály", value=exist_canvas.get("kanaly","") if exist_canvas else "", height=150)
                 with c6: vyhoda = st.text_area("6. Nefér Výhoda", value=exist_canvas.get("vyhoda","") if exist_canvas else "", height=150)
-                    
                 c7, c8 = st.columns(2)
                 with c7: naklady = st.text_area("7. Struktura Nákladů", value=exist_canvas.get("naklady","") if exist_canvas else "", height=100)
                 with c8: prijmy = st.text_area("8. Zdroje Příjmů", value=exist_canvas.get("prijmy","") if exist_canvas else "", height=100)
-                    
                 if st.form_submit_button("Uložit Lean Canvas"):
                     c_payload = {"firma_id": moje_firma["id"], "problem": prob, "reseni": sol, "hodnota": hodnota, "cilova_skupina": cilovka, "kanaly": kanaly, "vyhoda": vyhoda, "naklady": naklady, "prijmy": prijmy}
                     if exist_canvas: requests.patch(f"{SUPABASE_URL}/rest/v1/lean_canvas?id=eq.{exist_canvas['id']}", headers=headers, json=c_payload)
@@ -309,22 +295,19 @@ if tab_brand:
                     st.rerun()
 
         with t_ai_shark:
-            st.subheader("Předstupte před AI Investory")
             res_pitches = requests.get(f"{SUPABASE_URL}/rest/v1/ai_pitches?firma_id=eq.{moje_firma['id']}&order=datum.desc", headers=headers).json()
             ma_uspesnou_investici = any(p.get('schvaleno_investovano', False) for p in res_pitches) if isinstance(res_pitches, list) else False
-
             if ma_uspesnou_investici:
                 st.success("Získali jste Seed investici od AI Shark Tanku.")
             else:
                 with st.form("form_pitch"):
-                    p_nazev = st.text_input("Název investiční prezentace:")
+                    p_nazev = st.text_input("Název prezentace:")
                     p_popis = st.text_area("Detailní pitch:")
                     col_p1, col_p2 = st.columns(2)
                     with col_p1: p_castka = st.number_input("Požadovaný kapitál (M-K):", min_value=50, value=200)
                     with col_p2: p_akcie = st.number_input("Nabízené akcie (ks):", min_value=5, value=20)
-                    
                     if st.form_submit_button("Spustit AI Pitching"):
-                        requests.post(f"{SUPABASE_URL}/rest/v1/ai_pitches", headers=headers, json={"firma_id": moje_firma['id'], "nazev_pitchu": p_nazev, "popis_projektu": p_popis, "zadana_castka": p_castka, "nabizene_akcie": p_akcie, "hodnoceni_ostry": "[SCHVALENO] Ostrý: Čísla dávají smysl.", "hodnoceni_vizionarka": "[SCHVALENO] Vizionářová: Projekt má potenciál.", "hodnoceni_rychly": "[SCHVALENO] Rychlý: Investici schvaluji.", "schvaleno_investovano": True, "investovana_castka": p_castka})
+                        requests.post(f"{SUPABASE_URL}/rest/v1/ai_pitches", headers=headers, json={"firma_id": moje_firma['id'], "nazev_pitchu": p_nazev, "popis_projektu": p_popis, "zadana_castka": p_castka, "nabizene_akcie": p_akcie, "hodnoceni_ostry": "[SCHVALENO]", "hodnoceni_vizionarka": "[SCHVALENO]", "hodnoceni_rychly": "[SCHVALENO]", "schvaleno_investovano": True, "investovana_castka": p_castka})
                         r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers).json()
                         if r_ceo: requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"kredity": r_ceo[0]['kredity'] + p_castka})
                         requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": moje_firma["id"], "typ_transakce": "PRIJEM", "titul": f"AI Shark Tank: {p_nazev}", "castka": p_castka, "auditovano": True})
@@ -335,7 +318,6 @@ if tab_brand:
 # ==========================================
 if tab_vyvoj:
     with tab_vyvoj:
-        st.markdown("#### Týmový Backlog a Sprint")
         with st.form("form_novy_ukol"):
             col_u1, col_u2 = st.columns([3, 1])
             with col_u1: u_nazev = st.text_input("Úkol:")
@@ -346,7 +328,6 @@ if tab_vyvoj:
 
         res_tasks = requests.get(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?firma_id=eq.{moje_firma['id']}&order=id.asc", headers=headers).json()
         tasks = res_tasks if isinstance(res_tasks, list) else []
-
         col_todo, col_ip, col_done = st.columns(3)
         with col_todo:
             st.markdown("<div class='kanban-col-header header-todo'>K řešení (To Do)</div>", unsafe_allow_html=True)
@@ -356,7 +337,6 @@ if tab_vyvoj:
                     if st.button("Začít řešit", key=f"start_{t['id']}"):
                         requests.patch(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?id=eq.{t['id']}", headers=headers, json={"stav": "IN_PROGRESS"})
                         st.rerun()
-
         with col_ip:
             st.markdown("<div class='kanban-col-header header-ip'>V řešení (In Progress)</div>", unsafe_allow_html=True)
             for t in [x for x in tasks if x.get('stav') == 'IN_PROGRESS']:
@@ -365,7 +345,6 @@ if tab_vyvoj:
                     if st.button("Dokončit", key=f"done_{t['id']}"):
                         requests.patch(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?id=eq.{t['id']}", headers=headers, json={"stav": "DONE"})
                         st.rerun()
-
         with col_done:
             st.markdown("<div class='kanban-col-header header-done'>Hotovo (Done)</div>", unsafe_allow_html=True)
             for t in [x for x in tasks if x.get('stav') == 'DONE']:
@@ -377,29 +356,13 @@ if tab_vyvoj:
 # ==========================================
 if tab_hr:
     with tab_hr:
-        st.subheader("Správa týmu a zaměstnanců")
-        
         res_z = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{moje_firma['id']}&select=*", headers=headers).json()
         zamestnanci = res_z if isinstance(res_z, list) else []
-        
-        st.markdown("#### Seznam zaměstnanců firmy")
         if zamestnanci:
             df_zam = pd.DataFrame(zamestnanci)
             zobrazit_sloupce = [c for c in ['jmeno_zamestnance', 'pozice', 'hodinova_sazba', 'vyplaceno_celkem'] if c in df_zam.columns]
-            df_show = df_zam[zobrazit_sloupce].rename(columns={
-                'jmeno_zamestnance': 'Jméno pracovníka',
-                'pozice': 'Pracovní pozice',
-                'hodinova_sazba': 'Sazba (M-K/hod)',
-                'vyplaceno_celkem': 'Vyplaceno (M-K)'
-            })
-            st.dataframe(df_show, use_container_width=True)
-        else:
-            st.info("Ve firmě zatím nemáte zaregistrovány žádné další zaměstnance.")
+            st.dataframe(df_zam[zobrazit_sloupce], use_container_width=True)
 
-        st.divider()
-
-        st.markdown("#### Přijmout nového pracovníka do týmu")
-        
         res_zaci_tridy = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.{trida_nazev}&role=neq.ucitel", headers=headers).json()
         jmena_v_tyme = [z['jmeno_zamestnance'].lower() for z in zamestnanci]
         if moje_firma.get('ceo_jmeno'): jmena_v_tyme.append(moje_firma['ceo_jmeno'].lower())
@@ -411,52 +374,29 @@ if tab_hr:
         with st.form("form_novy_zamestnanec"):
             col_z1, col_z2 = st.columns(2)
             with col_z1:
-                if volni_zaci:
-                    z_jmeno = st.selectbox("Vyberte spolužáka ze své třídy:", volni_zaci)
-                else:
-                    st.info("Ve vaší třídě již nejsou žádní volní žáci.")
-                    z_jmeno = None
-                z_pozice = st.text_input("Pracovní pozice (např. Operátor 3D tisku, Grafik):")
+                z_jmeno = st.selectbox("Vyberte spolužáka ze své třídy:", volni_zaci) if volni_zaci else None
+                z_pozice = st.text_input("Pracovní pozice:")
             with col_z2:
                 z_sazba = st.number_input("Hodinová sazba (M-K / hod):", min_value=10.0, value=50.0)
-                
-            if st.form_submit_button("Přijmout zaměstnance do týmu", type="primary"):
+            if st.form_submit_button("Přijmout do týmu", type="primary"):
                 if z_jmeno and z_pozice:
-                    res_post = requests.post(f"{SUPABASE_URL}/rest/v1/zamestnanci", headers=headers, json={
-                        "firma_id": int(moje_firma["id"]),
-                        "jmeno_zamestnance": str(z_jmeno),
-                        "pozice": str(z_pozice),
-                        "hodinova_sazba": float(z_sazba),
-                        "vyplaceno_celkem": 0.0
-                    })
-                    if res_post.status_code in [200, 201]:
-                        st.success(f"Pracovník {z_jmeno} byl přijat do firmy.")
-                        st.rerun()
-                    else:
-                        st.error(f"Chyba při ukládání: {res_post.text}")
-                else:
-                    st.error("Vyberte spolužáka a zadejte jeho pracovní pozici.")
+                    requests.post(f"{SUPABASE_URL}/rest/v1/zamestnanci", headers=headers, json={"firma_id": int(moje_firma["id"]), "jmeno_zamestnance": str(z_jmeno), "pozice": str(z_pozice), "hodinova_sazba": float(z_sazba), "vyplaceno_celkem": 0.0})
+                    st.rerun()
 
-        st.divider()
-
-        st.markdown(f"#### Zúčtování mezd")
         if zamestnanci:
-            vybrany_z_jmeno = st.selectbox("Komu chcete vyplatit mzdu:", [z["jmeno_zamestnance"] for z in zamestnanci])
-            vybrany_z = next((z for z in zamestnanci if z["jmeno_zamestnance"] == vybrany_z_jmeno), None)
-            if vybrany_z:
-                hodiny = st.number_input("Počet odpracovaných hodin:", min_value=1.0, value=4.0)
-                hruba = hodiny * vybrany_z["hodinova_sazba"]
-                dan_castka = hruba * (akt_dan_prijem / 100.0)
-                cista = hruba - dan_castka
-                
-                st.info(f"Hrubá mzda: {hruba} M-K | Daň: {dan_castka} M-K | Čistá mzda: {cista} M-K")
-                
-                if st.button("Odeslat výplatu"):
+            st.divider()
+            with st.form("mzdy"):
+                vybrany_z_jmeno = st.selectbox("Komu chcete vyplatit mzdu:", [z["jmeno_zamestnance"] for z in zamestnanci])
+                hodiny = st.number_input("Počet hodin:", min_value=1.0, value=4.0)
+                if st.form_submit_button("Odeslat výplatu"):
+                    vybrany_z = next((z for z in zamestnanci if z["jmeno_zamestnance"] == vybrany_z_jmeno), None)
+                    hruba = hodiny * vybrany_z["hodinova_sazba"]
+                    dan_castka = hruba * (akt_dan_prijem / 100.0)
+                    cista = hruba - dan_castka
                     res_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers).json()
                     kredity_ceo = res_ceo[0]['kredity'] if res_ceo else 0
-                    
                     if hruba > kredity_ceo:
-                        st.error("Nedostatek peněz na firemním účtu (na účtu CEO).")
+                        st.error("Nedostatek peněz na firemním účtu CEO.")
                     else:
                         requests.patch(f"{SUPABASE_URL}/rest/v1/zamestnanci?id=eq.{vybrany_z['id']}", headers=headers, json={"vyplaceno_celkem": vybrany_z.get("vyplaceno_celkem", 0) + cista})
                         requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{moje_firma['ceo_jmeno']}", headers=headers, json={"kredity": kredity_ceo - hruba})
@@ -470,7 +410,6 @@ if tab_hr:
 # ==========================================
 if tab_kalkulace:
     with tab_kalkulace:
-        st.subheader("Kalkulace produktů pro E-shop")
         with st.form("form_kalkulace"):
             prod_nazev = st.text_input("Název produktu:")
             popis = st.text_area("Popis:")
@@ -487,58 +426,88 @@ if tab_kalkulace:
 # ==========================================
 if tab_ucto:
     with tab_ucto:
-        st.subheader("Účetnictví a Kniha transakcí")
         res_kniha = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{moje_firma['id']}&order=datum.desc", headers=headers).json()
         if isinstance(res_kniha, list) and len(res_kniha) > 0: 
             st.dataframe(pd.DataFrame(res_kniha)[['datum', 'typ_transakce', 'titul', 'castka']], use_container_width=True)
-        else:
-            st.info("Kniha transakcí je prázdná.")
 
 # ==========================================
 # ZÁLOŽKA 7: BURZA
 # ==========================================
 if tab_burza:
     with tab_burza:
-        st.subheader("Investiční burza")
         with st.form("form_ipo"):
             pocet_akcii = st.number_input("Počet akcií k prodeji:", min_value=1, value=50)
             cena_akcie = st.number_input("Cena za 1 akcii (M-K):", min_value=1.0, value=15.0)
             if st.form_submit_button("Zveřejnit na burze"):
                 requests.post(f"{SUPABASE_URL}/rest/v1/burza_nabidky", headers=headers, json={"firma_id": moje_firma["id"], "pocet_k_prodeji": pocet_akcii, "cena_za_kus": cena_akcie, "aktivni": True})
-                st.success("Akcie zveřejněny.")
                 st.rerun()
 
 # ==========================================
-# ZÁLOŽKA 8: DENÍK PRÁCE
+# ZÁLOŽKA 8: DENÍK A PORADY (NOVĚ PŘIDÁNO)
 # ==========================================
 if tab_denik:
     with tab_denik:
-        st.subheader("Deník práce a Výkazy")
-        st.markdown("Zde evidujte, na čem jste konkrétně pracovali. Tyto výkazy slouží pro vyučujícího k hodnocení vaší aktivity.")
+        t_osobni, t_porady = st.tabs(["Individuální výkazy", "Zápisy z firemních porad"])
         
-        with st.form("form_denik_prace_safe"):
-            dp_popis = st.text_area("Co přesně jste udělali / odpracovali:")
-            dp_hodiny = st.number_input("Počet odpracovaných hodin:", min_value=0.5, max_value=12.0, value=1.0, step=0.5)
-            if st.form_submit_button("Uložit do výkazu"):
-                if dp_popis.strip():
-                    requests.post(f"{SUPABASE_URL}/rest/v1/denik_prace", headers=headers, json={
-                        "jmeno_zaka": uzivatel, 
-                        "firma_id": moje_firma['id'], 
-                        "popis_prace": dp_popis.strip(), 
-                        "hodiny": dp_hodiny
-                    })
-                    st.success("Záznam byl úspěšně uložen.")
-                    st.rerun()
+        # --- PODZÁLOŽKA: INDIVIDUÁLNÍ VÝKAZY ---
+        with t_osobni:
+            st.markdown("Zde evidujte, na čem jste konkrétně pracovali. Tyto výkazy slouží pro vyučujícího k hodnocení vaší aktivity.")
+            with st.form("form_denik_prace_osobni"):
+                dp_popis = st.text_area("Co přesně jste udělali / odpracovali:")
+                dp_hodiny = st.number_input("Počet odpracovaných hodin:", min_value=0.5, max_value=12.0, value=1.0, step=0.5)
+                if st.form_submit_button("Uložit do osobního výkazu"):
+                    if dp_popis.strip():
+                        requests.post(f"{SUPABASE_URL}/rest/v1/denik_prace", headers=headers, json={
+                            "jmeno_zaka": uzivatel, 
+                            "firma_id": moje_firma['id'], 
+                            "popis_prace": dp_popis.strip(), 
+                            "hodiny": dp_hodiny
+                        })
+                        st.success("Záznam byl úspěšně uložen.")
+                        st.rerun()
+                    else:
+                        st.error("Vyplňte popis práce.")
+            
+            st.markdown("#### Historie odvedené práce ve firmě")
+            res_denik = requests.get(f"{SUPABASE_URL}/rest/v1/denik_prace?firma_id=eq.{moje_firma['id']}&order=id.desc", headers=headers).json()
+            if isinstance(res_denik, list):
+                # Zobrazíme jen běžné výkazy (vyfiltrujeme zápisy z porad)
+                bezne_vykazy = [p for p in res_denik if not str(p.get("popis_prace", "")).startswith("[ZÁPIS Z PORADY]")]
+                if bezne_vykazy:
+                    df_denik = pd.DataFrame(bezne_vykazy)
+                    zobrazit = [c for c in ['datum', 'jmeno_zaka', 'popis_prace', 'hodiny'] if c in df_denik.columns]
+                    df_show = df_denik[zobrazit].rename(columns={'datum': 'Datum', 'jmeno_zaka': 'Pracovník', 'popis_prace': 'Popis činnosti', 'hodiny': 'Hodiny'})
+                    st.dataframe(df_show, use_container_width=True)
                 else:
-                    st.error("Vyplňte popis práce.")
-        
-        st.divider()
-        st.markdown("#### Historie odvedené práce ve firmě")
-        res_denik = requests.get(f"{SUPABASE_URL}/rest/v1/denik_prace?firma_id=eq.{moje_firma['id']}&order=id.desc", headers=headers).json()
-        if isinstance(res_denik, list) and len(res_denik) > 0:
-            df_denik = pd.DataFrame(res_denik)
-            zobrazit = [c for c in ['datum', 'jmeno_zaka', 'popis_prace', 'hodiny'] if c in df_denik.columns]
-            df_show = df_denik[zobrazit].rename(columns={'datum': 'Datum', 'jmeno_zaka': 'Pracovník', 'popis_prace': 'Popis činnosti', 'hodiny': 'Hodiny'})
-            st.dataframe(df_show, use_container_width=True)
-        else:
-            st.info("Zatím nebyly zaznamenány žádné pracovní výkazy.")
+                    st.info("Zatím nebyly zaznamenány žádné pracovní výkazy.")
+
+        # --- PODZÁLOŽKA: ZÁPISY Z PORAD ---
+        with t_porady:
+            st.markdown("Zde evidujte oficiální zápisy z vašich firemních schůzek a porad.")
+            with st.form("form_zapis_porady"):
+                zapis_text = st.text_area("Co se řešilo, jaké jsou úkoly a závěry z porady:", height=150)
+                if st.form_submit_button("Uložit zápis z porady"):
+                    if zapis_text.strip():
+                        # Uložíme to do deníku práce, ale s prefixem, aby to učitel poznal
+                        requests.post(f"{SUPABASE_URL}/rest/v1/denik_prace", headers=headers, json={
+                            "jmeno_zaka": uzivatel, 
+                            "firma_id": moje_firma['id'], 
+                            "popis_prace": f"[ZÁPIS Z PORADY]\n{zapis_text.strip()}", 
+                            "hodiny": 0
+                        })
+                        st.success("Zápis z porady byl uložen.")
+                        st.rerun()
+                    else:
+                        st.error("Zápis nesmí být prázdný.")
+            
+            st.markdown("#### Historie porad")
+            if isinstance(res_denik, list):
+                porady_list = [p for p in res_denik if str(p.get("popis_prace", "")).startswith("[ZÁPIS Z PORADY]")]
+                if porady_list:
+                    for p in porady_list:
+                        with st.container(border=True):
+                            st.caption(f"📅 **Datum:** {p.get('datum', '')[:10]} | ✍️ **Zapsal:** {p.get('jmeno_zaka', '')}")
+                            cisty_text = p.get('popis_prace', '').replace("[ZÁPIS Z PORADY]\n", "")
+                            st.write(cisty_text)
+                else:
+                    st.info("Firma zatím nemá žádné zápisy z porad.")
