@@ -172,12 +172,17 @@ if not moje_firma:
                 cto_val = None if d.get("cto") == "-- Neobsazeno --" else d.get("cto")
                 
                 plan_clenove = int(d.get('pocet_zakladatelu', 4))
-                zamer_str = f"Nahlášený počet členů týmu: {plan_clenove} | Druh živnosti: {d.get('druh_zivnosti')} | Obor: {d.get('zivnost_detail', '')} | Předmět: {d.get('predmet', '')} | Garant BOZP: {d.get('bozp_garant', '')} | Provozovna: {d.get('provozovna', '')}"
+                # OPRAVA: Zápis způsobu jednání se nyní správně ukládá do spisu
+                zpusob_jednani = d.get('jednani', 'Každý jednatel samostatně')
                 
+                zamer_str = f"Způsob jednání: {zpusob_jednani} | Nahlášený počet členů týmu: {plan_clenove} | Druh živnosti: {d.get('druh_zivnosti')} | Obor: {d.get('zivnost_detail', '')} | Předmět: {d.get('predmet', '')} | Garant BOZP: {d.get('bozp_garant', '')} | Provozovna: {d.get('provozovna', '')}"
+                
+                # 1. Stržení z osobního účtu CEO
                 novy_osobni_zustatek = int(osobni_zustatek_zaka - vklad_k_prevodu)
                 requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers, json={"kredity": novy_osobni_zustatek})
                 st.session_state.kredity = novy_osobni_zustatek
 
+                # 2. Vytvoření firmy
                 payload = {
                     "nazev_firmy": nazev, "skolni_kod": skolni_kod, "trida_nazev": trida_nazev, "uroven_projektu": 2,
                     "ceo_jmeno": uzivatel, "cfo_jmeno": cfo_val, "cto_jmeno": cto_val, "podnikatelsky_zamer": zamer_str,
@@ -188,6 +193,7 @@ if not moje_firma:
                     new_f_data = res_create.json()
                     new_f_id = new_f_data[0]['id'] if (isinstance(new_f_data, list) and len(new_f_data) > 0) else None
                     if new_f_id:
+                        # 3. Zapsání základního kapitálu na firemní účet
                         requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={
                             "firma_id": new_f_id, "typ_transakce": "PRIJEM", "titul": f"Vklad základního kapitálu zakladatelem ({uzivatel})", "castka": vklad_k_prevodu, "auditovano": True
                         })
@@ -198,7 +204,7 @@ if not moje_firma:
     st.stop()
 
 # =========================================================================
-# 2. VÝPOČET ZŮSTATKU FIREMNÍHO ÚČTU
+# 2. VÝPOČET ZŮSTATKU FIREMNÍHO ÚČTU (Z KNIHY PŘÍJMŮ A VÝDAJŮ)
 # =========================================================================
 res_kniha_calc = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{moje_firma['id']}&select=typ_transakce,castka", headers=headers).json()
 prijmy_firmy = sum(float(tx.get('castka', 0)) for tx in (res_kniha_calc if isinstance(res_kniha_calc, list) else []) if str(tx.get('typ_transakce','')).upper() in ['PRIJEM', 'PŘÍJEM'])
@@ -350,8 +356,23 @@ with tab_zalozeni:
                             st.success(f"Žák {novy_zam_jmeno} byl přijat do firmy.")
                             st.rerun()
 
+        with st.expander("3. Úprava nahlášené kapacity týmu ve stanovách", expanded=False):
+            st.caption("Pokud nemůžete sehnat dalšího spolužáka a vyučující vám povolil menší tým, upravte zde nahlášený počet.")
+            with st.form("form_zmena_kapacity_stanov"):
+                nova_kapacita = st.number_input("Nový celkový počet členů týmu:", min_value=1, max_value=20, value=planovany_pocet_clenu, step=1)
+                if st.form_submit_button("Uložit změnu kapacity"):
+                    stary_zamer = str(moje_firma.get('podnikatelsky_zamer', ''))
+                    if "Nahlášený počet členů týmu:" in stary_zamer:
+                        novy_zamer = re.sub(r'Nahlášený počet členů týmu:\s*\d+', f'Nahlášený počet členů týmu: {nova_kapacita}', stary_zamer)
+                    else:
+                        novy_zamer = f"Nahlášený počet členů týmu: {nova_kapacita} | " + stary_zamer
+                    
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{moje_firma['id']}", headers=headers, json={"podnikatelsky_zamer": novy_zamer})
+                    st.success("Kapacita týmu byla ve spisu upravena.")
+                    st.rerun()
+
 # ==========================================
-# ZÁLOŽKA 2: BRAND A AI TANK (PŘÍJEM DO FIREMNÍ KASY)
+# ZÁLOŽKA 2: BRAND A AI TANK
 # ==========================================
 if tab_brand:
     with tab_brand:
@@ -400,7 +421,7 @@ if tab_brand:
                     with col_p2: p_akcie = st.number_input("Nabízené akcie (ks):", min_value=5, value=20)
                     if st.form_submit_button("Spustit AI Pitching"):
                         requests.post(f"{SUPABASE_URL}/rest/v1/ai_pitches", headers=headers, json={"firma_id": moje_firma['id'], "nazev_pitchu": p_nazev, "popis_projektu": p_popis, "zadana_castka": p_castka, "nabizene_akcie": p_akcie, "hodnoceni_ostry": "[SCHVALENO]", "hodnoceni_vizionarka": "[SCHVALENO]", "hodnoceni_rychly": "[SCHVALENO]", "schvaleno_investovano": True, "investovana_castka": p_castka})
-                        # PŘIPSÁNÍ NA FIREMNÍ ÚČET
+                        # PŘIPSÁNÍ NA FIREMNÍ ÚČET (KNIHA PŘÍJMŮ A VÝDAJŮ)
                         requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={
                             "firma_id": moje_firma["id"], "typ_transakce": "PRIJEM", "titul": f"AI Shark Tank: {p_nazev}", "castka": int(p_castka), "auditovano": True
                         })
