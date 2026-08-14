@@ -89,13 +89,14 @@ if isinstance(nastaveni_res, list) and len(nastaveni_res) > 0:
     kurz_kc = float(nastaveni_res[0].get('kurz_kc', 10.0))
 
 # =========================================================================
-# 1. ZALOŽENÍ FIRMY (VÝBĚR POUZE ZE SPOLUŽÁKŮ Z TÉŽE TŘÍDY S ROLÍ PODNIKATEL)
+# 1. ZALOŽENÍ FIRMY (VÝBĚR ZE VŠECH SPOLUŽÁKŮ V TÉŽE TŘÍDĚ)
 # =========================================================================
 if not moje_firma:
     st.info(f"Vítejte v podnikatelském akcelerátoru M-TECH (Třída: {trida_nazev or 'Vaše třída'}).")
     st.markdown("Získali jste oprávnění k založení startupu. Vyplňte níže zakladatelský zápis u Notáře a odešlete spis ke schválení na Kontrolní úřad.")
     
-    res_spoluzaci = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.{trida_nazev}&role=eq.firma", headers=headers).json()
+    # OPRAVA: Odstraněno role=eq.firma, nyní načítá VŠECHNY spolužáky ze třídy kromě učitele
+    res_spoluzaci = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.{trida_nazev}&role=neq.ucitel", headers=headers).json()
     seznam_spoluzaku = [u['jmeno'] for u in res_spoluzaci if u['jmeno'] != uzivatel] if isinstance(res_spoluzaci, list) else []
 
     u_notar, u_zivnost, u_financak, u_cssz, u_rejstrik = st.tabs([
@@ -308,7 +309,7 @@ if tab_vyvoj:
                 st.rerun()
 
 # ==========================================
-# ZÁLOŽKA 4: TÝM A HR (PŘIJÍMÁNÍ ZE STEJNÉ TŘÍDY S ROLÍ FIRMA)
+# ZÁLOŽKA 4: TÝM A HR (PŘIJÍMÁNÍ ZE VŠECH VE TŘÍDĚ)
 # ==========================================
 if tab_hr:
     with tab_hr:
@@ -335,7 +336,8 @@ if tab_hr:
 
         st.markdown("#### Přijmout nového pracovníka do týmu")
         
-        res_zaci_tridy = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.{trida_nazev}&role=eq.firma", headers=headers).json()
+        # OPRAVA: Odstraněno role=eq.firma, může přijmout kohokoliv ze třídy
+        res_zaci_tridy = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.{trida_nazev}&role=neq.ucitel", headers=headers).json()
         jmena_v_tyme = [z['jmeno_zamestnance'].lower() for z in zamestnanci]
         if moje_firma.get('ceo_jmeno'): jmena_v_tyme.append(moje_firma['ceo_jmeno'].lower())
         if moje_firma.get('cfo_jmeno'): jmena_v_tyme.append(moje_firma['cfo_jmeno'].lower())
@@ -347,9 +349,9 @@ if tab_hr:
             col_z1, col_z2 = st.columns(2)
             with col_z1:
                 if volni_zaci:
-                    z_jmeno = st.selectbox("Vyberte spolužáka z vaší třídy (role Podnikatel):", volni_zaci)
+                    z_jmeno = st.selectbox("Vyberte spolužáka ze své třídy:", volni_zaci)
                 else:
-                    st.info("Ve vaší třídě již nejsou žádní další volní podnikatelé.")
+                    st.info("Ve vaší třídě již nejsou žádní volní žáci.")
                     z_jmeno = None
                 z_pozice = st.text_input("Pracovní pozice (např. Operátor 3D tisku, Grafik):")
             with col_z2:
