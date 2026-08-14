@@ -46,7 +46,7 @@ uzivatel = st.session_state.get("uzivatel", "")
 skolni_kod = st.session_state.get("skolni_kod", "")
 trida_nazev = st.session_state.get("trida_nazev", "")
 
-# Pro jistotu vždy načteme aktuální zůstatek přímo z databáze (aby měl žák přesná čísla, i když zrovna dostal zaplaceno)
+# Načtení aktuálního zůstatku přímo z databáze
 res_akt_u = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers).json()
 if res_akt_u and isinstance(res_akt_u, list):
     aktualni_zustatek_zaka = float(res_akt_u[0].get("kredity", 0))
@@ -90,7 +90,7 @@ if isinstance(nastaveni_res, list) and len(nastaveni_res) > 0:
     kurz_kc = float(nastaveni_res[0].get('kurz_kc', 10.0))
 
 # =========================================================================
-# 1. ZALOŽENÍ FIRMY
+# 1. ZALOŽENÍ FIRMY (VÝBĚR ZE VŠECH SPOLUŽÁKŮ V TÉŽE TŘÍDĚ)
 # =========================================================================
 if not moje_firma:
     st.info(f"Vítejte v podnikatelském akcelerátoru M-TECH (Třída: {trida_nazev or 'Vaše třída'}).")
@@ -116,7 +116,7 @@ if not moje_firma:
         col_k1, col_k2 = st.columns(2)
         with col_k1: 
             if aktualni_zustatek_zaka < 10.0:
-                st.error(f"❌ Váš osobní zůstatek je pouze {aktualni_zustatek_zaka:.2f} M-K. Pro založení firmy potřebujete minimálně 10 M-K. Jděte do Moje peněženka -> Úřad práce a splňte úkoly od vyučujícího, abyste získali kapitál!")
+                st.error(f"Váš osobní zůstatek je pouze {aktualni_zustatek_zaka:.2f} M-K. Pro založení firmy potřebujete minimálně 10 M-K. Jděte do Moje peněženka -> Úřad práce a splňte úkoly od vyučujícího, abyste získali kapitál!")
                 vklad_hodnota = 0.0
             else:
                 vklad_hodnota = st.number_input(f"Základní kapitál zakladatelů (Maximum je váš aktuální zůstatek: {aktualni_zustatek_zaka} M-K):", min_value=10.0, max_value=aktualni_zustatek_zaka, value=min(100.0, aktualni_zustatek_zaka))
@@ -311,12 +311,40 @@ if tab_vyvoj:
     with tab_vyvoj:
         st.markdown("#### Týmový Backlog a Sprint")
         with st.form("form_novy_ukol"):
-            col_u1, col_u2, col_u3 = st.columns([3,1])
+            col_u1, col_u2 = st.columns([3, 1])
             with col_u1: u_nazev = st.text_input("Úkol:")
             with col_u2: u_sp = st.number_input("Story Points:", min_value=1, value=3)
             if st.form_submit_button("Přidat úkol"):
                 requests.post(f"{SUPABASE_URL}/rest/v1/projektove_ukoly", headers=headers, json={"firma_id": moje_firma["id"], "nazev_ukolu": u_nazev, "zodpovedna_osoba": uzivatel, "story_points": u_sp, "stav": "TO_DO"})
                 st.rerun()
+
+        res_tasks = requests.get(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?firma_id=eq.{moje_firma['id']}&order=id.asc", headers=headers).json()
+        tasks = res_tasks if isinstance(res_tasks, list) else []
+
+        col_todo, col_ip, col_done = st.columns(3)
+        with col_todo:
+            st.markdown("<div class='kanban-col-header header-todo'>K řešení (To Do)</div>", unsafe_allow_html=True)
+            for t in [x for x in tasks if x.get('stav') == 'TO_DO']:
+                with st.container(border=True):
+                    st.write(f"**{t['nazev_ukolu']}** ({t.get('story_points', 1)} SP)")
+                    if st.button("Začít řešit", key=f"start_{t['id']}"):
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?id=eq.{t['id']}", headers=headers, json={"stav": "IN_PROGRESS"})
+                        st.rerun()
+
+        with col_ip:
+            st.markdown("<div class='kanban-col-header header-ip'>V řešení (In Progress)</div>", unsafe_allow_html=True)
+            for t in [x for x in tasks if x.get('stav') == 'IN_PROGRESS']:
+                with st.container(border=True):
+                    st.write(f"**{t['nazev_ukolu']}** ({t.get('story_points', 1)} SP)")
+                    if st.button("Dokončit", key=f"done_{t['id']}"):
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/projektove_ukoly?id=eq.{t['id']}", headers=headers, json={"stav": "DONE"})
+                        st.rerun()
+
+        with col_done:
+            st.markdown("<div class='kanban-col-header header-done'>Hotovo (Done)</div>", unsafe_allow_html=True)
+            for t in [x for x in tasks if x.get('stav') == 'DONE']:
+                with st.container(border=True):
+                    st.write(f"**{t['nazev_ukolu']}** ({t.get('story_points', 1)} SP)")
 
 # ==========================================
 # ZÁLOŽKA 4: TÝM A HR
