@@ -37,14 +37,22 @@ except Exception:
     st.error("Chybí konfigurace databáze.")
     st.stop()
 
+# Zjištění školního kódu přihlášeného učitele
 res_ucitel = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{st.session_state.uzivatel}", headers=headers).json()
 skolni_kod_ucitele = res_ucitel[0].get("skolni_kod", "") if res_ucitel else ""
+is_admin = str(st.session_state.get("role")).upper() == "ADMIN"
 
-res_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?select=*&order=id.desc", headers=headers).json()
-firmy = res_firmy if res_firmy else []
+# Načtení firem – ADMIN vidí vše, UČITEL POUZE svou školu
+if is_admin:
+    res_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?select=*&order=id.desc", headers=headers).json()
+else:
+    res_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{skolni_kod_ucitele}&select=*&order=id.desc", headers=headers).json()
+
+firmy = res_firmy if (isinstance(res_firmy, list) and res_firmy) else []
 
 if not firmy:
-    st.info("V systému zatím nejsou žádné studentské entity.")
+    st.info("💡 Ve vaší škole zatím žádný žák nezaložil startup.")
+    st.caption(f"Váš licenční kód školy je: **{skolni_kod_ucitele}**. Jakmile žák projde notářem a odešle firmu ke schválení, objeví se vám zde.")
     st.stop()
 
 vybrana_firma_nazev = st.selectbox("Vyberte startup k auditu:", [f["nazev_firmy"] for f in firmy])
@@ -81,13 +89,16 @@ with tab_legal:
         </div>
         """, unsafe_allow_html=True)
         
-        # --- ZDŮRAZNĚNÁ ROLOVACÍ NABÍDKA PRO ZMĚNU ROLÍ ---
         with st.expander("👉 Jmenovat / Změnit vedení firmy (CEO, CFO, CTO)"):
-            zaci_vse = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak", headers=headers).json()
+            if is_admin:
+                zaci_vse = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak", headers=headers).json()
+            else:
+                zaci_vse = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak&skolni_kod=eq.{skolni_kod_ucitele}", headers=headers).json()
+            
             seznam_jmen_zaku = [z['jmeno'] for z in zaci_vse] if isinstance(zaci_vse, list) else []
             
             if not seznam_jmen_zaku:
-                st.info("V systému zatím nejsou žádní registrováni žáci.")
+                st.info("Ve vaší škole zatím nejsou žádní registrováni žáci.")
             else:
                 with st.form("form_zmena_roli"):
                     idx_ceo = seznam_jmen_zaku.index(firma['ceo_jmeno']) if firma.get('ceo_jmeno') in seznam_jmen_zaku else 0
@@ -110,8 +121,8 @@ with tab_legal:
                         st.rerun()
         
     with col_l2:
-        stav_tridy = 'status-ok' if firma['stave_licence'] == 'SCHVALENO' else 'status-wait'
-        st.markdown(f"<div class='card-box'><h4>Stav licence: <span class='{stav_tridy}'>{firma['stave_licence']}</span></h4></div>", unsafe_allow_html=True)
+        stav_tridy = 'status-ok' if firma.get('stave_licence') == 'SCHVALENO' else 'status-wait'
+        st.markdown(f"<div class='card-box'><h4>Stav licence: <span class='{stav_tridy}'>{firma.get('stave_licence', 'CEKA')}</span></h4></div>", unsafe_allow_html=True)
     
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
@@ -302,8 +313,6 @@ with tab_questy:
         res_q_check = requests.get(f"{SUPABASE_URL}/rest/v1/questy?stav=eq.K_KONTROLE", headers=headers).json()
         if isinstance(res_q_check, list) and len(res_q_check) > 0:
             for q in res_q_check:
-                
-                # Bezpečné zpracování odkazu
                 odkaz = q.get('odkaz_vystup', '')
                 if not odkaz:
                     vystup_html = "<span style='color:#64748b;'><i>Žák neposkytl žádný odkaz, pouze napsal, že má hotovo.</i></span>"
@@ -312,7 +321,6 @@ with tab_questy:
                 else:
                     vystup_html = f"<b>Komentář žáka:</b> <i>{odkaz}</i>"
                 
-                # Vizuální oddělení - Informace o úkolu a penězích
                 st.markdown(f"""
                 <div class='card-box' style='margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: none;'>
                     <h5 style='color: #0ea5e9; margin-top: 0;'>{q['nazev']}</h5>
@@ -324,7 +332,6 @@ with tab_questy:
                 </div>
                 """, unsafe_allow_html=True)
                 
-                # Formulář pouze pro hodnocení XP
                 with st.form(f"schvaleni_{q['id']}"):
                     st.markdown("<p style='font-size: 14px; font-weight: bold; margin-bottom: 5px;'>Ohodnoťte kvalitu práce (XP body pro AI návrh známky):</p>", unsafe_allow_html=True)
                     
@@ -365,6 +372,7 @@ with tab_questy:
                         st.rerun()
         else:
             st.info("Žádné úkoly momentálně nečekají na schválení.")
+
 # ==========================================
 # ZÁLOŽKA 6: STÁTNÍ POKLADNA A AI DAŇOVÝ AUDIT
 # ==========================================
@@ -400,12 +408,14 @@ with tab_stat:
     if priznani_list:
         for p in priznani_list:
             f_info = next((f for f in firmy if f['id'] == p['firma_id']), None)
-            f_nazev = f_info['nazev_firmy'] if f_info else f"Firma #{p['firma_id']}"
+            if not f_info:
+                continue
+            f_nazev = f_info['nazev_firmy']
 
             kniha = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{p['firma_id']}&typ_transakce=eq.PRIJEM", headers=headers).json()
             celkem_prijmy = sum(item['castka'] for item in kniha) if kniha else 0
 
-            sk_kod = f_info.get('skolni_kod', 'SYSTEM') if f_info else 'SYSTEM'
+            sk_kod = f_info.get('skolni_kod', 'SYSTEM')
             nast_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{sk_kod}", headers=headers).json()
             sazba_dan = float(nast_res[0].get('mtech_dan_pct', 15.0)) if nast_res else 15.0
 
@@ -459,15 +469,14 @@ with tab_stat:
                         requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": p['firma_id'], "typ_transakce": "PRIJEM", "titul": f"INFO OD FÚ: {zprava}", "castka": 0, "auditovano": True})
                         st.success(f"Inspektor: {zprava}")
                     else:
-                        if f_info:
-                            r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f_info['ceo_jmeno']}", headers=headers).json()
-                            if r_ceo:
-                                kredity = r_ceo[0]['kredity']
-                                requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f_info['ceo_jmeno']}", headers=headers, json={"kredity": max(0, kredity - vymere_penale)})
-                            
-                            requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers, json={"kredity": stat_kredity + vymere_penale})
-                            requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": p['firma_id'], "typ_transakce": "VYDAJ", "titul": f"PENÁLE OD FÚ: {zprava}", "castka": vymere_penale, "auditovano": True})
+                        r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f_info['ceo_jmeno']}", headers=headers).json()
+                        if r_ceo:
+                            kredity = r_ceo[0]['kredity']
+                            requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f_info['ceo_jmeno']}", headers=headers, json={"kredity": max(0, kredity - vymere_penale)})
                         
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers, json={"kredity": stat_kredity + vymere_penale})
+                        requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": p['firma_id'], "typ_transakce": "VYDAJ", "titul": f"PENÁLE OD FÚ: {zprava}", "castka": vymere_penale, "auditovano": True})
+                    
                         requests.patch(f"{SUPABASE_URL}/rest/v1/danova_priznani?id=eq.{p['id']}", headers=headers, json={"stav": "ZAMITNUTO_PENALE"})
                         st.error(f"Inspektor: {zprava} (Strženo {vymere_penale} M-K)")
                     
@@ -482,7 +491,7 @@ with tab_banka:
     st.subheader("Centrální Banka a Dozor nad Burzou")
     col_cb1, col_cb2 = st.columns(2)
     
-    target_skola = skolni_kod_ucitele or firma.get('skolni_kod', '') or 'SYSTEM'
+    target_skola = skolni_kod_ucitele or 'SYSTEM'
     nastaveni_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers).json()
     akt_nastaveni = nastaveni_res[0] if nastaveni_res else {}
     
@@ -511,25 +520,9 @@ with tab_banka:
         gemini_key = st.secrets.get("GEMINI_API_KEY", "")
         
         if st.button("Vygenerovat AI Burzovní zprávu", type="primary"):
-            with st.spinner("Zjišťuji dostupné AI modely a generuji zprávu (může to chvíli trvat)..."):
+            with st.spinner("Generuji zprávu z trhu..."):
                 if gemini_key:
                     try:
-                        list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={gemini_key}"
-                        models_data = requests.get(list_url, timeout=30).json()
-                        
-                        dostupne_modely = []
-                        if "models" in models_data:
-                            for m in models_data["models"]:
-                                if "generateContent" in m.get("supportedGenerationMethods", []):
-                                    nazev = m["name"].replace("models/", "")
-                                    if "flash" in nazev and "vision" not in nazev and "audio" not in nazev:
-                                        dostupne_modely.insert(0, nazev)
-                                    else:
-                                        dostupne_modely.append(nazev)
-                        
-                        if not dostupne_modely:
-                            dostupne_modely = ["gemini-3.5-flash", "gemini-3.0-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
-                        
                         krize_text = akt_nastaveni.get('krize_popis', '')
                         if not krize_text: 
                             krize_text = 'Na trzích je klid, žádná makroekonomická krize neprobíhá.'
@@ -540,40 +533,20 @@ with tab_banka:
                         Pravidlo: NEPIŠ o známkách, učitelích ani školních testech, piš jako skutečný reportér z Forbesu nebo Bloombergu.
                         Odpověz VÝHRADNĚ jako čistý JSON objekt: {{"titulek": "...", "text_zpravy": "..."}}"""
                         
-                        p_load = {"contents": [{"parts": [{"text": prompt}]}]}
+                        g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+                        p_load = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"response_mime_type": "application/json"}}
+                        res = requests.post(g_url, json=p_load, timeout=30).json()
                         
-                        uspesna_odpoved = None
-                        chyba_msg = ""
-                        pouzity_model = ""
-                        
-                        for model in dostupne_modely:
-                            g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
-                            res = requests.post(g_url, json=p_load, timeout=30).json()
-                            if 'error' not in res:
-                                uspesna_odpoved = res
-                                pouzity_model = model
-                                break
-                            else:
-                                chyba_msg = res['error']['message']
-                                
-                        if not uspesna_odpoved:
-                            st.error(f"Googlu selhalo všech {len(dostupne_modely)} modelů! Poslední chyba: {chyba_msg}")
+                        if 'candidates' in res:
+                            raw_text = res['candidates'][0]['content']['parts'][0]['text']
+                            data_ai = json.loads(raw_text)
+                            requests.post(f"{SUPABASE_URL}/rest/v1/burza_zpravy", headers=headers, json={"titulek": data_ai['titulek'], "text_zpravy": data_ai['text_zpravy']})
+                            st.success("Zpráva úspěšně vydána!")
+                            st.rerun()
                         else:
-                            raw_text = uspesna_odpoved['candidates'][0]['content']['parts'][0]['text']
-                            clean_text = raw_text.replace("```json", "").replace("```", "").strip()
-                            data_ai = json.loads(clean_text)
-                            
-                            res_db = requests.post(f"{SUPABASE_URL}/rest/v1/burza_zpravy", headers=headers, json={"titulek": data_ai['titulek'], "text_zpravy": data_ai['text_zpravy']})
-                            
-                            if res_db.status_code in [200, 201]:
-                                st.success(f"Zpráva úspěšně vydána! (Vygeneroval model: {pouzity_model})")
-                                st.rerun()
-                            else:
-                                st.error(f"Chyba při ukládání do DB: {res_db.text}")
-                    except requests.exceptions.Timeout:
-                        st.error("Chyba: Servery Googlu jsou aktuálně přetížené a nestihly odpovědět do 30 vteřin. Zkuste to za okamžik znovu.")
+                            st.error("Chyba při komunikaci s AI.")
                     except Exception as e:
-                        st.error(f"Kritická chyba v kódu: {str(e)}")
+                        st.error(f"Chyba: {e}")
 
         st.markdown("##### 📰 Náhled vydaných zpráv")
         zpravy_ucitel = requests.get(f"{SUPABASE_URL}/rest/v1/burza_zpravy?order=datum.desc&limit=2", headers=headers).json()
@@ -615,7 +588,7 @@ with tab_krize:
     st.subheader("Krizové řízení a Řízení intenzity krizí")
     st.caption("Plošné krizové akce. Zde můžete libovolně nastavit procentuální nebo finanční sílu jednotlivých dopadů!")
     
-    target_skola = skolni_kod_ucitele or firma.get('skolni_kod', '') or 'SYSTEM'
+    target_skola = skolni_kod_ucitele or 'SYSTEM'
     nastaveni_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers).json()
     akt_nast = nastaveni_res[0] if nastaveni_res else {}
     
@@ -627,19 +600,25 @@ with tab_krize:
         with st.expander("Měsíční uzávěrka (Vyžadovat nájmy)"):
             st.caption("Všem žákům zruší zaplacení životních nákladů. Budou muset uhradit složenky ze své peněženky.")
             if st.button("Provést uzávěrku a vymáhat nájmy"):
-                requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak", headers=headers, json={"naklady_zaplaceny": False})
+                if is_admin:
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak", headers=headers, json={"naklady_zaplaceny": False})
+                else:
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak&skolni_kod=eq.{skolni_kod_ucitele}", headers=headers, json={"naklady_zaplaceny": False})
                 st.success("Uzávěrka provedena! Žákům byla zaslána výzva k úhradě.")
                 st.rerun()
                 
         with st.expander("Hospodářský stimulus (Příspěvek žákům)"):
             stimulus_castka = st.number_input("Výše příspěvku (M-K):", min_value=10, value=50)
             if st.button("Rozdat plošný stimulus žákům"):
-                vsi_zaci = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak", headers=headers).json()
+                if is_admin:
+                    vsi_zaci = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak", headers=headers).json()
+                else:
+                    vsi_zaci = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak&skolni_kod=eq.{skolni_kod_ucitele}", headers=headers).json()
                 if vsi_zaci:
                     for z in vsi_zaci:
                         requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z['id']}", headers=headers, json={"kredity": z['kredity'] + stimulus_castka})
                         requests.post(f"{SUPABASE_URL}/rest/v1/bankovni_prevody", headers=headers, json={"odesilatel": "Stát (Stimulus)", "prijemce": z['jmeno'], "castka": stimulus_castka, "ucel": "Státní příspěvek na podporu poptávky"})
-                    st.success(f"Příspěvek {stimulus_castka} M-K byl úspěšně připsán všem žákům!")
+                    st.success(f"Příspěvek {stimulus_castka} M-K byl úspěšně připsán všem žákům vaší školy!")
                     st.rerun()
 
     with col_k2:
@@ -721,10 +700,10 @@ with tab_hodnoceni:
     
     for f in firmy:
         f_id_v = f['id']
-        rejstrik = "SCHVALENO" if f['stave_licence'] == 'SCHVALENO' else ("UKONCENO" if f['stave_licence'] == 'UKONCENO' else "CEKA")
-        canvas_znak = "ANO" if any(c['firma_id'] == f_id_v for c in all_canvas) else "NE"
-        produkty_znak = "ANO" if any(p['firma_id'] == f_id_v for p in all_produkty) else "NE"
-        dane_znak = "ANO" if any(d['firma_id'] == f_id_v for d in all_dane) else "NE"
+        rejstrik = "SCHVALENO" if f.get('stave_licence') == 'SCHVALENO' else ("UKONCENO" if f.get('stave_licence') == 'UKONCENO' else "CEKA")
+        canvas_znak = "ANO" if any(c['firma_id'] == f_id_v for c in (all_canvas if isinstance(all_canvas, list) else [])) else "NE"
+        produkty_znak = "ANO" if any(p['firma_id'] == f_id_v for p in (all_produkty if isinstance(all_produkty, list) else [])) else "NE"
+        dane_znak = "ANO" if any(d['firma_id'] == f_id_v for d in (all_dane if isinstance(all_dane, list) else [])) else "NE"
         
         r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers).json()
         finance = r_ceo[0]['kredity'] if r_ceo else 0
@@ -735,7 +714,7 @@ with tab_hodnoceni:
         if f.get('cto_jmeno'): clenove.append(f"{f['cto_jmeno']} (CTO)")
         
         res_zam = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{f_id_v}", headers=headers).json()
-        if res_zam:
+        if res_zam and isinstance(res_zam, list):
             for z in res_zam: clenove.append(f"{z['jmeno_zamestnance']} (HR)")
                 
         seznam_clenu = ", ".join(clenove) if clenove else "Bez členů"
@@ -759,9 +738,12 @@ with tab_hodnoceni:
 
     # --- 2. ŽEBŘÍČEK ŽÁKŮ ---
     st.markdown("#### Aktivita žáků a návrh známek")
-    zaci = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak&order=kredity.desc", headers=headers).json()
+    if is_admin:
+        zaci = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak&order=kredity.desc", headers=headers).json()
+    else:
+        zaci = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak&skolni_kod=eq.{skolni_kod_ucitele}&order=kredity.desc", headers=headers).json()
     
-    if zaci:
+    if zaci and isinstance(zaci, list):
         zaci_data = []
         for z in zaci:
             xp_celkem = z.get('xp_it', 0) + z.get('xp_marketing', 0) + z.get('xp_byznys', 0)
@@ -796,7 +778,7 @@ with tab_hodnoceni:
                 if firma.get('cto_jmeno'): clenove_k_hodnoceni.append({"jmeno": firma['cto_jmeno'], "role": "CTO"})
                 
                 res_z_hod = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{f_id}", headers=headers).json()
-                if res_z_hod:
+                if res_z_hod and isinstance(res_z_hod, list):
                     for zh in res_z_hod: clenove_k_hodnoceni.append({"jmeno": zh['jmeno_zamestnance'], "role": zh.get('pozice', 'Zaměstnanec')})
                 
                 if not clenove_k_hodnoceni:
@@ -804,17 +786,14 @@ with tab_hodnoceni:
                 else:
                     seznam_pro_ai = []
                     for clen in clenove_k_hodnoceni:
-                        # Načtení dat o žákovi
                         r_zak = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{clen['jmeno']}", headers=headers).json()
                         z_d = r_zak[0] if r_zak else {}
                         xp_c = z_d.get('xp_it', 0) + z_d.get('xp_marketing', 0) + z_d.get('xp_byznys', 0)
                         
-                        # Načtení deníku práce (výroba/manuální práce)
                         res_dp = requests.get(f"{SUPABASE_URL}/rest/v1/denik_prace?jmeno_zaka=eq.{clen['jmeno']}", headers=headers).json()
                         celkem_hodin = sum(item.get('hodiny', 0) for item in res_dp) if res_dp else 0
                         popisy_prace = "; ".join([item.get('popis_prace', '') for item in res_dp]) if res_dp else "Žádné zápisy v deníku práce."
                         
-                        # Načtení týmového hodnocení (peer review)
                         res_peer = requests.get(f"{SUPABASE_URL}/rest/v1/peer_review?hodnoceny=eq.{clen['jmeno']}", headers=headers).json()
                         prumer_peer = (sum(p.get('body', 5) for p in res_peer) / len(res_peer)) if res_peer else 5.0
                         komentare_peer = "; ".join([p.get('komentar', '') for p in res_peer if p.get('komentar')]) if res_peer else "Bez komentářů od týmu."
@@ -841,25 +820,12 @@ with tab_hodnoceni:
                     gemini_key = st.secrets.get("GEMINI_API_KEY", "")
                     if gemini_key:
                         try:
-                            list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={gemini_key}"
-                            models_data = requests.get(list_url, timeout=30).json()
-                            dostupne_modely = [m["name"].replace("models/", "") for m in models_data.get("models", []) if "generateContent" in m.get("supportedGenerationMethods", []) and "flash" in m["name"] and "vision" not in m["name"]]
-                            if not dostupne_modely: dostupne_modely = ["gemini-1.5-flash", "gemini-1.5-pro"]
-
-                            p_load = {"contents": [{"parts": [{"text": prompt}]}]}
-                            uspesna_odpoved = None
-                            
-                            for model in dostupne_modely:
-                                g_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={gemini_key}"
-                                res_ai = requests.post(g_url, json=p_load, timeout=30).json()
-                                if 'error' not in res_ai:
-                                    uspesna_odpoved = res_ai
-                                    break
-                            
-                            if uspesna_odpoved:
-                                raw_text = uspesna_odpoved['candidates'][0]['content']['parts'][0]['text']
-                                clean_text = raw_text.replace("```json", "").replace("```", "").strip()
-                                data_ai = json.loads(clean_text)
+                            g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
+                            p_load = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"response_mime_type": "application/json"}}
+                            res_ai = requests.post(g_url, json=p_load, timeout=30).json()
+                            if 'candidates' in res_ai:
+                                raw_text = res_ai['candidates'][0]['content']['parts'][0]['text']
+                                data_ai = json.loads(raw_text)
                                 st.success(f"Komplexní hodnocení pro tým {firma['nazev_firmy']} bylo úspěšně vygenerováno.")
                                 st.dataframe(pd.DataFrame(data_ai), use_container_width=True)
                             else:
@@ -867,4 +833,4 @@ with tab_hodnoceni:
                         except Exception as e:
                             st.error(f"Kritická chyba: {e}")
     else:
-        st.info("V systému zatím nejsou zaregistrováni žádní žáci.")
+        st.info("Ve vaší škole zatím nejsou zaregistrováni žádní žáci.")
