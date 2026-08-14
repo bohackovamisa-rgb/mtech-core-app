@@ -39,16 +39,22 @@ except Exception:
     st.stop()
 
 ucitel_jmeno = st.session_state.get("uzivatel", "")
-res_ucitel = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ucitel_jmeno}", headers=headers).json()
-skolni_kod = res_ucitel[0].get("skolni_kod", "") if res_ucitel else ""
+skolni_kod = st.session_state.get("skolni_kod", "")
 is_admin = str(st.session_state.get("role")).upper() == "ADMIN"
+
+# Bezpečné načtení údajů o vyučujícím
+if not skolni_kod and ucitel_jmeno:
+    res_ucitel = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ucitel_jmeno}", headers=headers).json()
+    if isinstance(res_ucitel, list) and len(res_ucitel) > 0:
+        skolni_kod = res_ucitel[0].get("skolni_kod", "")
+        st.session_state.skolni_kod = skolni_kod
 
 # =========================================================================
 # 0. ZOBRAZENÍ LICENČNÍHO KÓDU HNED NAHOŘE
 # =========================================================================
 if skolni_kod and skolni_kod != "SYSTEM":
     res_nazev_skoly = requests.get(f"{SUPABASE_URL}/rest/v1/licencovane_skoly?licencni_kod=eq.{skolni_kod}", headers=headers).json()
-    nazev_skoly_zobrazeni = res_nazev_skoly[0].get('nazev_skoly', 'Neznámá instituce') if isinstance(res_nazev_skoly, list) and len(res_nazev_skoly) > 0 else 'Neznámá instituce'
+    nazev_skoly_zobrazeni = res_nazev_skoly[0].get('nazev_skoly', 'Neznámá instituce') if (isinstance(res_nazev_skoly, list) and len(res_nazev_skoly) > 0) else 'Neznámá instituce'
     
     st.markdown(f"""
         <div class="licence-box">
@@ -60,7 +66,7 @@ if skolni_kod and skolni_kod != "SYSTEM":
         </div>
     """, unsafe_allow_html=True)
 elif is_admin:
-     st.markdown("""
+    st.markdown("""
         <div class="licence-box">
             <div>
                 <h4 style="margin: 0; color: #cbd5e1;">Režim: Hlavní Administrátor</h4>
@@ -71,7 +77,7 @@ elif is_admin:
     """, unsafe_allow_html=True)
 
 # =========================================================================
-# 1. GLOBÁLNÍ PŘEHLED NEVYŘÍZENÝCH POLOŽEK (VŠECHNY TŘÍDY UČITELE)
+# 1. GLOBÁLNÍ PŘEHLED NEVYŘÍZENÝCH POLOŽEK
 # =========================================================================
 if is_admin:
     res_moje_tridy_global = requests.get(f"{SUPABASE_URL}/rest/v1/tridy?select=nazev_tridy", headers=headers).json()
@@ -312,7 +318,7 @@ with tab_legal:
 # ==========================================
 with tab_aktiva:
     canvas = requests.get(f"{SUPABASE_URL}/rest/v1/lean_canvas?firma_id=eq.{f_id}", headers=headers).json()
-    if canvas:
+    if canvas and isinstance(canvas, list):
         with st.expander("Detail Lean Canvasu (8 bloků)"):
             col_c1, col_c2 = st.columns(2)
             with col_c1:
@@ -347,7 +353,7 @@ with tab_hr:
 with tab_finance:
     st.markdown("#### Schvalování produktů pro Tržiště")
     kalkulace = requests.get(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?firma_id=eq.{f_id}", headers=headers).json()
-    if kalkulace:
+    if kalkulace and isinstance(kalkulace, list):
         for k in kalkulace:
             barva = "status-ok" if k['schvaleno_uradem'] else "status-wait"
             with st.container(border=True):
@@ -388,7 +394,7 @@ with tab_questy:
                     if st.button("Schválit a vyplatit", key=f"btn_q_{q['id']}"):
                         requests.patch(f"{SUPABASE_URL}/rest/v1/questy?id=eq.{q['id']}", headers=headers, json={"stav": "DOKONCENO"})
                         res_r = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{q['resitel']}", headers=headers).json()
-                        if res_r:
+                        if res_r and isinstance(res_r, list) and len(res_r) > 0:
                             requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{q['resitel']}", headers=headers, json={"kredity": res_r[0]['kredity'] + q['odmena']})
                         st.success("Úkol schválen a odměna vyplacena.")
                         st.rerun()
@@ -399,9 +405,8 @@ with tab_questy:
 # ZÁLOŽKA 6: STÁTNÍ POKLADNA A DAŇOVÝ AUDIT
 # ==========================================
 with tab_stat:
-    st.subheader("Státní pokladna a Daňové audity")
     res_stat = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers).json()
-    stat_kredity = res_stat[0]['kredity'] if res_stat else 0
+    stat_kredity = res_stat[0]['kredity'] if (isinstance(res_stat, list) and len(res_stat) > 0) else 0
     with st.container(border=True):
         st.markdown(f"### Rozpočet vybraných daní: `{stat_kredity:.2f} M-K`")
         
@@ -414,11 +419,11 @@ with tab_stat:
             f_nazev = f_info['nazev_firmy']
 
             kniha = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{p['firma_id']}&typ_transakce=eq.PRIJEM", headers=headers).json()
-            celkem_prijmy = sum(item['castka'] for item in kniha) if kniha else 0
+            celkem_prijmy = sum(item['castka'] for item in kniha) if (isinstance(kniha, list) and kniha) else 0
 
-            sk_kod = f_info.get('skolni_kod', 'SYSTEM')
-            nast_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{sk_kod}", headers=headers).json()
-            sazba_dan = float(nast_res[0].get('mtech_dan_pct', 15.0)) if nast_res else 15.0
+            sk_kod_p = f_info.get('skolni_kod', 'SYSTEM')
+            nast_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{sk_kod_p}", headers=headers).json()
+            sazba_dan = float(nast_res[0].get('mtech_dan_pct', 15.0)) if (isinstance(nast_res, list) and len(nast_res) > 0) else 15.0
             pozadovana_dan = celkem_prijmy * (sazba_dan / 100.0)
 
             with st.container(border=True):
@@ -436,7 +441,7 @@ with tab_stat:
                         st.success("Daňové přiznání je v pořádku a bylo schváleno.")
                     else:
                         r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f_info['ceo_jmeno']}", headers=headers).json()
-                        if r_ceo:
+                        if r_ceo and isinstance(r_ceo, list) and len(r_ceo) > 0:
                             kredity = r_ceo[0]['kredity']
                             requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f_info['ceo_jmeno']}", headers=headers, json={"kredity": max(0, kredity - vymere_penale)})
                         
@@ -453,7 +458,7 @@ with tab_stat:
 # ==========================================
 with tab_banka:
     nastaveni_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{skolni_kod}", headers=headers).json()
-    akt_nastaveni = nastaveni_res[0] if nastaveni_res else {}
+    akt_nastaveni = nastaveni_res[0] if (isinstance(nastaveni_res, list) and len(nastaveni_res) > 0) else {}
     
     col_cb1, col_cb2 = st.columns(2)
     
@@ -463,7 +468,8 @@ with tab_banka:
         with st.form("form_tisk_penez"):
             tisk_castka = st.number_input("Částka k připsání (M-K):", min_value=100, value=1000)
             if st.form_submit_button("Vytisknout a připsat kredity"):
-                aktualni_zustatek_ucitele = res_ucitel[0].get("kredity", 0) if res_ucitel else 0
+                res_ucitel_akt = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ucitel_jmeno}", headers=headers).json()
+                aktualni_zustatek_ucitele = res_ucitel_akt[0].get("kredity", 0) if (isinstance(res_ucitel_akt, list) and len(res_ucitel_akt) > 0) else 0
                 novy_zustatek = aktualni_zustatek_ucitele + tisk_castka
                 requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ucitel_jmeno}", headers=headers, json={"kredity": novy_zustatek})
                 st.session_state.kredity = novy_zustatek
