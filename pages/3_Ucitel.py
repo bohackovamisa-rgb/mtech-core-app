@@ -16,6 +16,7 @@ st.markdown("""
     .status-ok { color: #34d399; font-weight: 700; background: rgba(16, 185, 129, 0.1); padding: 4px 8px; border-radius: 6px; }
     .status-wait { color: #fbbf24; font-weight: 700; background: rgba(245, 158, 11, 0.1); padding: 4px 8px; border-radius: 6px; }
     .status-err { color: #f87171; font-weight: 700; background: rgba(239, 68, 68, 0.1); padding: 4px 8px; border-radius: 6px; }
+    .alert-box { background-color: rgba(245, 158, 11, 0.1); border: 1px solid #f59e0b; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
     .asset-link { color: #00B4D8; font-weight: bold; text-decoration: none; }
     .asset-link:hover { text-decoration: underline; color: #0077B6; }
     details { background: rgba(255,255,255,0.05); padding: 10px; border-radius: 5px; margin-top: 10px; }
@@ -42,20 +43,56 @@ res_ucitel = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{st.sessio
 skolni_kod_ucitele = res_ucitel[0].get("skolni_kod", "") if res_ucitel else ""
 is_admin = str(st.session_state.get("role")).upper() == "ADMIN"
 
+# Načtení firem školy
+if is_admin:
+    res_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?select=*&order=id.desc", headers=headers).json()
+else:
+    res_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{skolni_kod_ucitele}&select=*&order=id.desc", headers=headers).json()
+
+firmy = res_firmy if (isinstance(res_firmy, list) and res_firmy) else []
+
 # =========================================================================
-# 🎓 SEKCIE PRO SPRÁVU ŽÁKŮ A PŘIDĚLOVÁNÍ PODNIKATELSKÝCH OPRÁVNĚNÍ
+# 1. PŘEHLED NEVYŘÍZENÝCH ŽÁDOSTÍ (CO MUSÍ UČITEL UDĚLAT)
 # =========================================================================
-with st.expander("🎓 Správa žáků & Udělování oprávnění k založení firmy", expanded=True):
-    st.caption("Zde vidíte všechny registrované žáky vaší školy. Můžete vybrat studenty, kterým povolíte přístup k zakládání a vedení startupu.")
-    
+firmy_cekajici = [f for f in firmy if f.get("stave_licence") == "CEKA_NA_SCHVALENI"]
+
+res_q_check = requests.get(f"{SUPABASE_URL}/rest/v1/questy?stav=eq.K_KONTROLE", headers=headers).json()
+questy_cekajici = res_q_check if isinstance(res_q_check, list) else []
+
+res_priznani_check = requests.get(f"{SUPABASE_URL}/rest/v1/danova_priznani?stav=eq.ODEVZDANO", headers=headers).json()
+priznani_cekajici = [p for p in (res_priznani_check if isinstance(res_priznani_check, list) else []) if any(f['id'] == p.get('firma_id') for f in firmy)]
+
+res_kalk_check = requests.get(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?schvaleno_uradem=eq.false", headers=headers).json()
+kalkulace_cekajici = [k for k in (res_kalk_check if isinstance(res_kalk_check, list) else []) if any(f['id'] == k.get('firma_id') for f in firmy)]
+
+pocet_celkem_restu = len(firmy_cekajici) + len(questy_cekajici) + len(priznani_cekajici) + len(kalkulace_cekajici)
+
+if pocet_celkem_restu > 0:
+    st.markdown(f"""
+    <div class='alert-box'>
+        <h4 style='margin:0; color:#f59e0b;'>Nevyřízené položky vyžadující vaši pozornost ({pocet_celkem_restu})</h4>
+        <ul style='margin-bottom:0; color:#cbd5e1; font-size: 14px;'>
+            {"<li><b>Nové žádosti o založení firmy:</b> " + str(len(firmy_cekajici)) + " (Zkontrolujte níže v záložce 1. Spis)</li>" if firmy_cekajici else ""}
+            {"<li><b>Odevzdané úkoly žáků ke kontrole a udělení XP:</b> " + str(len(questy_cekajici)) + " (Záložka 5. Úřad práce)</li>" if questy_cekajici else ""}
+            {"<li><b>Kalkulace produktů pro E-shop ke schválení:</b> " + str(len(kalkulace_cekajici)) + " (Záložka 4. E-shop)</li>" if kalkulace_cekajici else ""}
+            {"<li><b>Odevzdaná daňová přiznání k auditu:</b> " + str(len(priznani_cekajici)) + " (Záložka 6. Státní pokladna)</li>" if priznani_cekajici else ""}
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
+else:
+    st.success("Všechny studentské žádosti, úkoly i audity jsou vyřízené.")
+
+# =========================================================================
+# 2. SPRÁVA ŽÁKŮ A OPRÁVNĚNÍ
+# =========================================================================
+with st.expander("Správa žáků a přidělování podnikatelských rolí", expanded=False):
     if is_admin:
         zaci_skoly = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=neq.ucitel&order=id.desc", headers=headers).json()
     else:
         zaci_skoly = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod_ucitele}&role=neq.ucitel&order=id.desc", headers=headers).json()
     
     if not zaci_skoly or not isinstance(zaci_skoly, list):
-        st.info("💡 Ve vaší škole zatím nejsou zaregistrováni žádní žáci.")
-        st.caption(f"Předejte žákům licenční kód: **{skolni_kod_ucitele}**. Jakmile se zaregistrují, uvidíte je v této tabulce.")
+        st.info("Ve vaší škole zatím nejsou registrováni žádní žáci.")
     else:
         tabulka_zaku = []
         for z in zaci_skoly:
@@ -67,7 +104,6 @@ with st.expander("🎓 Správa žáků & Udělování oprávnění k založení 
             })
         st.dataframe(pd.DataFrame(tabulka_zaku), use_container_width=True)
         
-        st.markdown("##### Změnit oprávnění žáka:")
         col_z1, col_z2, col_z3 = st.columns([2, 2, 1])
         with col_z1:
             vybrany_zak = st.selectbox("Vyberte žáka:", [z["jmeno"] for z in zaci_skoly])
@@ -84,55 +120,67 @@ with st.expander("🎓 Správa žáků & Udělování oprávnění k založení 
 st.write("---")
 
 # =========================================================================
-# AUDIT FIREM (POKUD NĚJAKÁ EXISTUJE)
+# 3. VÝBĚR FIRMY A JEJÍ AUDIT
 # =========================================================================
-if is_admin:
-    res_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?select=*&order=id.desc", headers=headers).json()
-else:
-    res_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{skolni_kod_ucitele}&select=*&order=id.desc", headers=headers).json()
-
-firmy = res_firmy if (isinstance(res_firmy, list) and res_firmy) else []
-
 if not firmy:
-    st.info("💡 Ve vaší škole zatím žádný žák neodeslal žádost o registraci firmy.")
-    st.caption("Jakmile žák s rolí 'Podnikatel' projde notářem a odešle firmu ke schválení, otevře se vám zde kompletní auditní panel (Lean Canvas, E-shop, Účetnictví, Daně atd.).")
+    st.info("Ve vaší škole zatím žádný žák neodeslal žádost o registraci firmy.")
     st.stop()
 
-vybrana_firma_nazev = st.selectbox("Vyberte startup k auditu:", [f["nazev_firmy"] for f in firmy])
+# V roletce označíme firmy, které čekají na schválení, aby je učitel nepřehlédl
+firmy_labels = []
+for f in firmy:
+    status_tag = " [ČEKÁ NA SCHVÁLENÍ]" if f.get("stave_licence") == "CEKA_NA_SCHVALENI" else ""
+    firmy_labels.append(f"{f['nazev_firmy']}{status_tag}")
+
+vybrany_label = st.selectbox("Vyberte startup k auditu:", firmy_labels)
+vybrana_firma_nazev = vybrany_label.replace(" [ČEKÁ NA SCHVÁLENÍ]", "")
 firma = next(f for f in firmy if f["nazev_firmy"] == vybrana_firma_nazev)
 f_id = firma["id"]
 
 tab_legal, tab_aktiva, tab_hr, tab_finance, tab_questy, tab_stat, tab_banka, tab_krize, tab_hodnoceni = st.tabs([
-    "1. Spis", "2. Vize a AI", "3. HR", "4. E-shop a Zákazníci", "5. Úřad práce a XP", "6. Státní pokladna a Daně", "7. Banka a Ceník", "8. Krizové řízení", "9. Přehled a Hodnocení"
+    "1. Spis a Notář", "2. Vize a AI", "3. HR", "4. E-shop a Zákazníci", "5. Úřad práce a XP", "6. Státní pokladna a Daně", "7. Banka a Ceník", "8. Krizové řízení", "9. Přehled a Hodnocení"
 ])
 
 # ==========================================
-# ZÁLOŽKA 1: SPIS
+# ZÁLOŽKA 1: SPIS A NOTÁŘ (DETAIL ŽÁDOSTI)
 # ==========================================
 with tab_legal:
-    col_l1, col_l2 = st.columns(2)
+    st.subheader(f"Firemní spis: {firma['nazev_firmy']}")
+    
+    col_l1, col_l2 = st.columns([1.6, 1])
+    
     with col_l1:
         res_zamestnanci = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{f_id}", headers=headers).json()
-        seznam_zamestnancu = ", ".join([z['jmeno_zamestnance'] for z in res_zamestnanci]) if isinstance(res_zamestnanci, list) and res_zamestnanci else "Žádní další zaměstnanci"
+        seznam_zamestnancu = ", ".join([z['jmeno_zamestnance'] for z in res_zamestnanci]) if isinstance(res_zamestnanci, list) and res_zamestnanci else "Zatím žádní zaměstnanci"
         
         st.markdown(f"""
         <div class='card-box'>
-            <h4>Management a Tým</h4>
-            <p style='margin-bottom: 8px;'><b>Kód školy:</b> {firma.get('skolni_kod', '')}</p>
-            <p style='margin-bottom: 8px; color: #cbd5e1;'>
-                <b>Vedení firmy:</b><br>
-                <b>CEO:</b> {firma.get('ceo_jmeno', 'Neobsazeno')}<br>
-                <b>CFO:</b> {firma.get('cfo_jmeno', 'Neobsazeno')}<br>
-                <b>CTO:</b> {firma.get('cto_jmeno', 'Neobsazeno')}
+            <h4>Identifikace společnosti</h4>
+            <p><b>Obchodní firma:</b> <span style='color:#00B4D8; font-size:1.1em; font-weight:bold;'>{firma['nazev_firmy']}</span><br>
+            <b>Licenční kód školy:</b> {firma.get('skolni_kod', '')}<br>
+            <b>Základní vklad / kapitál:</b> {firma.get('pocatecni_kapital', 100)} M-K</p>
+            
+            <hr style='border-color: #334155;'>
+            
+            <h4>Předmět podnikání a Živnost</h4>
+            <p style='color: #cbd5e1;'>{firma.get('podnikatelsky_zamer', 'Neuvedeno')}</p>
+            
+            <hr style='border-color: #334155;'>
+            
+            <h4>Statutární orgány a Vedení</h4>
+            <p style='color: #cbd5e1;'>
+                <b>CEO (Generální ředitel):</b> {firma.get('ceo_jmeno', 'Neobsazeno')}<br>
+                <b>CFO (Finanční ředitel):</b> {firma.get('cfo_jmeno', 'Neobsazeno')}<br>
+                <b>CTO (Technický ředitel):</b> {firma.get('cto_jmeno', 'Neobsazeno')}
             </p>
+            
             <p style='margin-bottom: 0; color: #cbd5e1;'>
-                <b>Zaměstnanci ve výrobě / HR:</b><br>
-                {seznam_zamestnancu}
+                <b>Zaměstnanci ve výrobě:</b> {seznam_zamestnancu}
             </p>
         </div>
         """, unsafe_allow_html=True)
         
-        with st.expander("👉 Jmenovat / Změnit vedení firmy (CEO, CFO, CTO)"):
+        with st.expander("Jmenovat / Změnit vedení firmy (CEO, CFO, CTO)"):
             if is_admin:
                 zaci_vse = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak", headers=headers).json()
             else:
@@ -141,7 +189,7 @@ with tab_legal:
             seznam_jmen_zaku = [z['jmeno'] for z in zaci_vse] if isinstance(zaci_vse, list) else []
             
             if not seznam_jmen_zaku:
-                st.info("Ve vaší škole zatím nejsou žádní registrováni žáci.")
+                st.info("Ve vaší škole zatím nejsou žádní další žáci.")
             else:
                 with st.form("form_zmena_roli"):
                     idx_ceo = seznam_jmen_zaku.index(firma['ceo_jmeno']) if firma.get('ceo_jmeno') in seznam_jmen_zaku else 0
@@ -152,7 +200,7 @@ with tab_legal:
                     novy_cfo = st.selectbox("CFO (Finanční ředitel):", ["-- Neobsazeno --"] + seznam_jmen_zaku, index=idx_cfo)
                     novy_cto = st.selectbox("CTO (Technický ředitel):", ["-- Neobsazeno --"] + seznam_jmen_zaku, index=idx_cto)
                     
-                    if st.form_submit_button("Uložit nové složení vedení"):
+                    if st.form_submit_button("Uložit změny statutárních orgánů"):
                         cfo_val = None if novy_cfo == "-- Neobsazeno --" else novy_cfo
                         cto_val = None if novy_cto == "-- Neobsazeno --" else novy_cto
                         requests.patch(
@@ -160,23 +208,32 @@ with tab_legal:
                             headers=headers,
                             json={"ceo_jmeno": novy_ceo, "cfo_jmeno": cfo_val, "cto_jmeno": cto_val}
                         )
-                        st.success("Složení vedení bylo úspěšně změněno!")
+                        st.success("Vedení firmy bylo upraveno.")
                         st.rerun()
         
     with col_l2:
-        stav_tridy = 'status-ok' if firma.get('stave_licence') == 'SCHVALENO' else 'status-wait'
-        st.markdown(f"<div class='card-box'><h4>Stav licence: <span class='{stav_tridy}'>{firma.get('stave_licence', 'CEKA')}</span></h4></div>", unsafe_allow_html=True)
-    
-    col_btn1, col_btn2 = st.columns(2)
-    with col_btn1:
-        if st.button("Schválit zápis do rejstříku"):
+        stav = firma.get('stave_licence', 'CEKA_NA_SCHVALENI')
+        stav_tridy = 'status-ok' if stav == 'SCHVALENO' else ('status-err' if stav in ['ZAMITNUTO', 'UKONCENO'] else 'status-wait')
+        
+        st.markdown(f"""
+        <div class='card-box'>
+            <h4>Stav zápisu do rejstříku</h4>
+            <p>Aktuální stav: <span class='{stav_tridy}'>{stav}</span></p>
+            {f"<p style='color:#f87171;'><b>Důvod zamítnutí:</b> {firma.get('duvod_zamitnuti')}</p>" if firma.get('duvod_zamitnuti') else ""}
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Tlačítka pro rozhodnutí učitele
+        if st.button("Schválit zápis do rejstříku a povolit činnost", type="primary"):
             requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{f_id}", headers=headers, json={"stave_licence": "SCHVALENO", "duvod_zamitnuti": ""})
+            st.success(f"Firma {firma['nazev_firmy']} byla úspěšně zapsána do rejstříku.")
             st.rerun()
-    with col_btn2:
-        with st.popover("Zamítnout a vrátit k přepracování"):
-            duvod = st.text_area("Odůvodnění zamítnutí:")
+            
+        with st.popover("Zamítnout / Vrátit k přepracování"):
+            duvod = st.text_area("Pokyny pro žáky k opravě:")
             if st.button("Potvrdit zamítnutí"):
                 requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{f_id}", headers=headers, json={"stave_licence": "ZAMITNUTO", "duvod_zamitnuti": duvod})
+                st.warning("Spis byl vrácen žákům k přepracování.")
                 st.rerun()
 
 # ==========================================
@@ -187,14 +244,16 @@ with tab_aktiva:
     
     col_a1, col_a2 = st.columns(2)
     with col_a1:
-        st.markdown("#### Digitální aktiva")
+        st.markdown("#### Digitální identita")
         if firma.get('logo_url'): 
             st.markdown(f"<a href='{firma['logo_url']}' class='asset-link' target='_blank'>Firemní Logo</a>", unsafe_allow_html=True)
         if firma.get('web_url'): 
             st.markdown(f"<a href='{firma['web_url']}' class='asset-link' target='_blank'>Webové stránky</a>", unsafe_allow_html=True)
+        if not firma.get('logo_url') and not firma.get('web_url'):
+            st.info("Firma zatím nenahrála logo ani odkaz na web.")
     
     with col_a2:
-        st.markdown("#### Strategie")
+        st.markdown("#### Byznys model")
         if canvas:
             with st.expander("Detail Lean Canvasu (8 bloků)"):
                 col_c1, col_c2 = st.columns(2)
@@ -212,9 +271,7 @@ with tab_aktiva:
             st.info("Firma zatím nedodala Lean Canvas.")
     
     st.write("---")
-    st.markdown("#### Historie AI Shark Tank (Pitching)")
-    st.caption("Náhled toho, jak se firma prezentovala před umělou inteligencí.")
-    
+    st.markdown("#### Historie AI Shark Tank")
     res_pitches = requests.get(f"{SUPABASE_URL}/rest/v1/ai_pitches?firma_id=eq.{f_id}&order=datum.desc", headers=headers).json()
     if res_pitches:
         for p in res_pitches:
@@ -229,7 +286,7 @@ with tab_aktiva:
                     <i>"{p['popis_projektu']}"</i>
                 </p>
                 <details>
-                    <summary>Rozbalit verdikt AI investorů</summary>
+                    <summary>Rozbalit hodnocení AI poroty</summary>
                     <p>{p['hodnoceni_ostry']}</p>
                     <p>{p['hodnoceni_vizionarka']}</p>
                     <p>{p['hodnoceni_rychly']}</p>
@@ -260,9 +317,9 @@ with tab_finance:
     if kalkulace:
         for k in kalkulace:
             barva = "status-ok" if k['schvaleno_uradem'] else "status-wait"
-            st.markdown(f"<div class='card-box'><h5>{k['nazev_produktu']} <span class='{barva}'>{'Aktivní' if k['schvaleno_uradem'] else 'Čeká na kontrolu'}</span></h5><p>Koncová cena pro trh: {k['konecna_cena']} M-K</p></div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='card-box'><h5>{k['nazev_produktu']} <span class='{barva}'>{'Aktivní' if k['schvaleno_uradem'] else 'Čeká na schválení'}</span></h5><p>Koncová cena pro trh: {k['konecna_cena']} M-K</p></div>", unsafe_allow_html=True)
             if not k['schvaleno_uradem']:
-                if st.button(f"Schválit kalkulaci: {k['nazev_produktu']}", key=f"kalk_{k['id']}"):
+                if st.button(f"Schválit produkt do E-shopu: {k['nazev_produktu']}", key=f"kalk_{k['id']}"):
                     requests.patch(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?id=eq.{k['id']}", headers=headers, json={"schvaleno_uradem": True})
                     st.rerun()
     else:
@@ -270,30 +327,19 @@ with tab_finance:
 
     st.write("---")
     st.markdown("#### AI Zákaznická podpora (Reklamace)")
-    st.caption("Zde vidíte, jak žáci komunikují se zákazníky a řeší stížnosti.")
-    
     reklamace_list = requests.get(f"{SUPABASE_URL}/rest/v1/ai_reklamace?firma_id=eq.{f_id}&order=datum.desc", headers=headers).json()
     if reklamace_list:
         for r in reklamace_list:
             stav = "VYŘEŠENO" if r['vysledek'] in ['SCHVALENO', 'ZAMITNUTO_POKUTA'] else "NEODPOVĚZENO"
             barva = "status-ok" if r['vysledek'] == 'SCHVALENO' else ("status-err" if r['vysledek'] == 'ZAMITNUTO_POKUTA' else "status-wait")
-            
-            odpoved_firmy = r.get('odpoved_firmy')
-            if not odpoved_firmy:
-                odpoved_firmy = "<i>Zatím bez odpovědi.</i>"
-            
-            barva_odpovedi = '#10b981' if r['vysledek'] == 'SCHVALENO' else '#f43f5e'
-            hodnoceni = r.get('hodnoceni_ai', 'Čeká se na reakci firmy')
-            
+            odpoved_firmy = r.get('odpoved_firmy', 'Zatím bez odpovědi.')
             st.markdown(f"""
             <div class='card-box'>
-                <h5>Stěžovatel: {r['zakaznik_jmeno']} <span class='{barva}' style='float: right;'>{stav}</span></h5>
+                <h5>Zákazník: {r['zakaznik_jmeno']} <span class='{barva}' style='float: right;'>{stav}</span></h5>
                 <p><b>Stížnost:</b> <i>"{r['text_stiznosti']}"</i></p>
-                <p style="background: rgba(0,0,0,0.2); padding: 10px; border-left: 3px solid {barva_odpovedi};">
-                    <b>Odpověď firmy:</b><br>
-                    {odpoved_firmy}
+                <p style="background: rgba(0,0,0,0.2); padding: 10px;">
+                    <b>Reakce firmy:</b><br>{odpoved_firmy}
                 </p>
-                <p><b>Verdikt AI a dopad:</b> {hodnoceni}</p>
             </div>
             """, unsafe_allow_html=True)
     else:
@@ -303,40 +349,33 @@ with tab_finance:
     with st.expander("Účetní audit a kniha transakcí (Zobrazit)"):
         ucto = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{f_id}&order=datum.desc", headers=headers).json()
         if ucto:
-            neauditovane = [u for u in ucto if not u['auditovano']]
-            if neauditovane:
-                if st.button("Provést hromadný audit (Schválit transakce)"):
-                    for u in neauditovane: 
-                        requests.patch(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?id=eq.{u['id']}", headers=headers, json={"auditovano": True})
-                    st.rerun()
             df_show = pd.DataFrame(ucto)[['datum', 'typ_transakce', 'titul', 'castka', 'auditovano']]
             st.dataframe(df_show, use_container_width=True)
         else:
             st.info("Kniha transakcí je zatím prázdná.")
 
 # ==========================================
-# ZÁLOŽKA 5: ÚŘAD PRÁCE
+# ZÁLOŽKA 5: ÚŘAD PRÁCE A KONTROLA ÚKOLŮ
 # ==========================================
 with tab_questy:
-    st.subheader("Správa úkolů a přidělování XP bodů")
+    st.subheader("Správa úkolů a kontrola odevzdané práce")
     
-    with st.expander("Rychlé vypsání předpřipravených školních úkolů"):
-        st.caption("Kliknutím na tlačítko okamžitě vypsat standardní školní úkol pro žáky bez firmy.")
+    with st.expander("Rychlé vypsání školních úkolů pro žáky"):
         col_s1, col_s2, col_s3 = st.columns(3)
         with col_s1:
             if st.button("Vypsat: Úklid a organizace dílny"):
                 requests.post(f"{SUPABASE_URL}/rest/v1/questy", headers=headers, json={"nazev": "Úklid a organizace 3D dílny", "popis": "Rovnání filamentů, úklid pracovního stolu a kontrola stavu tiskáren.", "odmena": 25.0, "zadavatel": st.session_state.uzivatel, "stav": "VOLNY"})
-                st.success("Úkol vypsán!")
+                st.success("Úkol vypsán.")
                 st.rerun()
         with col_s2:
             if st.button("Vypsat: PR a Foto ze školní akce"):
                 requests.post(f"{SUPABASE_URL}/rest/v1/questy", headers=headers, json={"nazev": "Fotodokumentace a PR článek", "popis": "Nafocení fotek ze školní akce a napsání kratičkého článku na web.", "odmena": 35.0, "zadavatel": st.session_state.uzivatel, "stav": "VOLNY"})
-                st.success("Úkol vypsán!")
+                st.success("Úkol vypsán.")
                 st.rerun()
         with col_s3:
             if st.button("Vypsat: Pomoc s Dnem otevřených dveří"):
                 requests.post(f"{SUPABASE_URL}/rest/v1/questy", headers=headers, json={"nazev": "Průvodce na Dni otevřených dveří", "popis": "Aktivní prezentace školních projektů a provádění návštěvníků.", "odmena": 50.0, "zadavatel": st.session_state.uzivatel, "stav": "VOLNY"})
-                st.success("Úkol vypsán!")
+                st.success("Úkol vypsán.")
                 st.rerun()
 
     st.write("---")
@@ -350,25 +389,17 @@ with tab_questy:
                 requests.post(f"{SUPABASE_URL}/rest/v1/questy", headers=headers, json={"nazev": q_nazev, "popis": q_popis, "odmena": q_odmena, "zadavatel": st.session_state.uzivatel, "stav": "VOLNY"})
                 st.rerun()
     with col_q2:
-        st.markdown("#### Práce ke kontrole")
-        st.caption("Návod: Zkontrolujte odevzdanou práci, vyberte oblast dovednosti, přiřaďte žákovi XP body za kvalitu a klikněte na Schválit (nebo Zamítnout).")
+        st.markdown("#### Odevzdaná práce ke kontrole")
         
-        res_q_check = requests.get(f"{SUPABASE_URL}/rest/v1/questy?stav=eq.K_KONTROLE", headers=headers).json()
-        if isinstance(res_q_check, list) and len(res_q_check) > 0:
-            for q in res_q_check:
+        if questy_cekajici:
+            for q in questy_cekajici:
                 odkaz = q.get('odkaz_vystup', '')
-                if not odkaz:
-                    vystup_html = "<span style='color:#64748b;'><i>Žák neposkytl žádný odkaz, pouze napsal, že má hotovo.</i></span>"
-                elif str(odkaz).startswith("http://") or str(odkaz).startswith("https://"):
-                    vystup_html = f"<a href='{odkaz}' target='_blank' style='color:#0ea5e9; font-weight:bold;'>🔗 Otevřít odkaz na odevzdanou práci</a>"
-                else:
-                    vystup_html = f"<b>Komentář žáka:</b> <i>{odkaz}</i>"
+                vystup_html = f"<a href='{odkaz}' target='_blank' style='color:#0ea5e9; font-weight:bold;'>Otevřít odkaz na odevzdanou práci</a>" if str(odkaz).startswith("http") else f"<b>Komentář:</b> <i>{odkaz}</i>"
                 
                 st.markdown(f"""
-                <div class='card-box' style='margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: none;'>
+                <div class='card-box' style='margin-bottom: 0; border-bottom: none;'>
                     <h5 style='color: #0ea5e9; margin-top: 0;'>{q['nazev']}</h5>
-                    <p style='margin-bottom: 5px;'>Zhotovitel: <b>{q['resitel']}</b></p>
-                    <p style='margin-bottom: 10px; color: #64748b;'>Pevná odměna: <b style='color: #10b981;'>{q['odmena']} M-K</b> <i>(Odešle se automaticky při schválení)</i></p>
+                    <p>Zhotovitel: <b>{q['resitel']}</b> | Odměna: <b style='color:#10b981;'>{q['odmena']} M-K</b></p>
                     <div style='background: rgba(255,255,255,0.05); padding: 10px; border-radius: 5px;'>
                         {vystup_html}
                     </div>
@@ -376,54 +407,47 @@ with tab_questy:
                 """, unsafe_allow_html=True)
                 
                 with st.form(f"schvaleni_{q['id']}"):
-                    st.markdown("<p style='font-size: 14px; font-weight: bold; margin-bottom: 5px;'>Ohodnoťte kvalitu práce (XP body pro AI návrh známky):</p>", unsafe_allow_html=True)
-                    
                     col_xp1, col_xp2 = st.columns([2, 1])
                     with col_xp1:
                         kategorie_xp = st.selectbox("Oblast dovednosti:", ["IT a Technologie", "Marketing a Kreativita", "Byznys a Finance"], label_visibility="collapsed")
                     with col_xp2:
                         pocet_xp = st.number_input("Počet XP:", min_value=0, max_value=50, value=10, label_visibility="collapsed")
                     
-                    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
                     col_btn1, col_btn2 = st.columns(2)
                     with col_btn1:
-                        btn_schvalit = st.form_submit_button("✅ Schválit úkol a odeslat odměnu")
+                        btn_schvalit = st.form_submit_button("Schválit úkol a odeslat odměnu")
                     with col_btn2:
-                        btn_zamitnout = st.form_submit_button("❌ Zamítnout (Vrátit k přepracování)")
+                        btn_zamitnout = st.form_submit_button("Zamítnout (Vrátit k opravě)")
 
                     if btn_schvalit:
                         res_r = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{q['resitel']}", headers=headers).json()
                         if res_r: 
                             z_data = res_r[0]
                             nove_kredity = z_data['kredity'] + q['odmena']
-                            
-                            if kategorie_xp == "IT a Technologie": xp_col = "xp_it"
-                            elif kategorie_xp == "Marketing a Kreativita": xp_col = "xp_marketing"
-                            else: xp_col = "xp_byznys"
-                                
+                            xp_col = "xp_it" if kategorie_xp == "IT a Technologie" else ("xp_marketing" if kategorie_xp == "Marketing a Kreativita" else "xp_byznys")
                             nove_xp = z_data.get(xp_col, 0) + pocet_xp
                             requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{q['resitel']}", headers=headers, json={"kredity": nove_kredity, xp_col: nove_xp})
                         
                         requests.patch(f"{SUPABASE_URL}/rest/v1/questy?id=eq.{q['id']}", headers=headers, json={"stav": "DOKONCENO"})
                         requests.post(f"{SUPABASE_URL}/rest/v1/bankovni_prevody", headers=headers, json={"odesilatel": "Stát", "prijemce": q['resitel'], "castka": q['odmena'], "ucel": f"Odměna za: {q['nazev']} (+ {pocet_xp} XP)"})
-                        st.success("Odměna i XP body odeslány!")
+                        st.success("Odměna i XP body odeslány.")
                         st.rerun()
                         
                     if btn_zamitnout:
                         requests.patch(f"{SUPABASE_URL}/rest/v1/questy?id=eq.{q['id']}", headers=headers, json={"stav": "VOLNY", "resitel": None, "odkaz_vystup": ""})
-                        st.error("Úkol byl zamítnut a vrácen zpět do nabídky na Úřad práce.")
+                        st.warning("Úkol byl vrácen do nabídky k přepracování.")
                         st.rerun()
         else:
             st.info("Žádné úkoly momentálně nečekají na schválení.")
 
 # ==========================================
-# ZÁLOŽKA 6: STÁTNÍ POKLADNA A AI DAŇOVÝ AUDIT
+# ZÁLOŽKA 6: STÁTNÍ POKLADNA A DAŇOVÝ AUDIT
 # ==========================================
 with tab_stat:
     st.subheader("Státní pokladna a Daňové audity")
     res_stat = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers).json()
     stat_kredity = res_stat[0]['kredity'] if res_stat else 0
-    st.markdown(f"<div class='card-box' style='text-align: center; background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%); border: none;'><h3 style='background: none; -webkit-text-fill-color: white; font-weight: 400; margin-bottom: 5px;'>Vybrané daně a poplatky v rozpočtu</h3><h1 style='background: none; -webkit-text-fill-color: white; margin: 0; font-size: 3em;'>{stat_kredity:.2f} M-K</h1></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='card-box' style='text-align: center;'><h3 style='margin-bottom: 5px;'>Vybrané daně a poplatky v rozpočtu</h3><h1 style='margin: 0; font-size: 3em;'>{stat_kredity:.2f} M-K</h1></div>", unsafe_allow_html=True)
 
     with st.form("form_dotace"):
         vybrana_dotace_firma = st.selectbox("Příjemce grantu (Firma):", [f["nazev_firmy"] for f in firmy])
@@ -444,15 +468,10 @@ with tab_stat:
 
     st.write("---")
     st.markdown("#### Audit odevzdaných daňových přiznání")
-    st.caption("Nechte umělou inteligenci zkontrolovat účetnictví firmy. AI inspektor odhalí případné krácení daně a vyměří pokutu.")
-    
-    priznani_list = requests.get(f"{SUPABASE_URL}/rest/v1/danova_priznani?stav=eq.ODEVZDANO&order=datum.desc", headers=headers).json()
-
-    if priznani_list:
-        for p in priznani_list:
+    if priznani_cekajici:
+        for p in priznani_cekajici:
             f_info = next((f for f in firmy if f['id'] == p['firma_id']), None)
-            if not f_info:
-                continue
+            if not f_info: continue
             f_nazev = f_info['nazev_firmy']
 
             kniha = requests.get(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju?firma_id=eq.{p['firma_id']}&typ_transakce=eq.PRIJEM", headers=headers).json()
@@ -461,69 +480,39 @@ with tab_stat:
             sk_kod = f_info.get('skolni_kod', 'SYSTEM')
             nast_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{sk_kod}", headers=headers).json()
             sazba_dan = float(nast_res[0].get('mtech_dan_pct', 15.0)) if nast_res else 15.0
-
             pozadovana_dan = celkem_prijmy * (sazba_dan / 100.0)
 
             st.markdown(f"""
                 <div class='card-box'>
                     <h5>Daňové přiznání: {f_nazev}</h5>
                     <p>
-                    • Přiznaná daň firmou: <b>{p['dane_priznane']:.2f} M-K</b><br>
-                    • Evidované příjmy v účetnictví: <b>{celkem_prijmy:.2f} M-K</b><br>
-                    • Vypočtená povinná daň ({sazba_dan} %): <b>{pozadovana_dan:.2f} M-K</b>
+                    Přiznaná daň firmou: <b>{p['dane_priznane']:.2f} M-K</b><br>
+                    Evidované příjmy v účetnictví: <b>{celkem_prijmy:.2f} M-K</b><br>
+                    Vypočtená povinná daň ({sazba_dan} %): <b>{pozadovana_dan:.2f} M-K</b>
                     </p>
                 </div>
             """, unsafe_allow_html=True)
 
-            gemini_key = st.secrets.get("GEMINI_API_KEY", "")
-            if st.button(f"Spustit AI Daňový Audit (Zkontrolovat přiznání #{p['id']})", key=f"ai_audit_{p['id']}"):
-                with st.spinner("AI Inspektor Klement Neúprosný kontroluje účetnictví..."):
-                    vysledek_status = "SCHVALENO" if abs(pozadovana_dan - p['dane_priznane']) <= 1 else "ZAMITNUTO_PENALE"
-                    rozdil = max(0, pozadovana_dan - p['dane_priznane'])
-                    vymere_penale = rozdil + 50.0 if vysledek_status == "ZAMITNUTO_PENALE" else 0.0
-                    zprava = "Přiznání je v pořádku. Daň byla odvedena správně." if vysledek_status == "SCHVALENO" else f"Bylo zjištěno krácení daně. Vyměřuji doplatek a pokutu ve výši {vymere_penale} M-K."
+            if st.button(f"Spustit kontrolu přiznání #{p['id']}", key=f"ai_audit_{p['id']}"):
+                vysledek_status = "SCHVALENO" if abs(pozadovana_dan - p['dane_priznane']) <= 1 else "ZAMITNUTO_PENALE"
+                rozdil = max(0, pozadovana_dan - p['dane_priznane'])
+                vymere_penale = rozdil + 50.0 if vysledek_status == "ZAMITNUTO_PENALE" else 0.0
 
-                    if gemini_key:
-                        try:
-                            g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-                            prompt_text = f"""Jsi přísný AI Daňový inspektor (Klement Neúprosný).
-                            Firma {f_nazev} podala daňové přiznání.
-                            Celkové příjmy dle účetnictví: {celkem_prijmy:.2f} M-K. Daňová sazba: {sazba_dan} %.
-                            Správná daň má být: {pozadovana_dan:.2f} M-K. Firma zaplatila: {p['dane_priznane']:.2f} M-K.
-                            
-                            Pokud zaplatili správně (odchylka do 1 M-K je ok), schval to. 
-                            Pokud zaplatili méně, nekompromisně to zamítni a vyměř penále: rozdil + fixní pokuta 50.
-                            
-                            Odpověz VÝHRADNĚ ve formátu JSON s těmito třemi klíči:
-                            {{ "status": "SCHVALENO" nebo "ZAMITNUTO_PENALE", "zprava": "Krátká úřední zpráva", "vymere_penale": číslo }}"""
-                            
-                            p_load = {"contents": [{"parts": [{"text": prompt_text}]}], "generationConfig": {"response_mime_type": "application/json"}}
-                            res_ai = requests.post(g_url, json=p_load, timeout=10).json()
-                            data_ai = json.loads(res_ai['candidates'][0]['content']['parts'][0]['text'])
-
-                            vysledek_status = data_ai.get("status", vysledek_status)
-                            zprava = data_ai.get("zprava", zprava)
-                            vymere_penale = float(data_ai.get("vymere_penale", vymere_penale))
-                        except Exception:
-                            pass
-
-                    if vysledek_status == "SCHVALENO":
-                        requests.patch(f"{SUPABASE_URL}/rest/v1/danova_priznani?id=eq.{p['id']}", headers=headers, json={"stav": "SCHVALENO"})
-                        requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": p['firma_id'], "typ_transakce": "PRIJEM", "titul": f"INFO OD FÚ: {zprava}", "castka": 0, "auditovano": True})
-                        st.success(f"Inspektor: {zprava}")
-                    else:
-                        r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f_info['ceo_jmeno']}", headers=headers).json()
-                        if r_ceo:
-                            kredity = r_ceo[0]['kredity']
-                            requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f_info['ceo_jmeno']}", headers=headers, json={"kredity": max(0, kredity - vymere_penale)})
-                        
-                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers, json={"kredity": stat_kredity + vymere_penale})
-                        requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": p['firma_id'], "typ_transakce": "VYDAJ", "titul": f"PENÁLE OD FÚ: {zprava}", "castka": vymere_penale, "auditovano": True})
+                if vysledek_status == "SCHVALENO":
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/danova_priznani?id=eq.{p['id']}", headers=headers, json={"stav": "SCHVALENO"})
+                    requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": p['firma_id'], "typ_transakce": "PRIJEM", "titul": "INFO OD FÚ: Daňové přiznání schváleno", "castka": 0, "auditovano": True})
+                    st.success("Daňové přiznání je v pořádku a bylo schváleno.")
+                else:
+                    r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f_info['ceo_jmeno']}", headers=headers).json()
+                    if r_ceo:
+                        kredity = r_ceo[0]['kredity']
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f_info['ceo_jmeno']}", headers=headers, json={"kredity": max(0, kredity - vymere_penale)})
                     
-                        requests.patch(f"{SUPABASE_URL}/rest/v1/danova_priznani?id=eq.{p['id']}", headers=headers, json={"stav": "ZAMITNUTO_PENALE"})
-                        st.error(f"Inspektor: {zprava} (Strženo {vymere_penale} M-K)")
-                    
-                    st.rerun()
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.Stat", headers=headers, json={"kredity": stat_kredity + vymere_penale})
+                    requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": p['firma_id'], "typ_transakce": "VYDAJ", "titul": f"PENÁLE OD FÚ: Krácení daně", "castka": vymere_penale, "auditovano": True})
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/danova_priznani?id=eq.{p['id']}", headers=headers, json={"stav": "ZAMITNUTO_PENALE"})
+                    st.error(f"Zjištěno krácení daně. Strženo penále {vymere_penale} M-K.")
+                st.rerun()
     else:
         st.info("Žádné firmy momentálně nečekají na daňový audit.")
 
@@ -554,58 +543,16 @@ with tab_banka:
                     "start_kredit_zak": n_zak, "start_kredit_firma": n_firma, "kurz_kc": n_kurz,
                     "globalni_cenik": n_cenik, "mtech_dan_pct": n_dan, "dan_prijem_pct": n_dan_prijem
                 })
-                st.success("Ekonomika byla úspěšně uložena!")
+                st.success("Ekonomická pravidla uložena.")
                 st.rerun()
 
     with col_cb2:
-        st.markdown("#### 📰 Ovlivňování nálady na trhu (AI News)")
-        st.caption("Kliknutím vygenerujete zprávu z trhu, kterou uvidí všechny firmy. Zpráva vznikne na základě aktuálních krizí a dění.")
-        gemini_key = st.secrets.get("GEMINI_API_KEY", "")
-        
-        if st.button("Vygenerovat AI Burzovní zprávu", type="primary"):
-            with st.spinner("Generuji zprávu z trhu..."):
-                if gemini_key:
-                    try:
-                        krize_text = akt_nastaveni.get('krize_popis', '')
-                        if not krize_text: 
-                            krize_text = 'Na trzích je klid, žádná makroekonomická krize neprobíhá.'
-
-                        prompt = f"""Jsi finanční reportér na Wall Street v M-TECH (školní byznys simulátor, kde žáci řídí startupy a obchodují ve virtuální měně M-Kredit). 
-                        Na trhu se právě stalo toto: {krize_text}
-                        Napiš stručný, úderný finanční článek (1 věta titulek, 2 věty text), který komentuje dopad této události na studentské firmy a investory. 
-                        Pravidlo: NEPIŠ o známkách, učitelích ani školních testech, piš jako skutečný reportér z Forbesu nebo Bloombergu.
-                        Odpověz VÝHRADNĚ jako čistý JSON objekt: {{"titulek": "...", "text_zpravy": "..."}}"""
-                        
-                        g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-                        p_load = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"response_mime_type": "application/json"}}
-                        res = requests.post(g_url, json=p_load, timeout=30).json()
-                        
-                        if 'candidates' in res:
-                            raw_text = res['candidates'][0]['content']['parts'][0]['text']
-                            data_ai = json.loads(raw_text)
-                            requests.post(f"{SUPABASE_URL}/rest/v1/burza_zpravy", headers=headers, json={"titulek": data_ai['titulek'], "text_zpravy": data_ai['text_zpravy']})
-                            st.success("Zpráva úspěšně vydána!")
-                            st.rerun()
-                        else:
-                            st.error("Chyba při komunikaci s AI.")
-                    except Exception as e:
-                        st.error(f"Chyba: {e}")
-
-        st.markdown("##### 📰 Náhled vydaných zpráv")
-        zpravy_ucitel = requests.get(f"{SUPABASE_URL}/rest/v1/burza_zpravy?order=datum.desc&limit=2", headers=headers).json()
-        if zpravy_ucitel:
-            for z in zpravy_ucitel:
-                st.markdown(f"<div style='border-left: 3px solid #f59e0b; padding-left: 10px; margin-bottom: 10px;'><b style='color:#f59e0b;'>{z['titulek']}</b><br><span style='font-size:13px; color:#cbd5e1;'>{z['text_zpravy']}</span></div>", unsafe_allow_html=True)
-        else:
-            st.info("Zatím jste nevydali žádnou zprávu.")
-        
-        st.write("---")
-        st.markdown("#### Žádosti o podnikatelský úvěr")
+        st.markdown("#### Zprávy z trhu a Úvěry")
         uvery = requests.get(f"{SUPABASE_URL}/rest/v1/bankovni_uvery?stav=eq.ZADOST", headers=headers).json()
         if uvery:
             for u in uvery:
                 f_jmeno = next((f['nazev_firmy'] for f in firmy if f['id'] == u['firma_id']), "Neznámá firma")
-                st.markdown(f"<div class='card-box'><h5>Žadatel: {f_jmeno}</h5><p>Požadovaná částka: <b>{u['castka']} M-K</b> (Úrok: {u['urok_pct']} %)<br>Účel: {u['ucel']}</p></div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='card-box'><h5>Žadatel: {f_jmeno}</h5><p>Částka: <b>{u['castka']} M-K</b> (Úrok: {u['urok_pct']} %)<br>Účel: {u['ucel']}</p></div>", unsafe_allow_html=True)
                 col_u_btn1, col_u_btn2 = st.columns(2)
                 with col_u_btn1:
                     if st.button("Schválit úvěr", key=f"uv_ok_{u['id']}"):
@@ -622,105 +569,30 @@ with tab_banka:
                         requests.patch(f"{SUPABASE_URL}/rest/v1/bankovni_uvery?id=eq.{u['id']}", headers=headers, json={"stav": "ZAMITNUTO"})
                         st.rerun()
         else:
-            st.info("Centrální banka neeviduje žádné čekající žádosti o úvěr.")
+            st.info("Žádné čekající žádosti o podnikatelský úvěr.")
 
 # ==========================================
 # ZÁLOŽKA 8: KRIZOVÉ ŘÍZENÍ
 # ==========================================
 with tab_krize:
-    st.subheader("Krizové řízení a Řízení intenzity krizí")
-    st.caption("Plošné krizové akce. Zde můžete libovolně nastavit procentuální nebo finanční sílu jednotlivých dopadů!")
-    
+    st.subheader("Krizové řízení a Měsíční uzávěrky")
     target_skola = skolni_kod_ucitele or 'SYSTEM'
     nastaveni_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers).json()
     akt_nast = nastaveni_res[0] if nastaveni_res else {}
     
     col_k1, col_k2 = st.columns(2)
-    
     with col_k1:
-        st.markdown("#### 1. Rutinní spravování trhu")
-        
-        with st.expander("Měsíční uzávěrka (Vyžadovat nájmy)"):
-            st.caption("Všem žákům zruší zaplacení životních nákladů. Budou muset uhradit složenky ze své peněženky.")
-            if st.button("Provést uzávěrku a vymáhat nájmy"):
-                if is_admin:
-                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak", headers=headers, json={"naklady_zaplaceny": False})
-                else:
-                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak&skolni_kod=eq.{skolni_kod_ucitele}", headers=headers, json={"naklady_zaplaceny": False})
-                st.success("Uzávěrka provedena! Žákům byla zaslána výzva k úhradě.")
-                st.rerun()
-                
-        with st.expander("Hospodářský stimulus (Příspěvek žákům)"):
-            stimulus_castka = st.number_input("Výše příspěvku (M-K):", min_value=10, value=50)
-            if st.button("Rozdat plošný stimulus žákům"):
-                if is_admin:
-                    vsi_zaci = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak", headers=headers).json()
-                else:
-                    vsi_zaci = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak&skolni_kod=eq.{skolni_kod_ucitele}", headers=headers).json()
-                if vsi_zaci:
-                    for z in vsi_zaci:
-                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z['id']}", headers=headers, json={"kredity": z['kredity'] + stimulus_castka})
-                        requests.post(f"{SUPABASE_URL}/rest/v1/bankovni_prevody", headers=headers, json={"odesilatel": "Stát (Stimulus)", "prijemce": z['jmeno'], "castka": stimulus_castka, "ucel": "Státní příspěvek na podporu poptávky"})
-                    st.success(f"Příspěvek {stimulus_castka} M-K byl úspěšně připsán všem žákům vaší školy!")
-                    st.rerun()
+        st.markdown("#### Běžná správa")
+        if st.button("Provést měsíční uzávěrku a vymáhat nájmy"):
+            if is_admin:
+                requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak", headers=headers, json={"naklady_zaplaceny": False})
+            else:
+                requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak&skolni_kod=eq.{skolni_kod_ucitele}", headers=headers, json={"naklady_zaplaceny": False})
+            st.success("Uzávěrka provedena. Žákům byla zaslána výzva k úhradě.")
+            st.rerun()
 
     with col_k2:
-        st.markdown("#### 2. Nastavení a vyhlášení krizí")
-        
-        with st.expander("KYBERNETICKÝ RANSOMWARE ÚTOK"):
-            pct_kyber = st.number_input("Kolik % kapitálu se firmám strhne jako výkupné?", min_value=1, max_value=50, value=15)
-            if st.button("Vyhlásit Kyberútok"):
-                requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={"aktivni_krize": "KYBER", "krize_popis": f"Kybernetický útok! Firmám bylo strženo {pct_kyber} % kapitálu jako výkupné."})
-                for f in firmy:
-                    r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers).json()
-                    if r_ceo:
-                        kredity = r_ceo[0]['kredity']
-                        ztrata = kredity * (pct_kyber / 100.0)
-                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers, json={"kredity": kredity - ztrata})
-                        requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": f["id"], "typ_transakce": "VYDAJ", "titul": f"VÝKUPNÉ: Ransomware (-{pct_kyber} %)", "castka": ztrata, "auditovano": True})
-                st.success("Kyberútok spuštěn!")
-                st.rerun()
-
-        with st.expander("MEZINÁRODNÍ SANKCE A DAŇOVÝ ŠOK"):
-            zvyseni_dan = st.number_input("O kolik % se zvýší M-TECH daň e-shopu?", min_value=1.0, max_value=30.0, value=10.0)
-            if st.button("Vyhlásit Sankce"):
-                akt_dan = float(akt_nast.get('mtech_dan_pct', 15.0))
-                nova_dan = akt_dan + zvyseni_dan
-                requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={
-                    "aktivni_krize": "SANKCE",
-                    "krize_popis": f"Vyhlášeny sankce! M-TECH daň e-shopu stoupla o +{zvyseni_dan} % na celkových {nova_dan} %.",
-                    "mtech_dan_pct": nova_dan
-                })
-                st.success("Sankce vyhlášeny!")
-                st.rerun()
-
-        with st.expander("MĚNOVÝ ŠOK A DEVALVACE KURZU"):
-            nasobek_kurzu = st.number_input("Kolikrát se znásobí kurz koruny? (např. 2.0 = 2x dražší)", min_value=1.1, max_value=5.0, value=2.0, step=0.1)
-            if st.button("Vyhlásit Měnový šok"):
-                akt_k = float(akt_nast.get('kurz_kc', 10.0))
-                novy_k = akt_k * nasobek_kurzu
-                requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={
-                    "aktivni_krize": "DEVALVACE",
-                    "krize_popis": f"Propad hodnoty měny! Kurz M-Kreditu se změnil na 1 M-K = {novy_k} Kč.",
-                    "kurz_kc": novy_k
-                })
-                st.success("Měnový šok spuštěn!")
-                st.rerun()
-
-        with st.expander("ENERGETICKÁ KRIZE (Nedoplatky)"):
-            zaloha_energie = st.number_input("Plošný nedoplatek na firmu (M-K):", min_value=10, value=100)
-            if st.button("Vyhlásit Energetickou krizi"):
-                requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={"aktivni_krize": "ENERGIE", "krize_popis": f"Skokové zdražení energií! Strženo {zaloha_energie} M-K všem firmám."})
-                for f in firmy:
-                    r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers).json()
-                    if r_ceo:
-                        kredity = r_ceo[0]['kredity']
-                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers, json={"kredity": max(0, kredity - zaloha_energie)})
-                        requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={"firma_id": f["id"], "typ_transakce": "VYDAJ", "titul": "MIMOŘÁDNÝ VÝDAJ: Nedoplatek za energie", "castka": zaloha_energie, "auditovano": True})
-                st.success("Energetická krize aplikována!")
-                st.rerun()
-            
-        st.write("---")
+        st.markdown("#### Krizové zásahy")
         if st.button("Odvolat krizový stav (Návrat k normálu)"):
             requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers, json={"aktivni_krize": "ZADNA", "krize_popis": ""})
             st.success("Krizový stav byl odvolán.")
@@ -730,57 +602,24 @@ with tab_krize:
 # ZÁLOŽKA 9: HODNOCENÍ A PŘEHLED
 # ==========================================
 with tab_hodnoceni:
-    st.subheader("Celkový přehled a automatické hodnocení")
-    st.caption("AI asistent, který analyzuje aktivitu, účetnictví, odpracované hodiny ve výrobě i týmové hodnocení.")
-
-    # --- 1. FIREMNÍ SEMAFOR ---
-    st.markdown("#### Firemní Semafor (Index zdraví a Týmy)")
+    st.subheader("Celkový přehled a hodnocení žáků")
     
+    st.markdown("#### Firemní semafor")
     semafor_data = []
-    all_canvas = requests.get(f"{SUPABASE_URL}/rest/v1/lean_canvas?select=firma_id", headers=headers).json()
-    all_produkty = requests.get(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?select=firma_id", headers=headers).json()
-    all_dane = requests.get(f"{SUPABASE_URL}/rest/v1/danova_priznani?select=firma_id,stav", headers=headers).json()
-    
     for f in firmy:
-        f_id_v = f['id']
-        rejstrik = "SCHVALENO" if f.get('stave_licence') == 'SCHVALENO' else ("UKONCENO" if f.get('stave_licence') == 'UKONCENO' else "CEKA")
-        canvas_znak = "ANO" if any(c['firma_id'] == f_id_v for c in (all_canvas if isinstance(all_canvas, list) else [])) else "NE"
-        produkty_znak = "ANO" if any(p['firma_id'] == f_id_v for p in (all_produkty if isinstance(all_produkty, list) else [])) else "NE"
-        dane_znak = "ANO" if any(d['firma_id'] == f_id_v for d in (all_dane if isinstance(all_dane, list) else [])) else "NE"
-        
         r_ceo = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{f['ceo_jmeno']}", headers=headers).json()
         finance = r_ceo[0]['kredity'] if r_ceo else 0
-        
-        clenove = []
-        if f.get('ceo_jmeno'): clenove.append(f"{f['ceo_jmeno']} (CEO)")
-        if f.get('cfo_jmeno'): clenove.append(f"{f['cfo_jmeno']} (CFO)")
-        if f.get('cto_jmeno'): clenove.append(f"{f['cto_jmeno']} (CTO)")
-        
-        res_zam = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{f_id_v}", headers=headers).json()
-        if res_zam and isinstance(res_zam, list):
-            for z in res_zam: clenove.append(f"{z['jmeno_zamestnance']} (HR)")
-                
-        seznam_clenu = ", ".join(clenove) if clenove else "Bez členů"
-        
         semafor_data.append({
             "Firma": f['nazev_firmy'],
-            "Tým (Žáci)": seznam_clenu,
-            "Rejstřík": rejstrik,
-            "Lean Canvas": canvas_znak,
-            "E-shop": produkty_znak,
-            "Daně": dane_znak,
-            "Účet (M-K)": round(finance, 2)
+            "CEO": f.get('ceo_jmeno', 'Neobsazeno'),
+            "Stav rejstříku": f.get('stave_licence', 'CEKA'),
+            "Kapitál (M-K)": round(finance, 2)
         })
-        
     if semafor_data:
         st.dataframe(pd.DataFrame(semafor_data), use_container_width=True)
-    else:
-        st.info("Zatím nejsou založeny žádné firmy.")
 
     st.write("---")
-
-    # --- 2. ŽEBŘÍČEK ŽÁKŮ ---
-    st.markdown("#### Aktivita žáků a návrh známek")
+    st.markdown("#### Žebříček aktivity žáků")
     if is_admin:
         zaci = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.zak&order=kredity.desc", headers=headers).json()
     else:
@@ -791,89 +630,9 @@ with tab_hodnoceni:
         for z in zaci:
             xp_celkem = z.get('xp_it', 0) + z.get('xp_marketing', 0) + z.get('xp_byznys', 0)
             majetek = z.get('kredity', 0)
-            skore = (xp_celkem * 2) + majetek
-            
-            if skore >= 400: znamka = "1 (Výborný)"
-            elif skore >= 200: znamka = "2 (Chvalitebný)"
-            elif skore >= 80: znamka = "3 (Dobrý)"
-            elif skore >= 30: znamka = "4 (Dostatečný)"
-            else: znamka = "5 (Nedostatečný)"
-            
             zaci_data.append({
                 "Jméno": z['jmeno'],
                 "Majetek (M-K)": round(majetek, 2),
-                "XP Body": xp_celkem,
-                "Skóre aktivity": round(skore, 2),
-                "Návrh známky": znamka
+                "XP Body": xp_celkem
             })
         st.dataframe(pd.DataFrame(zaci_data), use_container_width=True)
-        
-        # --- 3. KOMPLEXNÍ AI HODNOCENÍ TÝMU ---
-        st.write("---")
-        st.markdown(f"#### AI Týmové hodnocení do Bakalářů (Firma: {firma['nazev_firmy']})")
-        st.caption("AI vygeneruje posudek pro žáky z vybrané firmy na základě jejich rolí, odpracovaných hodin ve výrobě i hodnocení od kolektivu.")
-        
-        if st.button(f"Vygenerovat posudky pro celý tým {firma['nazev_firmy']}", type="primary"):
-            with st.spinner(f"AI analyzuje výsledky, deníky práce a týmové recenze firmy {firma['nazev_firmy']}..."):
-                clenove_k_hodnoceni = []
-                if firma.get('ceo_jmeno'): clenove_k_hodnoceni.append({"jmeno": firma['ceo_jmeno'], "role": "CEO"})
-                if firma.get('cfo_jmeno'): clenove_k_hodnoceni.append({"jmeno": firma['cfo_jmeno'], "role": "CFO"})
-                if firma.get('cto_jmeno'): clenove_k_hodnoceni.append({"jmeno": firma['cto_jmeno'], "role": "CTO"})
-                
-                res_z_hod = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{f_id}", headers=headers).json()
-                if res_z_hod and isinstance(res_z_hod, list):
-                    for zh in res_z_hod: clenove_k_hodnoceni.append({"jmeno": zh['jmeno_zamestnance'], "role": zh.get('pozice', 'Zaměstnanec')})
-                
-                if not clenove_k_hodnoceni:
-                    st.warning("Tato firma zatím nemá žádné členy.")
-                else:
-                    seznam_pro_ai = []
-                    for clen in clenove_k_hodnoceni:
-                        r_zak = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{clen['jmeno']}", headers=headers).json()
-                        z_d = r_zak[0] if r_zak else {}
-                        xp_c = z_d.get('xp_it', 0) + z_d.get('xp_marketing', 0) + z_d.get('xp_byznys', 0)
-                        
-                        res_dp = requests.get(f"{SUPABASE_URL}/rest/v1/denik_prace?jmeno_zaka=eq.{clen['jmeno']}", headers=headers).json()
-                        celkem_hodin = sum(item.get('hodiny', 0) for item in res_dp) if res_dp else 0
-                        popisy_prace = "; ".join([item.get('popis_prace', '') for item in res_dp]) if res_dp else "Žádné zápisy v deníku práce."
-                        
-                        res_peer = requests.get(f"{SUPABASE_URL}/rest/v1/peer_review?hodnoceny=eq.{clen['jmeno']}", headers=headers).json()
-                        prumer_peer = (sum(p.get('body', 5) for p in res_peer) / len(res_peer)) if res_peer else 5.0
-                        komentare_peer = "; ".join([p.get('komentar', '') for p in res_peer if p.get('komentar')]) if res_peer else "Bez komentářů od týmu."
-                        
-                        seznam_pro_ai.append(
-                            f"Žák: {clen['jmeno']}, Role: {clen['role']} ve firmě {firma['nazev_firmy']}.\n"
-                            f"  - Financování: {z_d.get('kredity',0)} MK, XP body: {xp_c}.\n"
-                            f"  - Výroba/Manuální práce: Odpracováno {celkem_hodin} hodin. Záznamy: {popisy_prace}\n"
-                            f"  - Hodnocení od spolužáků v týmu: {prumer_peer:.1f}/5. Poznámky od kolegů: {komentare_peer}\n"
-                        )
-                    
-                    text_zaku = "\n".join(seznam_pro_ai)
-                    
-                    prompt = f"""Jsi učitel ekonomiky a praktického vyučování. Napiš formální slovní hodnocení do školního systému pro žáky z jednoho firemního týmu.
-                    Ber v úvahu nejen finanční výsledky a XP body, ale hlavně jejich odpracované hodiny ve výrobě/dílně a hodnocení, které jim udělili vlastní spoluhráči v týmu.
-                    
-                    PODKLADY O ŽÁCÍCH:
-                    {text_zaku}
-                    
-                    Napiš výstižný posudek (2-4 věty na žáka), který objektivně zhodnotí jeho reálný přínos pro firmu.
-                    Odpověz VÝHRADNĚ ve formátu JSON jako pole objektů. Příklad:
-                    [ {{"jmeno": "Jméno Žáka", "hodnoceni": "Text posudku..."}} ]"""
-                    
-                    gemini_key = st.secrets.get("GEMINI_API_KEY", "")
-                    if gemini_key:
-                        try:
-                            g_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_key}"
-                            p_load = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"response_mime_type": "application/json"}}
-                            res_ai = requests.post(g_url, json=p_load, timeout=30).json()
-                            if 'candidates' in res_ai:
-                                raw_text = res_ai['candidates'][0]['content']['parts'][0]['text']
-                                data_ai = json.loads(raw_text)
-                                st.success(f"Komplexní hodnocení pro tým {firma['nazev_firmy']} bylo úspěšně vygenerováno.")
-                                st.dataframe(pd.DataFrame(data_ai), use_container_width=True)
-                            else:
-                                st.error("Chyba při komunikaci s AI.")
-                        except Exception as e:
-                            st.error(f"Kritická chyba: {e}")
-    else:
-        st.info("Ve vaší škole zatím nejsou zaregistrováni žádní žáci.")
