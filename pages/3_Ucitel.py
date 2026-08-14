@@ -16,8 +16,6 @@ h1, h2, h3, h4 { background: -webkit-linear-gradient(45deg, #00B4D8, #0077B6); -
 .status-ok { color: #34d399; font-weight: 700; background: rgba(16, 185, 129, 0.1); padding: 4px 8px; border-radius: 6px; }
 .status-wait { color: #fbbf24; font-weight: 700; background: rgba(245, 158, 11, 0.1); padding: 4px 8px; border-radius: 6px; }
 .status-err { color: #f87171; font-weight: 700; background: rgba(239, 68, 68, 0.1); padding: 4px 8px; border-radius: 6px; }
-.alert-box { background-color: rgba(245, 158, 11, 0.1); border: 1px solid #f59e0b; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-.info-box { background-color: rgba(16, 185, 129, 0.1); border: 1px solid #10b981; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
 .licence-box { background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%); border: 1px solid #334155; padding: 20px; border-radius: 12px; margin-bottom: 25px; }
 .licence-card { background: rgba(15, 23, 42, 0.6); padding: 15px; border-radius: 8px; border: 1px solid #334155; }
 .licence-val { font-family: monospace; font-size: 1.5em; font-weight: bold; padding: 4px 10px; border-radius: 5px; display: inline-block; margin-top: 5px; }
@@ -42,7 +40,6 @@ ucitel_jmeno = st.session_state.get("uzivatel", "")
 skolni_kod = st.session_state.get("skolni_kod", "")
 is_admin = str(st.session_state.get("role")).upper() == "ADMIN"
 
-# Bezpečné načtení údajů o vyučujícím
 if not skolni_kod and ucitel_jmeno:
     res_ucitel = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{ucitel_jmeno}", headers=headers).json()
     if isinstance(res_ucitel, list) and len(res_ucitel) > 0:
@@ -50,7 +47,7 @@ if not skolni_kod and ucitel_jmeno:
         st.session_state.skolni_kod = skolni_kod
 
 # =========================================================================
-# 0. ZOBRAZENÍ OBOU LICENČNÍCH KÓDŮ ŠKOLY (VÝUKA + ZÁKAZNÍCI)
+# 0. ZOBRAZENÍ OBOU LICENČNÍCH KÓDŮ ŠKOLY
 # =========================================================================
 if skolni_kod and skolni_kod != "SYSTEM":
     res_nazev_skoly = requests.get(f"{SUPABASE_URL}/rest/v1/licencovane_skoly?licencni_kod=eq.{skolni_kod}", headers=headers).json()
@@ -116,26 +113,25 @@ g_pocet_celkem_restu = len(g_firmy_cekajici) + len(g_questy_cekajici) + len(g_pr
 pocet_zaku_celkem = len(moji_zaci_global)
 pocet_zaku_zakladni_role = len([z for z in moji_zaci_global if z.get("role") == "zak"])
 
+# --- ZDE JE HLAVNÍ OPRAVA PRO ZOBRAZOVÁNÍ BEZ CHYBY ---
 col_dash1, col_dash2 = st.columns(2)
 
 with col_dash1:
-    box_zaci_html = f"""<div class='info-box'><h4 style='margin:0; color:#10b981;'>Stav registrací ve vašich třídách</h4><p style='margin: 5px 0 0 0; color:#cbd5e1; font-size: 15px;'>Ve vašich třídách je aktuálně registrováno celkem <b>{pocet_zaku_celkem} žáků</b>.<br>Z toho <b>{pocet_zaku_zakladni_role} žáků</b> má zatím jen základní roli.</p></div>"""
-    st.markdown(box_zaci_html, unsafe_allow_html=True)
+    with st.container(border=True):
+        st.info(f"**Stav registrací ve vašich třídách**\n\nVe vašich třídách je aktuálně registrováno celkem **{pocet_zaku_celkem} žáků**.\nZ toho **{pocet_zaku_zakladni_role} žáků** má zatím jen základní roli.")
 
 with col_dash2:
     if g_pocet_celkem_restu > 0:
-        polozky = []
-        if g_firmy_cekajici: polozky.append(f"<li><b>Žádosti o registraci firmy:</b> {len(g_firmy_cekajici)}</li>")
-        if g_questy_cekajici: polozky.append(f"<li><b>Odevzdané úkoly ke kontrole:</b> {len(g_questy_cekajici)}</li>")
-        if g_kalkulace_cekajici: polozky.append(f"<li><b>Kalkulace produktů pro E-shop:</b> {len(g_kalkulace_cekajici)}</li>")
-        if g_priznani_cekajici: polozky.append(f"<li><b>Odevzdaná daňová přiznání:</b> {len(g_priznani_cekajici)}</li>")
-        if g_uvery_cekajici: polozky.append(f"<li><b>Žádosti o firemní úvěr:</b> {len(g_uvery_cekajici)}</li>")
-        
-        seznam_str = "".join(polozky)
-        alert_html = f"""<div class='alert-box'><h4 style='margin:0; color:#f59e0b;'>Nevyřízené úkoly a audity ({g_pocet_celkem_restu})</h4><ul style='margin: 5px 0 0 0; padding-left: 20px; color:#cbd5e1; font-size: 14px;'>{seznam_str}</ul></div>"""
-        st.markdown(alert_html, unsafe_allow_html=True)
+        with st.container(border=True):
+            st.warning(f"**Nevyřízené úkoly a audity ({g_pocet_celkem_restu})**")
+            if g_firmy_cekajici: st.write(f"• **Žádosti o registraci firmy:** {len(g_firmy_cekajici)}")
+            if g_questy_cekajici: st.write(f"• **Odevzdané úkoly ke kontrole:** {len(g_questy_cekajici)}")
+            if g_kalkulace_cekajici: st.write(f"• **Kalkulace produktů pro E-shop:** {len(g_kalkulace_cekajici)}")
+            if g_priznani_cekajici: st.write(f"• **Odevzdaná daňová přiznání:** {len(g_priznani_cekajici)}")
+            if g_uvery_cekajici: st.write(f"• **Žádosti o firemní úvěr:** {len(g_uvery_cekajici)}")
     else:
-        st.markdown("""<div class='info-box' style='background-color: rgba(52, 211, 153, 0.05); border-color: #34d399;'><h4 style='margin:0; color:#34d399;'>Čistý stůl</h4><p style='margin: 5px 0 0 0; color:#cbd5e1; font-size: 14px;'>Žádné firmy ani úkoly nečekají na váš audit.</p></div>""", unsafe_allow_html=True)
+        with st.container(border=True):
+            st.success("**Čistý stůl**\n\nŽádné firmy ani úkoly nečekají na váš audit.")
 
 st.write("---")
 
@@ -216,8 +212,7 @@ res_nezarazeni = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{
 nezarazeni_zaci = res_nezarazeni if isinstance(res_nezarazeni, list) else []
 
 if nezarazeni_zaci:
-    st.markdown("""<div class='alert-box' style='border-color: #ef4444; background-color: rgba(239, 68, 68, 0.1); margin-top: 15px;'><h4 style='margin:0; color:#ef4444;'>Nezařazení žáci (Čekají na zařazení do třídy)</h4><p style='margin: 5px 0 0 0; color:#cbd5e1; font-size: 14px;'>Tito žáci se zaregistrovali výukovým kódem dříve, než jste založili třídu. Přiřaďte je níže.</p></div>""", unsafe_allow_html=True)
-    
+    st.error(f"**⚠️ Nezařazení žáci (Čekají na zařazení do třídy)**\n\n{len(nezarazeni_zaci)} žáků se zaregistrovalo výukovým kódem dříve, než jste založili třídu. Přiřaďte je níže.")
     with st.expander("Přiřadit nezařazené žáky do vaší třídy", expanded=True):
         df_nez = pd.DataFrame([{"Jméno žáka": z["jmeno"], "Role": z.get("role", "zak"), "Zůstatek": z.get("kredity", 0)} for z in nezarazeni_zaci])
         st.dataframe(df_nez, use_container_width=True)
