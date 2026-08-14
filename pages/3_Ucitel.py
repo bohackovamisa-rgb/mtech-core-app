@@ -76,7 +76,7 @@ elif is_admin:
     st.markdown("""<div class="licence-box"><h4 style="margin: 0; color: #cbd5e1;">Režim: Hlavní Administrátor</h4><p style="margin: 5px 0 0 0; font-size: 0.9em; color: #94a3b8;">Máte neomezený přístup napříč všemi školami v systému.</p></div>""", unsafe_allow_html=True)
 
 # =========================================================================
-# 1. ŘÍDÍCÍ PANEL (ACTION CENTER) - NOTIFIKACE PRO UČITELE
+# 1. ŘÍDÍCÍ PANEL (ACTION CENTER)
 # =========================================================================
 if is_admin:
     res_moje_tridy_global = requests.get(f"{SUPABASE_URL}/rest/v1/tridy?select=nazev_tridy", headers=headers).json()
@@ -113,7 +113,6 @@ g_pocet_celkem_restu = len(g_firmy_cekajici) + len(g_questy_cekajici) + len(g_pr
 pocet_zaku_celkem = len(moji_zaci_global)
 pocet_zaku_zakladni_role = len([z for z in moji_zaci_global if z.get("role") == "zak"])
 
-# --- ZDE JE HLAVNÍ OPRAVA PRO ZOBRAZOVÁNÍ BEZ CHYBY ---
 col_dash1, col_dash2 = st.columns(2)
 
 with col_dash1:
@@ -242,14 +241,14 @@ else:
     aktivni_trida = st.selectbox("Vyberte třídu, se kterou právě pracujete:", seznam_trid_nazvy)
 
     # Načtení žáků a firem vybrané třídy
-    res_zaci = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.{aktivni_trida}&role=neq.ucitel&order=id.desc", headers=headers).json()
+    res_zaci = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.{aktivni_trida}&role=neq.ucitel&order=id.asc", headers=headers).json()
     zaci_tridy = res_zaci if isinstance(res_zaci, list) else []
 
     res_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.{aktivni_trida}&select=*&order=id.desc", headers=headers).json()
     firmy = res_firmy if isinstance(res_firmy, list) else []
 
     # Správa žáků vybrané třídy
-    with st.expander(f"Seznam žáků třídy {aktivni_trida} (Role, Odměny a Reset hesel)", expanded=False):
+    with st.expander(f"Seznam žáků třídy {aktivni_trida} (Role, Odměny a Reset hesel)", expanded=True):
         if not zaci_tridy:
             st.info(f"Ve třídě {aktivni_trida} zatím nejsou registrováni žádní žáci.")
         else:
@@ -263,55 +262,54 @@ else:
                 })
             st.dataframe(pd.DataFrame(tabulka_zaku), use_container_width=True)
             
+            seznam_jmen_tridy = [z["jmeno"] for z in zaci_tridy]
+            
             st.markdown("##### 1. Správa role žáka")
             col_z1, col_z2, col_z3 = st.columns([2, 2, 1])
             with col_z1:
-                vybrany_zak = st.selectbox("Vyberte žáka z této třídy:", [z["jmeno"] for z in zaci_tridy])
+                vybrany_zak_role = st.selectbox("Vyberte žáka pro změnu role:", seznam_jmen_tridy, key="sel_role_zak")
             with col_z2:
-                nova_role = st.selectbox("Nastavit oprávnění:", ["firma (Podnikatel / Zakladatel)", "zak (Běžný žák)"])
+                nova_role = st.selectbox("Nastavit oprávnění:", ["firma (Podnikatel / Zakladatel)", "zak (Běžný žák)"], key="sel_nova_role")
             with col_z3:
                 st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-                if st.button("Uložit roli"):
+                if st.button("Uložit roli", key="btn_save_role"):
                     role_kod = "firma" if "firma" in nova_role else "zak"
-                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_zak}", headers=headers, json={"role": role_kod})
-                    st.success(f"Žákovi {vybrany_zak} byla nastavena role.")
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_zak_role}", headers=headers, json={"role": role_kod})
+                    st.success(f"Žákovi {vybrany_zak_role} byla nastavena role.")
                     st.rerun()
 
             st.divider()
             st.markdown("##### 2. Přímé udělení odměny / stržení kreditů žákovi")
-            st.caption("Můžete žákovi připsat odměnu za aktivitu v hodině nebo mu udělit finanční postih.")
-            with st.form("form_ucitel_odmena_zaka_penez"):
-                col_o1, col_o2, col_o3 = st.columns([2, 2, 1])
+            with st.form("form_ucitel_odmena_zaka_penez_explicit"):
+                col_o1, col_o2, col_o3 = st.columns([2, 1.5, 1])
                 with col_o1:
-                    akce_penize = st.selectbox("Typ transakce:", ["Připsat odměnu (Bonus)", "Strhnout kredity (Pokuta)"])
+                    vybrany_zak_penize = st.selectbox("Vyberte žáka, kterému chcete upravit zůstatek:", seznam_jmen_tridy)
                 with col_o2:
-                    castka_odmeny = st.number_input("Částka M-K:", min_value=1.0, value=25.0)
+                    akce_penize = st.selectbox("Typ transakce:", ["Připsat odměnu (Bonus)", "Strhnout kredity (Pokuta)"])
                 with col_o3:
-                    st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-                    if st.form_submit_button("Provést"):
-                        target_user = next((z for z in zaci_tridy if z["jmeno"] == vybrany_zak), None)
-                        if target_user:
-                            if akce_penize == "Připsat odměnu (Bonus)":
-                                novy_bal = target_user.get("kredity", 0) + castka_odmeny
-                                requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_zak}", headers=headers, json={"kredity": novy_bal})
-                                st.success(f"Žákovi **{vybrany_zak}** bylo připsáno {castka_odmeny} M-K.")
-                            else:
-                                novy_bal = max(0, target_user.get("kredity", 0) - castka_odmeny)
-                                requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_zak}", headers=headers, json={"kredity": novy_bal})
-                                st.success(f"Žákovi **{vybrany_zak}** bylo strženo {castka_odmeny} M-K.")
-                            st.rerun()
+                    castka_odmeny = st.number_input("Částka M-K:", min_value=1.0, value=25.0)
+                
+                if st.form_submit_button("Provést transakci a připsat/strhnout"):
+                    r_target = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_zak_penize}", headers=headers).json()
+                    if r_target and isinstance(r_target, list):
+                        akt_bal = float(r_target[0].get("kredity", 0))
+                        novy_bal = (akt_bal + castka_odmeny) if akce_penize == "Připsat odměnu (Bonus)" else max(0.0, akt_bal - castka_odmeny)
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_zak_penize}", headers=headers, json={"kredity": novy_bal})
+                        st.success(f"Žákovi **{vybrany_zak_penize}** byl zůstatek upraven na **{novy_bal:.2f} M-K**.")
+                        st.rerun()
 
             st.divider()
             st.markdown("##### 3. Reset zapomenutého hesla žáka")
-            with st.form("form_ucitel_reset_hesla_zaka_tridy_unique"):
+            with st.form("form_ucitel_reset_hesla_zaka_tridy_explicit"):
                 col_r1, col_r2 = st.columns([2, 1])
                 with col_r1:
-                    nove_heslo_pro_zaka = st.text_input("Zadejte nové heslo pro žáka:", value="1234")
+                    vybrany_zak_heslo = st.selectbox("Vyberte žáka pro reset hesla:", seznam_jmen_tridy)
+                    nove_heslo_pro_zaka = st.text_input("Zadejte nové heslo:", value="1234")
                 with col_r2:
                     st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-                    if st.form_submit_button("Nastavit nové heslo žákovi"):
-                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_zak}", headers=headers, json={"heslo": nove_heslo_pro_zaka.strip()})
-                        st.success(f"Žákovi **{vybrany_zak}** bylo nastaveno heslo: `{nove_heslo_pro_zaka.strip()}`.")
+                    if st.form_submit_button("Nastavit heslo"):
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{vybrany_zak_heslo}", headers=headers, json={"heslo": nove_heslo_pro_zaka.strip()})
+                        st.success(f"Žákovi **{vybrany_zak_heslo}** bylo nastaveno heslo: `{nove_heslo_pro_zaka.strip()}`.")
 
     st.write("---")
 
