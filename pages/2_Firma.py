@@ -46,7 +46,6 @@ uzivatel = st.session_state.get("uzivatel", "")
 skolni_kod = st.session_state.get("skolni_kod", "")
 trida_nazev = st.session_state.get("trida_nazev", "")
 
-# Načtení aktuálního zůstatku přímo z databáze
 res_akt_u = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers).json()
 if res_akt_u and isinstance(res_akt_u, list):
     aktualni_zustatek_zaka = float(res_akt_u[0].get("kredity", 0))
@@ -90,7 +89,7 @@ if isinstance(nastaveni_res, list) and len(nastaveni_res) > 0:
     kurz_kc = float(nastaveni_res[0].get('kurz_kc', 10.0))
 
 # =========================================================================
-# 1. ZALOŽENÍ FIRMY (VÝBĚR ZE VŠECH SPOLUŽÁKŮ V TÉŽE TŘÍDĚ)
+# 1. ZALOŽENÍ FIRMY (PŘEVOD KAPITÁLU Z OSOBNÍHO ÚČTU)
 # =========================================================================
 if not moje_firma:
     st.info(f"Vítejte v podnikatelském akcelerátoru M-TECH (Třída: {trida_nazev or 'Vaše třída'}).")
@@ -119,7 +118,12 @@ if not moje_firma:
                 st.error(f"Váš osobní zůstatek je pouze {aktualni_zustatek_zaka:.2f} M-K. Pro založení firmy potřebujete minimálně 10 M-K. Jděte do Moje peněženka -> Úřad práce a splňte úkoly od vyučujícího, abyste získali kapitál!")
                 vklad_hodnota = 0.0
             else:
-                vklad_hodnota = st.number_input(f"Základní kapitál zakladatelů (Maximum je váš aktuální zůstatek: {aktualni_zustatek_zaka} M-K):", min_value=10.0, max_value=aktualni_zustatek_zaka, value=min(100.0, aktualni_zustatek_zaka))
+                vklad_hodnota = st.number_input(
+                    f"Vklad základního kapitálu z vaší peněženky (Máte k dispozici: {aktualni_zustatek_zaka:.2f} M-K):",
+                    min_value=10.0,
+                    max_value=aktualni_zustatek_zaka,
+                    value=min(100.0, aktualni_zustatek_zaka)
+                )
             st.session_state.reg_data["vklad"] = vklad_hodnota
         with col_k2: 
             st.session_state.reg_data["podily_popis"] = st.text_area("Rozdělení podílů (%):", value="CEO: 100 %")
@@ -147,20 +151,29 @@ if not moje_firma:
         st.session_state.reg_data["kodex_souhlas"] = st.checkbox("Zavazujeme se dodržovat Etický kodex mladého podnikatele.", value=True)
         st.write("---")
         
-        if st.button("Odeslat zakladatelský spis na Kontrolní úřad ke schválení", type="primary"):
+        vklad_k_prevodu = float(st.session_state.reg_data.get("vklad", 0))
+        st.caption(f"Odesláním žádosti bude z vaší osobní peněženky převedena částka **{vklad_k_prevodu:.2f} M-K** do základního jmění společnosti.")
+        
+        if st.button("Převést kapitál a odeslat spis na Kontrolní úřad", type="primary"):
             d = st.session_state.reg_data
             nazev = d.get("nazev_firmy", "").strip()
             
             if not nazev:
                 st.error("Vyplňte prosím název firmy v záložce Notářský zápis.")
-            elif aktualni_zustatek_zaka < 10.0:
-                st.error("Nemáte dostatek finančních prostředků (min. 10 M-K) na založení firmy.")
+            elif aktualni_zustatek_zaka < vklad_k_prevodu or vklad_k_prevodu < 10.0:
+                st.error(f"Nemáte dostatek financí ve své peněžence (Požadováno: {vklad_k_prevodu} M-K).")
             else:
                 cfo_val = None if d.get("cfo") == "-- Neobsazeno --" else d.get("cfo")
                 cto_val = None if d.get("cto") == "-- Neobsazeno --" else d.get("cto")
                 
                 zamer_str = f"Druh živnosti: {d.get('druh_zivnosti')} | Obor: {d.get('zivnost_detail', '')} | Předmět: {d.get('predmet', '')} | Garant BOZP: {d.get('bozp_garant', '')} | Provozovna: {d.get('provozovna', '')}"
                 
+                # 1. Stržení peněz z osobní peněženky CEO
+                novy_osobni_zustatek = aktualni_zustatek_zaka - vklad_k_prevodu
+                requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers, json={"kredity": novy_osobni_zustatek})
+                st.session_state.kredity = novy_osobni_zustatek
+
+                # 2. Vytvoření firmy v databázi
                 payload = {
                     "nazev_firmy": nazev,
                     "skolni_kod": skolni_kod,
@@ -170,13 +183,25 @@ if not moje_firma:
                     "cfo_jmeno": cfo_val,
                     "cto_jmeno": cto_val,
                     "podnikatelsky_zamer": zamer_str,
-                    "pocatecni_kapital": int(d.get("vklad", 10)),
+                    "pocatecni_kapital": int(vklad_k_prevodu),
                     "stave_licence": "CEKA_NA_SCHVALENI",
                     "duvod_zamitnuti": ""
                 }
                 res_create = requests.post(f"{SUPABASE_URL}/rest/v1/firmy", headers=headers, json=payload)
                 if res_create.status_code in [200, 201]:
-                    st.success("Žádost o registraci firmy byla úspěšně odeslána vyučujícímu ke schválení.")
+                    new_f_data = res_create.json()
+                    new_f_id = new_f_data[0]['id'] if (isinstance(new_f_data, list) and len(new_f_data) > 0) else None
+                    
+                    # 3. Zaevidování prvního vkladu do firemní knihy
+                    if new_f_id:
+                        requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={
+                            "firma_id": new_f_id,
+                            "typ_transakce": "PRIJEM",
+                            "titul": f"Vklad základního kapitálu zakladatelem ({uzivatel})",
+                            "castka": vklad_k_prevodu,
+                            "auditovano": True
+                        })
+                    st.success(f"Základní kapitál {vklad_k_prevodu} M-K byl úspěšně převeden a žádost odeslána vyučujícímu.")
                     st.rerun()
                 else:
                     st.error(f"Chyba při zakládání firmy: {res_create.text}")
