@@ -99,27 +99,26 @@ if not st.session_state.prihlasen:
                             requests.post(f"{SUPABASE_URL}/rest/v1/uzivatele", headers=headers, json={"jmeno": reg_jmeno, "heslo": reg_heslo, "role": reg_role, "kredity": start_kredity, "skolni_kod": skolni_kod, "aktivni": True})
                             st.success("Účet vytvořen. Můžete se přihlásit.")
 
-        with tab_school_licence:
-    st.markdown("### Správa licencí")
-    st.caption("Tato sekce je určena výhradně pro správce systému.")
-    
-    master_password = st.text_input("Zadejte administrátorské heslo:", type="password")
-    
-    if master_password == "MtechAdmin2026": 
-        with st.form("school_form"):
-            nazev_skoly = st.text_input("Název instituce:")
-            email = st.text_input("Kontaktní e-mail:")
-            if st.form_submit_button("Generovat licenční kód pro školu"):
-                if nazev_skoly and email:
-                    kod = "SKOLA-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-                    requests.post(f"{SUPABASE_URL}/rest/v1/licencovane_skoly", headers=headers, json={"nazev_skoly": nazev_skoly, "kontaktni_email": email, "licencni_kod": kod, "zaplaceno": False})
-                    
-                    requests.post(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni", headers=headers, json={"skolni_kod": kod})
-                    st.success(f"Poptávka zaznamenána. Licenční kód: {kod}")
-                else:
-                    st.error("Vyplňte název školy i e-mail.")
-    elif master_password != "":
-        st.error("Nesprávné heslo!")
+with tab_school_licence:
+        st.markdown("### Správa licencí")
+        st.caption("Tato sekce je určena výhradně pro správce systému.")
+        
+        master_password = st.text_input("Zadejte administrátorské heslo:", type="password")
+        
+        if master_password == "MtechAdmin2026": 
+            with st.form("school_form"):
+                nazev_skoly = st.text_input("Název instituce:")
+                email = st.text_input("Kontaktní e-mail:")
+                if st.form_submit_button("Generovat licenční kód pro školu"):
+                    if nazev_skoly and email:
+                        kod = "SKOLA-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+                        requests.post(f"{SUPABASE_URL}/rest/v1/licencovane_skoly", headers=headers, json={"nazev_skoly": nazev_skoly, "kontaktni_email": email, "licencni_kod": kod, "zaplaceno": False})
+                        requests.post(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni", headers=headers, json={"skolni_kod": kod})
+                        st.success(f"Poptávka zaznamenána. Licenční kód: {kod}")
+                    else:
+                        st.error("Vyplňte název školy i e-mail.")
+        elif master_password != "":
+            st.error("Nesprávné heslo!")
 
 else:
     if st.session_state.role == "zak": pg = st.navigation([zaci_page, trh_page, zebricky_page])
