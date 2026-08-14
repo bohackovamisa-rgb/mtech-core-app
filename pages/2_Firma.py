@@ -95,7 +95,7 @@ if isinstance(nastaveni_res, list) and len(nastaveni_res) > 0:
     kurz_kc = float(nastaveni_res[0].get('kurz_kc', 10.0))
 
 # =========================================================================
-# 1. ZALOŽENÍ FIRMY (S EXPLICITNÍM POČTEM ČLENŮ)
+# 1. ZALOŽENÍ FIRMY
 # =========================================================================
 if not moje_firma:
     st.info(f"Vítejte v podnikatelském akcelerátoru M-TECH (Třída: {trida_nazev or 'Vaše třída'}).")
@@ -211,7 +211,7 @@ planovany_pocet_clenu = parse_planovany_pocet(moje_firma.get('podnikatelsky_zame
 
 col_s1, col_s2, col_s3, col_s4, col_s5 = st.columns(5)
 stav_text = "Rejstřík OK" if moje_firma["stave_licence"] == "SCHVALENO" else ("Ukončeno" if moje_firma["stave_licence"] == "UKONCENO" else ("Zamítnuto" if moje_firma["stave_licence"] == "ZAMITNUTO" else "Čeká na audit"))
-badge_class = "status-badge-ok" if moje_firma["stave_licence"] == "SCHVALENO" else "status-badge-wait"
+badge_class = "status-badge-ok" if moje_firma["stave_licence"] == "SCHVALENO" else ("status-badge-err" if moje_firma["stave_licence"] == "ZAMITNUTO" else "status-badge-wait")
 
 tym_badge_class = "status-badge-ok" if pocet_celkem_tym >= planovany_pocet_clenu else "status-badge-err"
 
@@ -222,19 +222,15 @@ with col_s4: st.markdown('<div class="status-badge-ok">HR a Mzdy</div>', unsafe_
 with col_s5: st.markdown('<div class="status-badge-ok">Finance</div>', unsafe_allow_html=True)
 st.write("---")
 
-# Upozornění na neshodu počtu členů se spisem
-if pocet_celkem_tym < planovany_pocet_clenu:
-    st.error(f"""
-    🚨 **NESOULAD SE ZAKLADATELSKOU LISTINOU (Chybí členové týmu):**  
-    V zakladatelském spisu máte nahlášeno **{planovany_pocet_clenu} členů**, ale reálně máte v systému zapsáno pouze **{pocet_celkem_tym} osob** ({pocet_vedeni} vedení + {pocet_zam} zaměstnanců).  
-    👉 Přejděte do záložky **4. Tým a HR** a doplňte zbývajícího zaměstnance, jinak Kontrolní úřad neschválí váš audit!
-    """)
-
 if moje_firma["stave_licence"] == "CEKA_NA_SCHVALENI":
-    st.warning("Vaše firma byla odeslána na Kontrolní úřad a čeká na posouzení vyučujícím.")
+    st.warning("⏳ Vaše firma byla odeslána na Kontrolní úřad a čeká na posouzení vyučujícím.")
     
 if moje_firma["stave_licence"] == "ZAMITNUTO":
-    st.error(f"Žádost o zápis do rejstříku byla Kontrolním úřadem vrácena k přepracování.\n\n**Důvod zamítnutí:** {moje_firma.get('duvod_zamitnuti', 'Bez udání důvodu.')}")
+    st.error(f"""
+    ❌ **ŽÁDOST BYLA KONTROLNÍM ÚŘADEM ZAMÍTNUTA / VRÁCENA K PŘEPRACOVÁNÍ**  
+    **Důvod od vyučujícího:** {moje_firma.get('duvod_zamitnuti', 'Doplňte náležitosti spisu.')}  
+    👉 Upravte níže složení týmu nebo přijměte chybějící zaměstnance a klikněte na tlačítko **Odeslat k novému posouzení**.
+    """)
 
 if moje_firma["stave_licence"] == "UKONCENO":
     st.error("Tato společnost byla oficiálně zlikvidována a ukončena.")
@@ -259,8 +255,12 @@ else:
     ])
     tab_brand = tab_vyvoj = tab_hr = tab_kalkulace = tab_ucto = tab_burza = tab_likvidace = None
 
+# Všichni žáci ve třídě pro roletky
+res_zaci_tridy = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.{trida_nazev}&role=neq.ucitel", headers=headers).json()
+vsechna_jmena_tridy = [u['jmeno'] for u in (res_zaci_tridy if isinstance(res_zaci_tridy, list) else [])]
+
 # ==========================================
-# ZÁLOŽKA 1: SPIS (A DODATEČNÁ SPRÁVA VEDENÍ)
+# ZÁLOŽKA 1: SPIS (A SPRÁVA CELÉHO TÝMU + RE-SUBMIT)
 # ==========================================
 with tab_zalozeni:
     st.subheader("Registrační spis a Právní status")
@@ -273,34 +273,92 @@ with tab_zalozeni:
         st.markdown(f"**CEO (Generální ředitel):** `{moje_firma.get('ceo_jmeno', 'Neobsazeno')}`")
         st.markdown(f"**CFO (Finanční ředitel):** `{moje_firma.get('cfo_jmeno', 'Neobsazeno')}`")
         st.markdown(f"**CTO (Technický ředitel):** `{moje_firma.get('cto_jmeno', 'Neobsazeno')}`")
-        st.markdown(f"**Zaměstnanci:** `{len(zamestnanci_firmy)} evidovaných pracovníků`")
-        st.markdown(f"**Nahlášená kapacita v zakladatelské listině:** `{planovany_pocet_clenu} osob`")
+        
+        if zamestnanci_firmy:
+            z_seznam_txt = ", ".join([f"{z['jmeno_zamestnance']} ({z.get('pozice','Pracovník')})" for z in zamestnanci_firmy])
+            st.markdown(f"**Zaměstnanci ({len(zamestnanci_firmy)}):** `{z_seznam_txt}`")
+        else:
+            st.markdown("**Zaměstnanci:** `Zatím žádní řadoví zaměstnanci`")
+            
+        st.markdown(f"**Aktuální obsazenost týmu:** `{pocet_celkem_tym} z {planovany_pocet_clenu} nahlášených osob`")
         st.markdown(f"**Základní kapitál:** `{moje_firma.get('pocatecni_kapital', 100)} M-K`")
         st.divider()
         st.markdown("**Předmět podnikání a záměr:**")
         st.write(moje_firma.get('podnikatelsky_zamer', 'Neuvedeno'))
-        
+
+    # TLAČÍTKO PRO OPĚTOVNÉ ODESLÁNÍ K POSOUZENÍ (POKUD JE ZAMÍTNUTO)
+    if moje_role == "CEO" and moje_firma["stave_licence"] == "ZAMITNUTO":
+        if st.button("🔄 Odeslat opravený spis k novému posouzení vyučujícímu", type="primary"):
+            requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{moje_firma['id']}", headers=headers, json={"stave_licence": "CEKA_NA_SCHVALENI"})
+            st.success("Spis byl znovu odeslán Kontrolnímu úřadu.")
+            st.rerun()
+
     if moje_role == "CEO":
-        with st.expander("Aktualizovat statutární vedení (CFO / CTO)", expanded=False):
-            st.caption("Pokud se vaši spolužáci zaregistrovali až po založení firmy, můžete jim zde přiřadit vedení.")
-            res_spolu_edit = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.{trida_nazev}&role=neq.ucitel", headers=headers).json()
-            volni_kandidati = ["-- Neobsazeno --"] + [u['jmeno'] for u in (res_spolu_edit if isinstance(res_spolu_edit, list) else []) if u['jmeno'] != uzivatel]
-            
-            with st.form("form_update_vedeni_ceo"):
+        st.divider()
+        st.markdown("### Správa členů týmu a zaměstnanců")
+        
+        # 1. ČÁST: VEDENÍ (CFO / CTO)
+        with st.expander("1. Statutární vedení firmy (CFO a CTO)", expanded=False):
+            volni_kandidati_vedeni = ["-- Neobsazeno --"] + [j for j in vsechna_jmena_tridy if j != uzivatel]
+            with st.form("form_update_vedeni_ceo_main"):
                 akt_cfo = moje_firma.get('cfo_jmeno') or "-- Neobsazeno --"
                 akt_cto = moje_firma.get('cto_jmeno') or "-- Neobsazeno --"
                 
-                idx_cfo = volni_kandidati.index(akt_cfo) if akt_cfo in volni_kandidati else 0
-                idx_cto = volni_kandidati.index(akt_cto) if akt_cto in volni_kandidati else 0
+                idx_cfo = volni_kandidati_vedeni.index(akt_cfo) if akt_cfo in volni_kandidati_vedeni else 0
+                idx_cto = volni_kandidati_vedeni.index(akt_cto) if akt_cto in volni_kandidati_vedeni else 0
                 
-                new_cfo = st.selectbox("CFO (Finanční ředitel):", volni_kandidati, index=idx_cfo)
-                new_cto = st.selectbox("CTO (Technický ředitel):", volni_kandidati, index=idx_cto)
+                new_cfo = st.selectbox("CFO (Finanční ředitel):", volni_kandidati_vedeni, index=idx_cfo)
+                new_cto = st.selectbox("CTO (Technický ředitel):", volni_kandidati_vedeni, index=idx_cto)
                 
-                if st.form_submit_button("Uložit změny statutárního vedení"):
+                if st.form_submit_button("Uložit změny vedení"):
                     patch_cfo = None if new_cfo == "-- Neobsazeno --" else new_cfo
                     patch_cto = None if new_cto == "-- Neobsazeno --" else new_cto
                     requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{moje_firma['id']}", headers=headers, json={"cfo_jmeno": patch_cfo, "cto_jmeno": patch_cto})
                     st.success("Vedení společnosti bylo aktualizováno.")
+                    st.rerun()
+
+        # 2. ČÁST: PŘIJÍMÁNÍ BĚŽNÝCH ZAMĚSTNANCŮ
+        with st.expander("2. Přijmout nového běžného zaměstnance do firmy", expanded=(pocet_celkem_tym < planovany_pocet_clenu)):
+            obsazena_jmena = [z['jmeno_zamestnance'].lower() for z in zamestnanci_firmy]
+            if moje_firma.get('ceo_jmeno'): obsazena_jmena.append(moje_firma['ceo_jmeno'].lower())
+            if moje_firma.get('cfo_jmeno'): obsazena_jmena.append(moje_firma['cfo_jmeno'].lower())
+            if moje_firma.get('cto_jmeno'): obsazena_jmena.append(moje_firma['cto_jmeno'].lower())
+            
+            volni_pro_zam = [j for j in vsechna_jmena_tridy if j.lower() not in obsazena_jmena]
+            
+            if not volni_pro_zam:
+                st.info(f"Ve třídě {trida_nazev} jsou momentálně registrováni pouze {len(vsechna_jmena_tridy)} žáci a všichni už ve firmě mají roli. Až se zaregistruje další spolužák, objeví se zde.")
+            else:
+                with st.form("form_prijmout_zamestnance_spis_tab"):
+                    col_p1, col_p2 = st.columns(2)
+                    with col_p1:
+                        novy_zam_jmeno = st.selectbox("Vyberte žáka k přijetí:", volni_pro_zam)
+                        novy_zam_pozice = st.text_input("Pracovní pozice (např. Grafik, Operátor výroby):", value="Pracovník vývoje")
+                    with col_p2:
+                        novy_zam_sazba = st.number_input("Hodinová sazba (M-K / hod):", min_value=10, value=50, step=5)
+                    
+                    if st.form_submit_button("Přijmout zaměstnance do firmy", type="primary"):
+                        if novy_zam_jmeno and novy_zam_pozice.strip():
+                            requests.post(f"{SUPABASE_URL}/rest/v1/zamestnanci", headers=headers, json={
+                                "firma_id": int(moje_firma["id"]), "jmeno_zamestnance": str(novy_zam_jmeno), "pozice": str(novy_zam_pozice.strip()), "hodinova_sazba": float(novy_zam_sazba), "vyplaceno_celkem": 0.0
+                            })
+                            st.success(f"Žák {novy_zam_jmeno} byl přijat do firmy.")
+                            st.rerun()
+
+        # 3. ČÁST: ZMĚNA PLÁNOVANÉHO POČTU ČLENŮ
+        with st.expander("3. Úprava nahlášené kapacity týmu ve stanovách", expanded=False):
+            st.caption("Pokud nemůžete sehnat dalšího spolužáka a vyučující vám povolil menší tým, upravte zde nahlášený počet.")
+            with st.form("form_zmena_kapacity_stanov"):
+                nova_kapacita = st.number_input("Nový celkový počet členů týmu:", min_value=1, max_value=20, value=planovany_pocet_clenu, step=1)
+                if st.form_submit_button("Uložit změnu kapacity"):
+                    stary_zamer = str(moje_firma.get('podnikatelsky_zamer', ''))
+                    if "Nahlášený počet členů týmu:" in stary_zamer:
+                        novy_zamer = re.sub(r'Nahlášený počet členů týmu:\s*\d+', f'Nahlášený počet členů týmu: {nova_kapacita}', stary_zamer)
+                    else:
+                        novy_zamer = f"Nahlášený počet členů týmu: {nova_kapacita} | " + stary_zamer
+                    
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{moje_firma['id']}", headers=headers, json={"podnikatelsky_zamer": novy_zamer})
+                    st.success("Kapacita týmu byla ve spisu upravena.")
                     st.rerun()
 
 # ==========================================
@@ -397,7 +455,7 @@ if tab_vyvoj:
                     st.write(f"**{t['nazev_ukolu']}** ({t.get('story_points', 1)} SP)")
 
 # ==========================================
-# ZÁLOŽKA 4: TÝM A HR (PŘIJÍMÁNÍ NOVÝCH ZAMĚSTNANCŮ)
+# ZÁLOŽKA 4: TÝM A HR
 # ==========================================
 if tab_hr:
     with tab_hr:
@@ -411,40 +469,10 @@ if tab_hr:
         else:
             st.info("Firma zatím nemá žádné řadové zaměstnance.")
 
-        st.divider()
-        st.markdown("#### Přijmout nového zaměstnance do firmy")
-        
-        # Všichni žáci ve třídě
-        res_zaci_tridy = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?skolni_kod=eq.{skolni_kod}&trida_nazev=eq.{trida_nazev}&role=neq.ucitel", headers=headers).json()
-        
-        jmena_v_tyme = [z['jmeno_zamestnance'].lower() for z in zamestnanci_firmy]
-        if moje_firma.get('ceo_jmeno'): jmena_v_tyme.append(moje_firma['ceo_jmeno'].lower())
-        if moje_firma.get('cfo_jmeno'): jmena_v_tyme.append(moje_firma['cfo_jmeno'].lower())
-        if moje_firma.get('cto_jmeno'): jmena_v_tyme.append(moje_firma['cto_jmeno'].lower())
-        
-        volni_zaci = [u['jmeno'] for u in (res_zaci_tridy if isinstance(res_zaci_tridy, list) else []) if u['jmeno'].lower() not in jmena_v_tyme]
-
-        with st.form("form_novy_zamestnanec"):
-            col_z1, col_z2 = st.columns(2)
-            with col_z1:
-                z_jmeno = st.selectbox("Vyberte nového spolužáka ze své třídy:", volni_zaci) if volni_zaci else None
-                z_pozice = st.text_input("Pracovní pozice (např. Grafik, Operátor výroby):")
-            with col_z2:
-                z_sazba = st.number_input("Hodinová sazba (M-K / hod):", min_value=10, value=50, step=5)
-            if st.form_submit_button("Přijmout zaměstnance do týmu", type="primary"):
-                if z_jmeno and z_pozice.strip():
-                    requests.post(f"{SUPABASE_URL}/rest/v1/zamestnanci", headers=headers, json={
-                        "firma_id": int(moje_firma["id"]), "jmeno_zamestnance": str(z_jmeno), "pozice": str(z_pozice.strip()), "hodinova_sazba": float(z_sazba), "vyplaceno_celkem": 0.0
-                    })
-                    st.success(f"Pracovník {z_jmeno} byl úspěšně přijat.")
-                    st.rerun()
-                else:
-                    st.error("Vyberte žáka a zadejte pracovní pozici.")
-
         if zamestnanci_firmy:
             st.divider()
             st.markdown("#### Výplata mezd")
-            with st.form("form_mzdy_vyplata"):
+            with st.form("form_mzdy_vyplata_tab4"):
                 vybrany_z_jmeno = st.selectbox("Komu chcete vyplatit mzdu:", [z["jmeno_zamestnance"] for z in zamestnanci_firmy])
                 hodiny = st.number_input("Počet odpracovaných hodin:", min_value=1.0, value=4.0, step=0.5)
                 if st.form_submit_button("Odeslat výplatu"):
@@ -499,6 +527,7 @@ if tab_burza:
             cena_akcie = st.number_input("Cena za 1 akcii (M-K):", min_value=1.0, value=15.0)
             if st.form_submit_button("Zveřejnit na burze"):
                 requests.post(f"{SUPABASE_URL}/rest/v1/burza_nabidky", headers=headers, json={"firma_id": moje_firma["id"], "pocet_k_prodeji": pocet_akcii, "cena_za_kus": cena_akcie, "aktivni": True})
+                st.success("Akcie zveřejněny.")
                 st.rerun()
 
 # ==========================================
