@@ -14,6 +14,9 @@ h1, h2, h3, h4 { background: -webkit-linear-gradient(45deg, #00B4D8, #0077B6); -
 .stButton>button { border-radius: 8px; transition: all 0.3s ease; border: 1px solid #00B4D8; width: 100%; font-weight: 600; }
 .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0, 180, 216, 0.4); border-color: #00B4D8; background-color: #0f172a; color: white;}
 .card-box { background-color: #1e293b; padding: 20px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 15px; }
+.status-ok { color: #34d399; font-weight: 700; background: rgba(16, 185, 129, 0.1); padding: 4px 8px; border-radius: 6px; }
+.status-wait { color: #fbbf24; font-weight: 700; background: rgba(245, 158, 11, 0.1); padding: 4px 8px; border-radius: 6px; }
+.status-err { color: #f87171; font-weight: 700; background: rgba(239, 68, 68, 0.1); padding: 4px 8px; border-radius: 6px; }
 .licence-box { background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%); border: 1px solid #334155; padding: 20px; border-radius: 12px; margin-bottom: 25px; }
 .licence-card { background: rgba(15, 23, 42, 0.6); padding: 15px; border-radius: 8px; border: 1px solid #334155; }
 .licence-val { font-family: monospace; font-size: 1.5em; font-weight: bold; padding: 4px 10px; border-radius: 5px; display: inline-block; margin-top: 5px; }
@@ -83,7 +86,7 @@ else:
 
 moje_tridy_nazvy_global = [t["nazev_tridy"] for t in res_moje_tridy_global] if isinstance(res_moje_tridy_global, list) else []
 
-vsechny_firmy_skoly = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{skolni_kod}&select=*", headers=headers).json()
+vsechny_firmy_skoly = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{skolni_kod}&select=*&order=id.desc", headers=headers).json()
 if is_admin:
     moje_firmy_global = vsechny_firmy_skoly if isinstance(vsechny_firmy_skoly, list) else []
 else:
@@ -353,11 +356,11 @@ else:
     else:
         firmy_labels = []
         for f in firmy:
-            status_tag = " [ČEKÁ NA SCHVÁLENÍ]" if f.get("stave_licence") == "CEKA_NA_SCHVALENI" else ""
+            status_tag = " [ČEKÁ NA SCHVÁLENÍ]" if f.get("stave_licence") == "CEKA_NA_SCHVALENI" else (" [UKONČENO]" if f.get("stave_licence") == "UKONCENO" else "")
             firmy_labels.append(f"{f['nazev_firmy']}{status_tag}")
 
         vybrany_label = st.selectbox("Vyberte startup k auditu:", firmy_labels)
-        vybrana_firma_nazev = vybrany_label.replace(" [ČEKÁ NA SCHVÁLENÍ]", "")
+        vybrana_firma_nazev = vybrany_label.replace(" [ČEKÁ NA SCHVÁLENÍ]", "").replace(" [UKONČENO]", "")
         firma = next(f for f in firmy if f["nazev_firmy"] == vybrana_firma_nazev)
         f_id = firma["id"]
 
@@ -371,11 +374,18 @@ else:
             with col_l1:
                 res_zamestnanci = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?firma_id=eq.{f_id}", headers=headers).json()
                 zamestnanci = res_zamestnanci if isinstance(res_zamestnanci, list) else []
+                
+                # Výpočet celkového počtu lidí ve firmě
+                pocet_vedeni = 1 + (1 if firma.get('cfo_jmeno') else 0) + (1 if firma.get('cto_jmeno') else 0)
+                pocet_zamestnancu = len(zamestnanci)
+                pocet_celkem_tym = pocet_vedeni + pocet_zamestnancu
+
                 with st.container(border=True):
                     st.markdown("#### Identifikace společnosti")
                     st.markdown(f"**Obchodní firma:** `{firma['nazev_firmy']}`")
                     st.markdown(f"**Třída:** `{aktivni_trida}` | **Licenční kód:** `{firma.get('skolni_kod', '')}`")
                     st.markdown(f"**Základní kapitál:** `{firma.get('pocatecni_kapital', 100)} M-K`")
+                    st.info(f"👥 **Celkem v týmu firmy:** **{pocet_celkem_tym} osob** ({pocet_vedeni} ve vedení + {pocet_zamestnancu} zaměstnanci)")
                     st.divider()
                     st.markdown("#### Předmět podnikání a Živnost")
                     zamer_raw = str(firma.get('podnikatelsky_zamer', ''))
@@ -384,25 +394,29 @@ else:
                     else: st.write(zamer_raw if zamer_raw else "Neuvedeno")
                     st.divider()
                     st.markdown("#### Statutární orgány (Vedení)")
-                    st.markdown(f"* **CEO:** {firma.get('ceo_jmeno', 'Neobsazeno')}")
-                    st.markdown(f"* **CFO:** {firma.get('cfo_jmeno', 'Neobsazeno')}")
-                    st.markdown(f"* **CTO:** {firma.get('cto_jmeno', 'Neobsazeno')}")
+                    st.markdown(f"* **CEO (Ředitel):** {firma.get('ceo_jmeno', 'Neobsazeno')}")
+                    st.markdown(f"* **CFO (Finanční ředitel):** {firma.get('cfo_jmeno', 'Neobsazeno')}")
+                    st.markdown(f"* **CTO (Technický ředitel):** {firma.get('cto_jmeno', 'Neobsazeno')}")
                     st.divider()
                     st.markdown("#### Zaměstnanci a pracovníci")
                     if zamestnanci:
                         for z in zamestnanci: st.markdown(f"* **{z['jmeno_zamestnance']}** — {z.get('pozice', 'Pracovník')} ({z.get('hodinova_sazba', 0)} M-K/hod)")
-                    else: st.info("Firma zatím nepřijala žádné další zaměstnance.")
+                    else: st.info("Firma zatím nemá žádné řadové zaměstnance.")
             with col_l2:
                 stav = firma.get('stave_licence', 'CEKA_NA_SCHVALENI')
                 stav_tridy = 'status-ok' if stav == 'SCHVALENO' else ('status-err' if stav in ['ZAMITNUTO', 'UKONCENO'] else 'status-wait')
                 with st.container(border=True):
                     st.markdown("#### Stav zápisu do rejstříku")
                     st.markdown(f"Aktuální stav: <span class='{stav_tridy}'>{stav}</span>", unsafe_allow_html=True)
-                if st.button("Schválit zápis do rejstříku a povolit činnost", type="primary"):
-                    requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{f_id}", headers=headers, json={"stave_licence": "SCHVALENO", "duvod_zamitnuti": ""})
-                    st.success(f"Firma {firma['nazev_firmy']} byla zapsána do rejstříku.")
-                    time.sleep(1.5)
-                    st.rerun()
+                    if firma.get('duvod_zamitnuti'):
+                        st.caption(f"Poznámka / Likvidace: {firma.get('duvod_zamitnuti')}")
+                
+                if stav == "CEKA_NA_SCHVALENI":
+                    if st.button("Schválit zápis do rejstříku a povolit činnost", type="primary"):
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{f_id}", headers=headers, json={"stave_licence": "SCHVALENO", "duvod_zamitnuti": ""})
+                        st.success(f"Firma {firma['nazev_firmy']} byla zapsána do rejstříku.")
+                        time.sleep(1.5)
+                        st.rerun()
 
         with tab_aktiva:
             canvas = requests.get(f"{SUPABASE_URL}/rest/v1/lean_canvas?firma_id=eq.{f_id}", headers=headers).json()
@@ -442,7 +456,7 @@ else:
             with st.form("form_ucitel_pridat_novy_quest_clean"):
                 qn = st.text_input("Název úkolu:")
                 qp = st.text_area("Popis:")
-                qo = st.number_input("Odměna za splnění (M-K):", min_value=1.0, value=20.0)
+                qo = st.number_input("Odměna za splnění (M-K):", min_value=1, value=20, step=1)
                 if st.form_submit_button("Vypsat úkol na Úřad práce"):
                     requests.post(f"{SUPABASE_URL}/rest/v1/questy", headers=headers, json={"nazev": qn, "popis": qp, "odmena": qo, "zadavatel": ucitel_jmeno, "stav": "VOLNY"})
                     st.rerun()
@@ -462,12 +476,12 @@ else:
                 n_kurz = st.number_input("Kurz M-Kreditu k CZK (1 M-K = X Kč):", min_value=1.0, value=float(akt_nastaveni.get('kurz_kc', 10.0)))
                 n_dan = st.number_input("M-TECH Daň pro e-shop (%):", min_value=0.0, max_value=50.0, value=float(akt_nastaveni.get('mtech_dan_pct', 15.0)))
                 n_dan_prijem = st.number_input("Daň z příjmu zaměstnanců (%):", min_value=0.0, max_value=50.0, value=float(akt_nastaveni.get('dan_prijem_pct', 15.0)))
-                n_zakaznik = st.number_input("Výchozí startovací kredit pro ZÁKAZNÍKA (M-K):", min_value=0.0, value=float(akt_nastaveni.get('start_kredit_zakaznik', 50.0)))
+                n_zakaznik = st.number_input("Výchozí startovací kredit pro ZÁKAZNÍKA (M-K):", min_value=0, value=int(akt_nastaveni.get('start_kredit_zakaznik', 50)), step=5)
                 n_cenik = st.text_area("Globální ceník školy (materiály, pronájmy):", value=str(akt_nastaveni.get('globalni_cenik', '')), height=150)
                 
                 if st.form_submit_button("Uložit ekonomická pravidla"):
                     requests.patch(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{skolni_kod}", headers=headers, json={
-                        "kurz_kc": n_kurz, "globalni_cenik": n_cenik, "mtech_dan_pct": n_dan, "dan_prijem_pct": n_dan_prijem, "start_kredit_zakaznik": n_zakaznik
+                        "kurz_kc": n_kurz, "globalni_cenik": n_cenik, "mtech_dan_pct": n_dan, "dan_prijem_pct": n_dan_prijem, "start_kredit_zakaznik": int(n_zakaznik)
                     })
                     st.success("Pravidla ekonomiky byla uložena.")
                     time.sleep(1.5)
