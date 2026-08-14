@@ -3,7 +3,7 @@ import requests
 import random
 import string
 
-st.set_page_config(page_title="M-TECH CORE", page_icon=":material/hub:", layout="wide")
+st.set_page_config(page_title="M-TECH CORE", layout="wide")
 
 st.markdown("""
     <style>
@@ -32,11 +32,11 @@ if "uzivatel" not in st.session_state: st.session_state.uzivatel = None
 if "skolni_kod" not in st.session_state: st.session_state.skolni_kod = None
 if "trida_nazev" not in st.session_state: st.session_state.trida_nazev = None
 
-zaci_page = st.Page("pages/1_Zaci.py", title="Moje peněženka", icon=":material/wallet:")
-firma_page = st.Page("pages/2_Firma.py", title="Firemní Dashboard", icon=":material/insights:")
-ucitel_page = st.Page("pages/3_Ucitel.py", title="Kontrolní úřad", icon=":material/account_balance:")
-trh_page = st.Page("pages/4_Trh.py", title="Tržiště produktů", icon=":material/shopping_cart:")
-zebricky_page = st.Page("pages/5_Zebricky.py", title="Síň slávy", icon=":material/emoji_events:")
+zaci_page = st.Page("pages/1_Zaci.py", title="Moje peněženka")
+firma_page = st.Page("pages/2_Firma.py", title="Firemní Dashboard")
+ucitel_page = st.Page("pages/3_Ucitel.py", title="Kontrolní úřad")
+trh_page = st.Page("pages/4_Trh.py", title="Tržiště produktů")
+zebricky_page = st.Page("pages/5_Zebricky.py", title="Síň slávy")
 
 if not st.session_state.prihlasen:
     st.markdown("""
@@ -150,7 +150,7 @@ else:
         if st.session_state.trida_nazev:
             st.caption(f"Třída: **{st.session_state.trida_nazev}**")
         st.markdown(f"Zůstatek: **{st.session_state.kredity} M-K**")
-        if st.button("Odhlásit se", icon=":material/logout:"):
+        if st.button("Odhlásit se"):
             st.session_state.clear()
             st.rerun()
             
