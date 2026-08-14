@@ -150,7 +150,7 @@ with st.expander("Seznam zákazníků školy a správa jejich peněženek (Rozba
         df_zak = pd.DataFrame([{"Jméno zákazníka": z["jmeno"], "Zůstatek (M-K)": z.get("kredity", 0)} for z in zakaznici])
         st.dataframe(df_zak, use_container_width=True)
         
-        with st.form("form_ucitel_korekce_zakazniku_fixed"):
+        with st.form("form_ucitel_korekce_zakazniku_robust"):
             col_k1, col_k2, col_k3 = st.columns([2, 2, 1])
             with col_k1: 
                 z_vyber = st.selectbox("Vyberte zákazníka:", [z["jmeno"] for z in zakaznici])
@@ -159,22 +159,26 @@ with st.expander("Seznam zákazníků školy a správa jejich peněženek (Rozba
             with col_k3: 
                 hodnota = st.number_input("Částka M-K (při pokutě/bonusu):", min_value=1.0, value=50.0)
             
-            if st.form_submit_button("Provést akci"):
-                z_target = next((z for z in zakaznici if z["jmeno"] == z_vyber), None)
+            sub_zakaznik = st.form_submit_button("Provést akci")
+            
+        if sub_zakaznik:
+            z_target = next((z for z in zakaznici if z["jmeno"] == z_vyber), None)
+            if z_target:
                 if akce == "Resetovat heslo na 1234":
                     requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers, json={"heslo": "1234"})
-                    st.success(f"Zákazníkovi **{z_vyber}** bylo nastaveno heslo: `1234`.")
+                    st.success(f"✅ Zákazníkovi **{z_vyber}** bylo nastaveno heslo: `1234`.")
                 elif akce == "Smazat účet (Ban)":
                     requests.delete(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers)
-                    st.success(f"Účet zákazníka {z_vyber} byl smazán.")
+                    st.success(f"✅ Účet zákazníka {z_vyber} byl smazán.")
                 elif akce == "Strhnout kredity (Pokuta)":
                     novy = max(0, z_target.get("kredity", 0) - hodnota)
                     requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers, json={"kredity": novy})
-                    st.success(f"Zákazníkovi {z_vyber} bylo strženo {hodnota} M-K.")
+                    st.success(f"✅ Zákazníkovi {z_vyber} bylo strženo {hodnota} M-K.")
                 elif akce == "Přidat kredity (Bonus)":
                     novy = z_target.get("kredity", 0) + hodnota
                     requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers, json={"kredity": novy})
-                    st.success(f"Zákazníkovi {z_vyber} bylo přidáno {hodnota} M-K.")
+                    st.success(f"✅ Zákazníkovi {z_vyber} bylo přidáno {hodnota} M-K.")
+                time.sleep(1.5)
                 st.rerun()
 
 st.write("---")
@@ -360,8 +364,8 @@ else:
         firma = next(f for f in firmy if f["nazev_firmy"] == vybrana_firma_nazev)
         f_id = firma["id"]
 
-        tab_legal, tab_aktiva, tab_hr, tab_finance, tab_questy, tab_stat, tab_banka, tab_hodnoceni, tab_reporty = st.tabs([
-            "1. Spis a Notář", "2. Vize a AI", "3. HR a Tým", "4. E-shop a Zákazníci", "5. Úřad práce a XP", "6. Státní pokladna a Daně", "7. Pravidla Ekonomiky", "8. Hodnocení žáků", "9. Reporty a Výkazy"
+        tab_legal, tab_aktiva, tab_hr, tab_finance, tab_questy, tab_stat, tab_banka, tab_hodnoceni, tab_porady = st.tabs([
+            "1. Spis a Notář", "2. Vize a AI", "3. HR a Tým", "4. E-shop a Zákazníci", "5. Úřad práce a XP", "6. Státní pokladna a Daně", "7. Pravidla Ekonomiky", "8. Hodnocení žáků", "9. Deník a Porady"
         ])
 
         with tab_legal:
@@ -476,14 +480,34 @@ else:
             if zaci_tridy:
                 st.dataframe(pd.DataFrame([{"Jméno": z['jmeno'], "Role": z.get('role', 'zak'), "Zůstatek (M-K)": z.get('kredity', 0)} for z in zaci_tridy]), use_container_width=True)
 
-        with tab_reporty:
-            st.subheader("Deník práce a Výkazy zaměstnanců")
-            st.caption("Slouží pro hodnocení žáků na základě toho, co v rámci firmy odpracovali.")
+        with tab_porady:
+            st.subheader(f"Deník práce a Firemní porady ({firma['nazev_firmy']})")
+            t_vykazy_ucitel, t_porady_ucitel = st.tabs(["1. Individuální výkazy žáků (Hodiny)", "2. Zápisy z firemních porad (Reporty)"])
+            
             res_denik = requests.get(f"{SUPABASE_URL}/rest/v1/denik_prace?firma_id=eq.{f_id}&order=id.desc", headers=headers).json()
-            if isinstance(res_denik, list) and len(res_denik) > 0:
-                df_denik = pd.DataFrame(res_denik)
-                zobrazit = [c for c in ['datum', 'jmeno_zaka', 'popis_prace', 'hodiny'] if c in df_denik.columns]
-                df_show = df_denik[zobrazit].rename(columns={'datum': 'Datum', 'jmeno_zaka': 'Pracovník', 'popis_prace': 'Popis činnosti', 'hodiny': 'Hodiny'})
-                st.dataframe(df_show, use_container_width=True)
+            if isinstance(res_denik, list):
+                vykazy = [p for p in res_denik if not str(p.get("popis_prace", "")).startswith("[ZÁPIS Z PORADY]")]
+                porady = [p for p in res_denik if str(p.get("popis_prace", "")).startswith("[ZÁPIS Z PORADY]")]
             else:
-                st.info("Žáci této firmy zatím neodevzdali žádné výkazy o své odvedené práci.")
+                vykazy = []
+                porady = []
+                
+            with t_vykazy_ucitel:
+                st.markdown("##### Odpracované hodiny a úkoly jednotlivých členů týmu")
+                if vykazy:
+                    df_vykazy = pd.DataFrame(vykazy)
+                    zobrazit = [c for c in ['datum', 'jmeno_zaka', 'popis_prace', 'hodiny'] if c in df_vykazy.columns]
+                    st.dataframe(df_vykazy[zobrazit].rename(columns={'datum': 'Datum', 'jmeno_zaka': 'Pracovník', 'popis_prace': 'Popis činnosti', 'hodiny': 'Hodiny'}), use_container_width=True)
+                else:
+                    st.info("Zatím nebyly zaznamenány žádné osobní pracovní výkazy.")
+                    
+            with t_porady_ucitel:
+                st.markdown("##### Oficiální zápisy a svodky z porad zapsané vedením (CEO)")
+                if porady:
+                    for p in porady:
+                        with st.container(border=True):
+                            st.caption(f"📅 **Datum zápisu:** {p.get('datum', '')[:10]} | ✍️ **Zapsal:** {p.get('jmeno_zaka', '')}")
+                            cisty_text = p.get('popis_prace', '').replace("[ZÁPIS Z PORADY]\n", "")
+                            st.markdown(cisty_text)
+                else:
+                    st.info("Firma zatím neodevzdala žádný zápis z porady.")
