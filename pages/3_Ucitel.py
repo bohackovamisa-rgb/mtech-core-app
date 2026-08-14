@@ -64,7 +64,7 @@ if not st.session_state.prihlasen:
     ])
     
     with tab_login:
-        with st.form("login_form"):
+        with st.form("main_login_form"):
             jmeno = st.text_input("Přihlašovací jméno:")
             heslo = st.text_input("Heslo:", type="password")
             if st.form_submit_button("Vstoupit do ekosystému"):
@@ -107,7 +107,7 @@ if not st.session_state.prihlasen:
                     if isinstance(res_tridy, list) and res_tridy:
                         dostupne_tridy = res_tridy
 
-        with st.form("user_reg_form"):
+        with st.form("main_user_reg_form"):
             reg_jmeno = st.text_input("Uživatelské jméno:")
             reg_heslo = st.text_input("Heslo:", type="password")
             
@@ -168,7 +168,7 @@ if not st.session_state.prihlasen:
             adm_tab1, adm_tab2 = st.tabs(["Generování licencí pro školy", "Správa hesel vyučujících"])
             
             with adm_tab1:
-                with st.form("school_admin_form"):
+                with st.form("form_admin_generate_school"):
                     nazev_skoly = st.text_input("Název vzdělávací instituce:")
                     kontakt_email = st.text_input("Kontaktní e-mail zástupce školy:")
                     
@@ -193,7 +193,7 @@ if not st.session_state.prihlasen:
                 st.markdown("#### Reset hesla pro vyučujícího")
                 res_ucitele = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?role=eq.ucitel", headers=headers).json()
                 if res_ucitele and isinstance(res_ucitele, list):
-                    with st.form("form_admin_reset_ucitele"):
+                    with st.form("form_admin_reset_pw_teacher"):
                         ucitel_reset_jmeno = st.selectbox("Vyberte vyučujícího:", [f"{u['jmeno']} (Kód školy: {u.get('skolni_kod', '')})" for u in res_ucitele])
                         nove_heslo_ucitele = st.text_input("Zadejte nové heslo:", value="1234")
                         if st.form_submit_button("Nastavit nové heslo učiteli"):
@@ -215,7 +215,7 @@ else:
         st.markdown(f"Zůstatek: **{st.session_state.kredity} M-K**")
         
         with st.expander("Změnit mé heslo"):
-            with st.form("form_zmena_vlastniho_hesla"):
+            with st.form("sidebar_form_change_own_password"):
                 moje_nove_heslo = st.text_input("Nové heslo:", type="password")
                 if st.form_submit_button("Uložit nové heslo"):
                     if moje_nove_heslo.strip():
