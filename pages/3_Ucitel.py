@@ -14,9 +14,6 @@ h1, h2, h3, h4 { background: -webkit-linear-gradient(45deg, #00B4D8, #0077B6); -
 .stButton>button { border-radius: 8px; transition: all 0.3s ease; border: 1px solid #00B4D8; width: 100%; font-weight: 600; }
 .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0, 180, 216, 0.4); border-color: #00B4D8; background-color: #0f172a; color: white;}
 .card-box { background-color: #1e293b; padding: 20px; border-radius: 12px; border: 1px solid #334155; margin-bottom: 15px; }
-.status-ok { color: #34d399; font-weight: 700; background: rgba(16, 185, 129, 0.1); padding: 4px 8px; border-radius: 6px; }
-.status-wait { color: #fbbf24; font-weight: 700; background: rgba(245, 158, 11, 0.1); padding: 4px 8px; border-radius: 6px; }
-.status-err { color: #f87171; font-weight: 700; background: rgba(239, 68, 68, 0.1); padding: 4px 8px; border-radius: 6px; }
 .licence-box { background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%); border: 1px solid #334155; padding: 20px; border-radius: 12px; margin-bottom: 25px; }
 .licence-card { background: rgba(15, 23, 42, 0.6); padding: 15px; border-radius: 8px; border: 1px solid #334155; }
 .licence-val { font-family: monospace; font-size: 1.5em; font-weight: bold; padding: 4px 10px; border-radius: 5px; display: inline-block; margin-top: 5px; }
@@ -157,7 +154,7 @@ with st.expander("Seznam zákazníků školy a správa jejich peněženek (Rozba
             with col_k2: 
                 akce = st.selectbox("Akce:", ["Resetovat heslo na 1234", "Strhnout kredity (Pokuta)", "Přidat kredity (Bonus)", "Smazat účet (Ban)"])
             with col_k3: 
-                hodnota = st.number_input("Částka M-K (při pokutě/bonusu):", min_value=1.0, value=50.0)
+                hodnota = st.number_input("Částka M-K (při pokutě/bonusu):", min_value=1, value=50, step=1)
             
             sub_zakaznik = st.form_submit_button("Provést akci")
             
@@ -171,12 +168,12 @@ with st.expander("Seznam zákazníků školy a správa jejich peněženek (Rozba
                     requests.delete(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers)
                     st.success(f"✅ Účet zákazníka {z_vyber} byl smazán.")
                 elif akce == "Strhnout kredity (Pokuta)":
-                    novy = max(0, z_target.get("kredity", 0) - hodnota)
-                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers, json={"kredity": novy})
+                    novy = max(0, int(z_target.get("kredity", 0)) - int(hodnota))
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers, json={"kredity": int(novy)})
                     st.success(f"✅ Zákazníkovi {z_vyber} bylo strženo {hodnota} M-K.")
                 elif akce == "Přidat kredity (Bonus)":
-                    novy = z_target.get("kredity", 0) + hodnota
-                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers, json={"kredity": novy})
+                    novy = int(z_target.get("kredity", 0)) + int(hodnota)
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{z_target['id']}", headers=headers, json={"kredity": int(novy)})
                     st.success(f"✅ Zákazníkovi {z_vyber} bylo přidáno {hodnota} M-K.")
                 time.sleep(1.5)
                 st.rerun()
@@ -301,7 +298,7 @@ else:
 
             st.divider()
             
-            # --- ODMENY A POKUTY ---
+            # --- ODMENY A POKUTY (OPRAVENO: POUZE CELÁ ČÍSLA PRO DATABÁZI) ---
             st.markdown("##### 2. Přímé udělení odměny / stržení kreditů žákovi")
             with st.form("form_ucitel_odmena_zaka_penez_robust"):
                 col_o1, col_o2, col_o3 = st.columns([2, 1.5, 1])
@@ -310,20 +307,20 @@ else:
                 with col_o2:
                     akce_penize = st.selectbox("Typ transakce:", ["Připsat odměnu (Bonus)", "Strhnout kredity (Pokuta)"])
                 with col_o3:
-                    castka_odmeny = st.number_input("Částka M-K:", min_value=1.0, value=25.0)
+                    castka_odmeny = st.number_input("Částka M-K:", min_value=1, value=25, step=1)
                 
                 sub_penize = st.form_submit_button("Provést transakci")
                 
             if sub_penize:
                 target_user = next((z for z in zaci_tridy if z["jmeno"] == vybrany_zak_penize), None)
                 if target_user:
-                    akt_bal = float(target_user.get("kredity", 0))
-                    novy_bal = float((akt_bal + castka_odmeny) if "Bonus" in akce_penize else max(0.0, akt_bal - castka_odmeny))
+                    akt_bal = int(target_user.get("kredity", 0))
+                    novy_bal = int(akt_bal + castka_odmeny) if "Bonus" in akce_penize else max(0, int(akt_bal - castka_odmeny))
                     
-                    res_patch = requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{target_user['id']}", headers=headers, json={"kredity": novy_bal})
+                    res_patch = requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?id=eq.{target_user['id']}", headers=headers, json={"kredity": int(novy_bal)})
                     
                     if res_patch.status_code in [200, 204]:
-                        st.success(f"✅ Transakce úspěšná: Žák **{vybrany_zak_penize}** má nyní **{novy_bal:.2f} M-K**.")
+                        st.success(f"✅ Transakce úspěšná: Žák **{vybrany_zak_penize}** má nyní **{novy_bal} M-K**.")
                         time.sleep(1.5)
                         st.rerun()
                     else:
