@@ -165,7 +165,6 @@ if not moje_firma:
             else:
                 cfo_val = None if d.get("cfo") == "-- Neobsazeno --" else d.get("cfo")
                 cto_val = None if d.get("cto") == "-- Neobsazeno --" else d.get("cto")
-                
                 zamer_str = f"Druh živnosti: {d.get('druh_zivnosti')} | Obor: {d.get('zivnost_detail', '')} | Předmět: {d.get('predmet', '')} | Garant BOZP: {d.get('bozp_garant', '')} | Provozovna: {d.get('provozovna', '')}"
                 
                 novy_osobni_zustatek = aktualni_zustatek_zaka - vklad_k_prevodu
@@ -173,17 +172,9 @@ if not moje_firma:
                 st.session_state.kredity = novy_osobni_zustatek
 
                 payload = {
-                    "nazev_firmy": nazev,
-                    "skolni_kod": skolni_kod,
-                    "trida_nazev": trida_nazev,
-                    "uroven_projektu": 2,
-                    "ceo_jmeno": uzivatel,
-                    "cfo_jmeno": cfo_val,
-                    "cto_jmeno": cto_val,
-                    "podnikatelsky_zamer": zamer_str,
-                    "pocatecni_kapital": int(vklad_k_prevodu),
-                    "stave_licence": "CEKA_NA_SCHVALENI",
-                    "duvod_zamitnuti": ""
+                    "nazev_firmy": nazev, "skolni_kod": skolni_kod, "trida_nazev": trida_nazev, "uroven_projektu": 2,
+                    "ceo_jmeno": uzivatel, "cfo_jmeno": cfo_val, "cto_jmeno": cto_val, "podnikatelsky_zamer": zamer_str,
+                    "pocatecni_kapital": int(vklad_k_prevodu), "stave_licence": "CEKA_NA_SCHVALENI", "duvod_zamitnuti": ""
                 }
                 res_create = requests.post(f"{SUPABASE_URL}/rest/v1/firmy", headers=headers, json=payload)
                 if res_create.status_code in [200, 201]:
@@ -443,7 +434,7 @@ if tab_burza:
                 st.rerun()
 
 # ==========================================
-# ZÁLOŽKA 8: DENÍK A PORADY (NOVĚ PŘIDÁNO)
+# ZÁLOŽKA 8: DENÍK A PORADY
 # ==========================================
 if tab_denik:
     with tab_denik:
@@ -471,7 +462,6 @@ if tab_denik:
             st.markdown("#### Historie odvedené práce ve firmě")
             res_denik = requests.get(f"{SUPABASE_URL}/rest/v1/denik_prace?firma_id=eq.{moje_firma['id']}&order=id.desc", headers=headers).json()
             if isinstance(res_denik, list):
-                # Zobrazíme jen běžné výkazy (vyfiltrujeme zápisy z porad)
                 bezne_vykazy = [p for p in res_denik if not str(p.get("popis_prace", "")).startswith("[ZÁPIS Z PORADY]")]
                 if bezne_vykazy:
                     df_denik = pd.DataFrame(bezne_vykazy)
@@ -484,21 +474,25 @@ if tab_denik:
         # --- PODZÁLOŽKA: ZÁPISY Z PORAD ---
         with t_porady:
             st.markdown("Zde evidujte oficiální zápisy z vašich firemních schůzek a porad.")
-            with st.form("form_zapis_porady"):
-                zapis_text = st.text_area("Co se řešilo, jaké jsou úkoly a závěry z porady:", height=150)
-                if st.form_submit_button("Uložit zápis z porady"):
-                    if zapis_text.strip():
-                        # Uložíme to do deníku práce, ale s prefixem, aby to učitel poznal
-                        requests.post(f"{SUPABASE_URL}/rest/v1/denik_prace", headers=headers, json={
-                            "jmeno_zaka": uzivatel, 
-                            "firma_id": moje_firma['id'], 
-                            "popis_prace": f"[ZÁPIS Z PORADY]\n{zapis_text.strip()}", 
-                            "hodiny": 0
-                        })
-                        st.success("Zápis z porady byl uložen.")
-                        st.rerun()
-                    else:
-                        st.error("Zápis nesmí být prázdný.")
+            
+            # Omezení psaní zápisů POUZE pro CEO
+            if moje_role == "CEO":
+                with st.form("form_zapis_porady"):
+                    zapis_text = st.text_area("Co se řešilo, jaké jsou úkoly a závěry z porady:", height=150)
+                    if st.form_submit_button("Uložit zápis z porady"):
+                        if zapis_text.strip():
+                            requests.post(f"{SUPABASE_URL}/rest/v1/denik_prace", headers=headers, json={
+                                "jmeno_zaka": uzivatel, 
+                                "firma_id": moje_firma['id'], 
+                                "popis_prace": f"[ZÁPIS Z PORADY]\n{zapis_text.strip()}", 
+                                "hodiny": 0
+                            })
+                            st.success("Zápis z porady byl uložen.")
+                            st.rerun()
+                        else:
+                            st.error("Zápis nesmí být prázdný.")
+            else:
+                st.info("⚠️ Zápisy z firemních porad smí do systému vkládat pouze generální ředitel (CEO). Dohodněte se na obsahu a předejte mu podklady.")
             
             st.markdown("#### Historie porad")
             if isinstance(res_denik, list):
