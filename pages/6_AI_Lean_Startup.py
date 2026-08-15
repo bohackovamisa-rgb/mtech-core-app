@@ -123,7 +123,7 @@ with st.sidebar:
         st.success("Fáze: Validovaný model připravený k nasazení!")
 
 # =========================================================================
-# ZPRACOVÁNÍ LOKÁLNÍCH SOUBORŮ A GOOGLE DISKU
+# ZPRACOVÁNÍ LOKÁLNÍCH SOUBORŮ
 # =========================================================================
 def extract_text_from_docx(file_bytes_io):
     try:
@@ -135,61 +135,6 @@ def extract_text_from_docx(file_bytes_io):
             return "\n".join(texts)
     except Exception:
         return "[Chyba při čtení Word dokumentu]"
-
-def fetch_google_drive_content(url):
-    if not url or not url.strip():
-        return None, "", None
-        
-    url = url.strip()
-    
-    doc_match = re.search(r'/document/d/([a-zA-Z0-9_-]+)', url)
-    if doc_match:
-        doc_id = doc_match.group(1)
-        export_url = f"https://docs.google.com/document/d/{doc_id}/export?format=txt"
-        try:
-            res = requests.get(export_url, timeout=15)
-            if res.status_code == 200:
-                return None, f"\n\n[OBSAH GOOGLE DOKUMENTU]:\n{res.text}\n", "Google Docs"
-        except Exception:
-            pass
-
-    sheet_match = re.search(r'/spreadsheets/d/([a-zA-Z0-9_-]+)', url)
-    if sheet_match:
-        sheet_id = sheet_match.group(1)
-        export_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=csv"
-        try:
-            res = requests.get(export_url, timeout=15)
-            if res.status_code == 200:
-                return None, f"\n\n[OBSAH GOOGLE TABULKY]:\n{res.text}\n", "Google Tabulka"
-        except Exception:
-            pass
-
-    drive_match = re.search(r'/file/d/([a-zA-Z0-9_-]+)', url) or re.search(r'id=([a-zA-Z0-9_-]+)', url)
-    if drive_match:
-        file_id = drive_match.group(1)
-        download_url = f"https://drive.google.com/uc?export=download&id={file_id}"
-        try:
-            res = requests.get(download_url, timeout=20)
-            if res.status_code == 200:
-                content_type = res.headers.get('Content-Type', '').lower()
-                fbytes = res.content
-                if 'pdf' in content_type:
-                    b64 = base64.b64encode(fbytes).decode("utf-8")
-                    return {"mime_type": "application/pdf", "data": b64}, "\n[PŘILOŽENO PDF Z GOOGLE DISKU]", "Google Drive PDF"
-                elif any(img in content_type for img in ['image', 'png', 'jpeg', 'jpg', 'webp']):
-                    mime = "image/png" if "png" in content_type else "image/jpeg"
-                    b64 = base64.b64encode(fbytes).decode("utf-8")
-                    return {"mime_type": mime, "data": b64}, "\n[PŘILOŽEN OBRÁZEK Z GOOGLE DISKU]", "Google Drive Obrázek"
-                else:
-                    try:
-                        text = fbytes.decode("utf-8")
-                        return None, f"\n\n[OBSAH SOUBORU Z GOOGLE DISKU]:\n{text}\n", "Google Drive Soubor"
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-            
-    return None, f"\n[Nepodařilo se automaticky stáhnout obsah z odkazu. Ujistěte se, že má odkaz zapnuté veřejné sdílení 'Kdokoli má odkaz'.]", "Google Disk (Chyba přístupu)"
 
 def prepare_local_file_payload(uploaded_file):
     if not uploaded_file:
@@ -337,27 +282,16 @@ with tab_canvas:
 # ==================== TAB 2: MENTOR ====================
 with tab_mentor:
     st.subheader("Konzultace s Lean Startup Mentorem")
-    st.caption("Napište zprávu a stiskněte **Enter**. Volitelně můžete připojit soubor z počítače nebo vložit odkaz na Google Disk / Docs.")
+    st.caption("Napište zprávu a stiskněte **Enter**. Volitelně můžete nahrát soubor jako podklad k analýze.")
     
-    with st.expander("Připojit podklady (Google Disk, PDF, Word, obrázky)", expanded=False):
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            uploaded_doc = st.file_uploader(
-                "Nahrát z počítače:",
-                type=["png", "jpg", "jpeg", "webp", "pdf", "docx", "txt", "csv", "md"],
-                key="mentor_file_uploader"
-            )
-        with col_f2:
-            gdrive_link = st.text_input(
-                "Nebo vložte sdílený odkaz na Google Disk / Docs / Sheets:",
-                placeholder="https://docs.google.com/document/d/... nebo https://drive.google.com/...",
-                help="Ujistěte se, že odkaz má zapnuté sdílení 'Kdokoli má odkaz'."
-            )
-            
+    with st.expander("Připojit podklady (PDF, Word, obrázky, text)", expanded=False):
+        uploaded_doc = st.file_uploader(
+            "Nahrát soubor z počítače:",
+            type=["png", "jpg", "jpeg", "webp", "pdf", "docx", "txt", "csv", "md"],
+            key="mentor_file_uploader"
+        )
         if uploaded_doc:
             st.success(f"Připraven soubor: `{uploaded_doc.name}`")
-        if gdrive_link:
-            st.info("Zadaný odkaz na Google Disk bude analyzován při odeslání dotazu.")
 
     st.divider()
 
@@ -376,8 +310,6 @@ with tab_mentor:
         if uploaded_doc:
             file_payload, extra_text_content = prepare_local_file_payload(uploaded_doc)
             attached_name = uploaded_doc.name
-        elif gdrive_link:
-            file_payload, extra_text_content, attached_name = fetch_google_drive_content(gdrive_link)
         
         chat_history.append({
             "role": "user", 
@@ -393,7 +325,7 @@ with tab_mentor:
 
         TVŮJ PŘÍSTUP:
         1. Buď věcný, analytický, profesionální partner k diskusi.
-        2. Pokud zakladatel přiložil dokument, tabulku, výkres nebo podklad z Google Disku, detailně jej zanalyzuj a zohledni ve své odpovědi.
+        2. Pokud zakladatel přiložil dokument, tabulku, výkres nebo jiný soubor, detailně jej zanalyzuj a zohledni ve své odpovědi.
         3. Rozuměj fázím vývoje: Pokud je projekt ve fázi MVP/pilotu, zaměř se na ověření u Early Adopters a první reálné testy.
         4. Zhodnoť argumenty zakladatele, potvrď, co dává smysl, a polož 1-2 přesné diagnostické otázky k ověření rizik.
 
@@ -424,103 +356,4 @@ with tab_mentor:
             try:
                 raw_text = call_ai_multimodal(prompt, file_payload)
                 raw_text = re.sub(r'^```json\s*', '', raw_text)
-                raw_text = re.sub(r'\s*```$', '', raw_text)
-                
-                match = re.search(r'\{.*\}', raw_text, re.DOTALL)
-                if match:
-                    ai_data = json.loads(match.group(0))
-                    chat_history.append({
-                        "role": "mentor", 
-                        "content": ai_data.get("odpoved_mentora", "Rozumím."),
-                        "file": None
-                    })
-                    new_score = ai_data.get("nove_skore", val_score)
-                    
-                    new_canvas = ai_data.get("canvas_updaty", {})
-                    for k in canvas.keys():
-                        if k in new_canvas and new_canvas[k]: 
-                            canvas[k] = new_canvas[k]
-
-                    save_to_db({
-                        "chat_history": chat_history,
-                        "validation_score": new_score,
-                        "canvas": canvas
-                    })
-                else:
-                    chat_history.append({"role": "mentor", "content": raw_text, "file": None})
-                    save_to_db({"chat_history": chat_history})
-            except Exception as e:
-                chat_history.append({"role": "mentor", "content": f"Chyba při zpracování: {str(e)}", "file": None})
-                save_to_db({"chat_history": chat_history})
-        st.rerun()
-
-# ==================== TAB 3: ZÁKAZNÍK ====================
-with tab_zakaznik:
-    st.subheader("Customer Discovery (Rozhovory nanečisto)")
-    st.write("Otestujte svou hodnotovou nabídku na konkrétní personě zákazníka.")
-    
-    with st.container(border=True):
-        col_c1, col_c2, col_c3 = st.columns(3)
-        with col_c1: persona_vek = st.text_input("Věk zákazníka:", value="52")
-        with col_c2: persona_role = st.text_input("Povolání / Pozice:", value="Ředitel / Učitel odborné školy")
-        with col_c3: persona_zajem = st.text_input("Charakteristika / Priority:", value="Konzervativní, málo času na novinky, limitovaný rozpočet")
-    
-    st.divider()
-    for msg in st.session_state.customer_history:
-        div_class = "chat-user" if msg["role"] == "user" else "chat-mentor"
-        st.markdown(f"<div class='{div_class}'><b>{'Vy' if msg['role']=='user' else 'Zákazník'}:</b><br>{msg['content']}</div>", unsafe_allow_html=True)
-    
-    cust_input = st.chat_input("Položte zákazníkovi otázku a stiskněte Enter...")
-    if cust_input and not is_teacher:
-        st.session_state.customer_history.append({"role": "user", "content": cust_input})
-        
-        prompt_cust = f"""
-        Hraješ roli reálného potenciálního zákazníka. Tvé parametry: Věk {persona_vek}, Pozice: {persona_role}, Vlastnosti: {persona_zajem}.
-        Kontext projektu zakladatele: {json.dumps(canvas, ensure_ascii=False)}.
-        Mluvíš česky. Reaguj autenticky a realisticky podle své role. Zajímej se o to, co ti to ušetří, kolik času tě to bude stát a jak složité je to zavést. Nepoužívej emotikony.
-
-        Vstup od zakladatele: {cust_input}
-        """
-        with st.spinner("Zákazník formuluje odpověď..."):
-            try:
-                res_cust = call_ai_multimodal(prompt_cust)
-                st.session_state.customer_history.append({"role": "customer", "content": res_cust})
-            except Exception as e:
-                st.error(f"Chyba: {e}")
-        st.rerun()
-
-# ==================== TAB 4: KRIZE ====================
-with tab_krize:
-    st.subheader("Black Swan (Simulace tržních rizik)")
-    st.write("Vygenerujte realistickou tržní komplikaci a otestujte schopnost týmu reagovat.")
-    
-    if st.button("Simulovat tržní komplikaci", type="primary") and not is_teacher:
-        prompt_krize = f"""
-        Kontext projektu: {json.dumps(canvas, ensure_ascii=False)}.
-        Vymysli věcnou, vysoce realistickou tržní nebo provozní komplikaci (např. zpoždění dotačních titulů na školách, nezájem části sboru o novou metodiku, změna legislativy).
-        Popiš situaci ve 2-3 větách a polož otázku na strategické řešení. Nepoužívej emotikony.
-        """
-        with st.spinner("Generuji krizový scénář..."):
-            try:
-                st.session_state.krize_aktivni = call_ai_multimodal(prompt_krize)
-            except Exception as e:
-                st.error(f"Chyba: {e}")
-        st.rerun()
-        
-    if st.session_state.krize_aktivni:
-        st.markdown(f"<div class='crisis-box'><b>SCÉNÁŘ K ŘEŠENÍ:</b><br><br>{st.session_state.krize_aktivni}</div><br>", unsafe_allow_html=True)
-        
-        with st.form("form_reseni_krize"):
-            reseni = st.text_area("Váš návrh řešení a mitigace rizika:")
-            if st.form_submit_button("Vyhodnotit řešení"):
-                if reseni.strip() and not is_teacher:
-                    prompt_reseni = f"""
-                    Krizová situace: {st.session_state.krize_aktivni}.
-                    Navržené řešení zakladatele: {reseni}.
-                    Zhodnoť věcně a realisticky, zda je toto řešení proveditelné a jaká nová rizika případně přináší. Ohodnoť 1-10 body. Nepoužívej emotikony.
-                    """
-                    with st.spinner("Vyhodnocuji..."):
-                        try:
-                            st.info(call_ai_multimodal(prompt_reseni))
-                        except Exception as e:
-                            st.error(f"Chyba: {e}")
+                raw_text = re.sub(r'\s*
