@@ -356,4 +356,103 @@ with tab_mentor:
             try:
                 raw_text = call_ai_multimodal(prompt, file_payload)
                 raw_text = re.sub(r'^```json\s*', '', raw_text)
-                raw_text = re.sub(r'\s*
+                raw_text = re.sub(r'\s*```$', '', raw_text)
+                
+                match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+                if match:
+                    ai_data = json.loads(match.group(0))
+                    chat_history.append({
+                        "role": "mentor", 
+                        "content": ai_data.get("odpoved_mentora", "Rozumím."),
+                        "file": None
+                    })
+                    new_score = ai_data.get("nove_skore", val_score)
+                    
+                    new_canvas = ai_data.get("canvas_updaty", {})
+                    for k in canvas.keys():
+                        if k in new_canvas and new_canvas[k]: 
+                            canvas[k] = new_canvas[k]
+
+                    save_to_db({
+                        "chat_history": chat_history,
+                        "validation_score": new_score,
+                        "canvas": canvas
+                    })
+                else:
+                    chat_history.append({"role": "mentor", "content": raw_text, "file": None})
+                    save_to_db({"chat_history": chat_history})
+            except Exception as e:
+                chat_history.append({"role": "mentor", "content": f"Chyba při zpracování: {str(e)}", "file": None})
+                save_to_db({"chat_history": chat_history})
+        st.rerun()
+
+# ==================== TAB 3: ZÁKAZNÍK ====================
+with tab_zakaznik:
+    st.subheader("Customer Discovery (Rozhovory nanečisto)")
+    st.write("Otestujte svou hodnotovou nabídku na konkrétní personě zákazníka.")
+    
+    with st.container(border=True):
+        col_c1, col_c2, col_c3 = st.columns(3)
+        with col_c1: persona_vek = st.text_input("Věk zákazníka:", value="52")
+        with col_c2: persona_role = st.text_input("Povolání / Pozice:", value="Ředitel / Učitel odborné školy")
+        with col_c3: persona_zajem = st.text_input("Charakteristika / Priority:", value="Konzervativní, málo času na novinky, limitovaný rozpočet")
+    
+    st.divider()
+    for msg in st.session_state.customer_history:
+        div_class = "chat-user" if msg["role"] == "user" else "chat-mentor"
+        st.markdown(f"<div class='{div_class}'><b>{'Vy' if msg['role']=='user' else 'Zákazník'}:</b><br>{msg['content']}</div>", unsafe_allow_html=True)
+    
+    cust_input = st.chat_input("Položte zákazníkovi otázku a stiskněte Enter...")
+    if cust_input and not is_teacher:
+        st.session_state.customer_history.append({"role": "user", "content": cust_input})
+        
+        prompt_cust = f"""
+        Hraješ roli reálného potenciálního zákazníka. Tvé parametry: Věk {persona_vek}, Pozice: {persona_role}, Vlastnosti: {persona_zajem}.
+        Kontext projektu zakladatele: {json.dumps(canvas, ensure_ascii=False)}.
+        Mluvíš česky. Reaguj autenticky a realisticky podle své role. Zajímej se o to, co ti to ušetří, kolik času tě to bude stát a jak složité je to zavést. Nepoužívej emotikony.
+
+        Vstup od zakladatele: {cust_input}
+        """
+        with st.spinner("Zákazník formuluje odpověď..."):
+            try:
+                res_cust = call_ai_multimodal(prompt_cust)
+                st.session_state.customer_history.append({"role": "customer", "content": res_cust})
+            except Exception as e:
+                st.error(f"Chyba: {e}")
+        st.rerun()
+
+# ==================== TAB 4: KRIZE ====================
+with tab_krize:
+    st.subheader("Black Swan (Simulace tržních rizik)")
+    st.write("Vygenerujte realistickou tržní komplikaci a otestujte schopnost týmu reagovat.")
+    
+    if st.button("Simulovat tržní komplikaci", type="primary") and not is_teacher:
+        prompt_krize = f"""
+        Kontext projektu: {json.dumps(canvas, ensure_ascii=False)}.
+        Vymysli věcnou, vysoce realistickou tržní nebo provozní komplikaci (např. zpoždění dotačních titulů na školách, nezájem části sboru o novou metodiku, změna legislativy).
+        Popiš situaci ve 2-3 větách a polož otázku na strategické řešení. Nepoužívej emotikony.
+        """
+        with st.spinner("Generuji krizový scénář..."):
+            try:
+                st.session_state.krize_aktivni = call_ai_multimodal(prompt_krize)
+            except Exception as e:
+                st.error(f"Chyba: {e}")
+        st.rerun()
+        
+    if st.session_state.krize_aktivni:
+        st.markdown(f"<div class='crisis-box'><b>SCÉNÁŘ K ŘEŠENÍ:</b><br><br>{st.session_state.krize_aktivni}</div><br>", unsafe_allow_html=True)
+        
+        with st.form("form_reseni_krize"):
+            reseni = st.text_area("Váš návrh řešení a mitigace rizika:")
+            if st.form_submit_button("Vyhodnotit řešení"):
+                if reseni.strip() and not is_teacher:
+                    prompt_reseni = f"""
+                    Krizová situace: {st.session_state.krize_aktivni}.
+                    Navržené řešení zakladatele: {reseni}.
+                    Zhodnoť věcně a realisticky, zda je toto řešení proveditelné a jaká nová rizika případně přináší. Ohodnoť 1-10 body. Nepoužívej emotikony.
+                    """
+                    with st.spinner("Vyhodnocuji..."):
+                        try:
+                            st.info(call_ai_multimodal(prompt_reseni))
+                        except Exception as e:
+                            st.error(f"Chyba: {e}")
