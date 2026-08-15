@@ -29,17 +29,19 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
 html, body, [class*="css"] { font-family: 'Montserrat', sans-serif !important; }
-.mtech-header { font-size: 1.5rem; font-weight: 800; color: #0f172a; letter-spacing: -0.5px; margin-bottom: 0.5rem; }
-.mtech-sub { color: #64748b; font-size: 0.9rem; margin-bottom: 1.5rem; }
+.mtech-header { font-size: 1.5rem; font-weight: 800; background: -webkit-linear-gradient(45deg, #00B4D8, #0077B6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: -0.5px; margin-bottom: 0.5rem; }
+.mtech-sub { color: #94a3b8; font-size: 0.9rem; margin-bottom: 1.5rem; }
 .score-panel { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 1px solid #334155; border-radius: 8px; padding: 18px; text-align: center; color: #ffffff; margin-bottom: 20px;}
 .score-val { font-size: 2.6rem; font-weight: 800; background: -webkit-linear-gradient(45deg, #00B4D8, #0077B6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; line-height: 1.1; margin: 6px 0; }
 .score-lbl { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; font-weight: 600; }
-.canvas-block { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; min-height: 130px; }
-.canvas-tag { font-size: 0.75rem; font-weight: 700; color: #0077B6; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-bottom: 8px; }
-.chat-mentor { background: #f1f5f9; border-left: 4px solid #00B4D8; padding: 12px 14px; border-radius: 0 6px 6px 0; margin-bottom: 8px; color: #0f172a; font-size: 0.95rem; }
-.chat-user { background: #ffffff; border: 1px solid #e2e8f0; padding: 12px 14px; border-radius: 6px; margin-bottom: 8px; text-align: right; color: #334155; font-size: 0.95rem; }
-.crisis-box { background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; padding: 20px; border-radius: 8px; color: #991b1b; font-weight: 600; font-size: 1.05em;}
-.file-badge { background: #e2e8f0; padding: 4px 8px; border-radius: 6px; font-size: 0.85em; font-weight: 600; color: #475569; display: inline-block; margin-bottom: 6px;}
+
+/* TMAVÝ DESIGN PRO CANVAS A CHAT */
+.canvas-block { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 15px; min-height: 140px; color: #e2e8f0; }
+.canvas-tag { font-size: 0.75rem; font-weight: 800; color: #00B4D8; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #334155; padding-bottom: 6px; margin-bottom: 10px; }
+.chat-mentor { background: #1e293b; border-left: 4px solid #00B4D8; padding: 15px; border-radius: 0 8px 8px 0; margin-bottom: 10px; color: #e2e8f0; font-size: 0.95rem; }
+.chat-user { background: #0f172a; border: 1px solid #334155; padding: 15px; border-radius: 8px; margin-bottom: 10px; text-align: right; color: #e2e8f0; font-size: 0.95rem; }
+.crisis-box { background: rgba(239, 68, 68, 0.1); border: 1px solid #ef4444; padding: 20px; border-radius: 8px; color: #fca5a5; font-weight: 600; font-size: 1.05em;}
+.file-badge { background: #334155; padding: 4px 8px; border-radius: 6px; font-size: 0.85em; font-weight: 600; color: #94a3b8; display: inline-block; margin-bottom: 6px;}
 </style>
 """, unsafe_allow_html=True)
 
