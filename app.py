@@ -48,6 +48,11 @@ if not st.session_state.prihlasen and qs_user:
         st.session_state.skolni_kod = res_auto[0].get("skolni_kod", "")
         st.session_state.trida_nazev = res_auto[0].get("trida_nazev", "")
 
+# AGRESIVNÍ VYNUCENÍ PARAMETRU: Pokud je přihlášený, okamžitě to vrazí do URL
+# (Tohle přesně zabrání tomu, aby F5 zhavarovalo)
+if st.session_state.prihlasen and st.session_state.uzivatel:
+    st.query_params["user"] = st.session_state.uzivatel
+
 # DEFINICE STRÁNEK
 zaci_page = st.Page("pages/1_Zaci.py", title="Moje peněženka")
 firma_page = st.Page("pages/2_Firma.py", title="Firemní Dashboard")
@@ -59,7 +64,7 @@ lean_page = st.Page("pages/6_AI_Lean_Startup.py", title="Lean Startup Validator"
 ma_pristup_k_firme = False
 moje_firemni_pozice = None
 
-# Pokud je uživatel přihlášen, zjistíme jeho firmu a uložíme si ji do Session State
+# ZJIŠTĚNÍ FIRMY UŽIVATELE
 if st.session_state.prihlasen and st.session_state.uzivatel and st.session_state.role in ["zak", "firma"]:
     u_name = str(st.session_state.uzivatel).strip().lower()
     sk_kod = st.session_state.get("skolni_kod", "")
@@ -67,9 +72,7 @@ if st.session_state.prihlasen and st.session_state.uzivatel and st.session_state
     r_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{sk_kod}&select=*", headers=headers).json()
     if isinstance(r_firmy, list):
         for f in r_firmy:
-            # Bezpečné získání názvu firmy (obchodni_firma nebo nazev)
             jmeno_firmy = f.get("obchodni_firma", f.get("nazev", "Firemní tým"))
-            
             if str(f.get('ceo_jmeno','')).lower() == u_name:
                 ma_pristup_k_firme = True
                 moje_firemni_pozice = "CEO"
@@ -118,7 +121,6 @@ if not st.session_state.prihlasen:
                     st.session_state.uzivatel = res[0]["jmeno"]
                     st.session_state.skolni_kod = res[0].get("skolni_kod", "")
                     st.session_state.trida_nazev = res[0].get("trida_nazev", "")
-                    # Uložení do URL
                     st.query_params["user"] = res[0]["jmeno"]
                     st.rerun()
                 else:
