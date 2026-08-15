@@ -49,24 +49,27 @@ if "krize_aktivni" not in st.session_state: st.session_state.krize_aktivni = Non
 if "aktivni_model_nazev" not in st.session_state: st.session_state.aktivni_model_nazev = "Automatická detekce"
 
 is_teacher = st.session_state.get("role") == "ucitel"
+is_demo = False
 
 if is_teacher:
     st.markdown("<div class='mtech-header'>Kontrolní audit: Lean Startup projekty</div>", unsafe_allow_html=True)
     skolni_kod = st.session_state.get("skolni_kod", "")
     res_f = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{skolni_kod}&select=id,obchodni_firma,nazev", headers=HEADERS).json()
     
+    firm_opts = {}
     if isinstance(res_f, list) and res_f:
         firm_opts = {f.get("obchodni_firma", f.get("nazev", f"Firma #{f.get('id')}")): f["id"] for f in res_f}
-    else:
-        firm_opts = {}
+    
+    # DEMO REŽIM PRO UČITELE
+    firm_opts = {"DEMO REŽIM (Testovací hřiště pro učitele)": 0, **firm_opts}
 
-    if not firm_opts:
-        st.warning("Zatím nejsou evidovány žádné studentské firmy.")
-        st.stop()
-        
-    selected_firm_name = st.selectbox("Vyberte firmu k auditu:", list(firm_opts.keys()))
+    selected_firm_name = st.selectbox("Vyberte firmu k auditu (nebo si aplikaci zkuste v Demo režimu):", list(firm_opts.keys()))
     active_firma_id = firm_opts[selected_firm_name]
     active_firma_nazev = selected_firm_name
+    
+    if active_firma_id == 0:
+        is_demo = True
+        st.info("Jste v testovacím Demo režimu. Můžete s aplikací volně pracovat. Po odhlášení se data smažou.")
 else:
     active_firma_id = st.session_state.get("firma_id")
     active_firma_nazev = st.session_state.get("firma_nazev", "Váš projekt")
@@ -77,27 +80,39 @@ else:
 
     st.markdown(f"<div class='mtech-header'>Lean Startup Validator: {active_firma_nazev}</div>", unsafe_allow_html=True)
 
-# Načtení projektu z databáze
-res_p = requests.get(f"{SUPABASE_URL}/rest/v1/firma_lean_projects?firma_id=eq.{active_firma_id}", headers=HEADERS).json()
-
-if not res_p or not isinstance(res_p, list) or len(res_p) == 0:
-    init_payload = {
-        "firma_id": int(active_firma_id),
-        "skola_id": str(st.session_state.get("skolni_kod", "")),
-        "canvas": {"problem": "", "reseni": "", "hodnota": "", "nefer_vyhoda": "", "cilovka": "", "metriky": "", "kanaly": "", "naklady": "", "prijmy": ""},
-        "validation_score": 0,
-        "chat_history": []
-    }
-    r_create = requests.post(f"{SUPABASE_URL}/rest/v1/firma_lean_projects", headers=HEADERS, json=init_payload).json()
-    project_data = r_create[0] if (isinstance(r_create, list) and len(r_create) > 0) else init_payload
+# Načtení projektu (z databáze nebo z dočasné paměti v případě DEMA)
+if is_demo:
+    if "demo_lean_data" not in st.session_state:
+        st.session_state.demo_lean_data = {
+            "canvas": {"problem": "", "reseni": "", "hodnota": "", "nefer_vyhoda": "", "cilovka": "", "metriky": "", "kanaly": "", "naklady": "", "prijmy": ""},
+            "validation_score": 0,
+            "chat_history": []
+        }
+    project_data = st.session_state.demo_lean_data
 else:
-    project_data = res_p[0]
+    res_p = requests.get(f"{SUPABASE_URL}/rest/v1/firma_lean_projects?firma_id=eq.{active_firma_id}", headers=HEADERS).json()
+    if not res_p or not isinstance(res_p, list) or len(res_p) == 0:
+        init_payload = {
+            "firma_id": int(active_firma_id),
+            "skola_id": str(st.session_state.get("skolni_kod", "")),
+            "canvas": {"problem": "", "reseni": "", "hodnota": "", "nefer_vyhoda": "", "cilovka": "", "metriky": "", "kanaly": "", "naklady": "", "prijmy": ""},
+            "validation_score": 0,
+            "chat_history": []
+        }
+        r_create = requests.post(f"{SUPABASE_URL}/rest/v1/firma_lean_projects", headers=HEADERS, json=init_payload).json()
+        project_data = r_create[0] if (isinstance(r_create, list) and len(r_create) > 0) else init_payload
+    else:
+        project_data = res_p[0]
 
 canvas = project_data.get("canvas", {})
 val_score = project_data.get("validation_score", 0)
 chat_history = project_data.get("chat_history", [])
 
 def save_to_db(updated_fields):
+    if is_demo:
+        st.session_state.demo_lean_data.update(updated_fields)
+        return
+        
     requests.patch(
         f"{SUPABASE_URL}/rest/v1/firma_lean_projects?firma_id=eq.{active_firma_id}",
         headers=HEADERS,
@@ -285,7 +300,6 @@ with tab_canvas:
         st.markdown("Nyní můžete svůj validovaný model zapsat do hlavního profilu vaší firmy (Zakladatelského spisu).")
         
         if st.button("Zapsat schválený byznys plán do firemního rejstříku", type="primary"):
-            # OPRAVA CHYBY: Bezpečné sčítání textu (odstraněna zpětná lomítka z konce řádků)
             spis_text = (
                 f"**NAŠE ŘEŠENÍ (MVP):**\n{canvas.get('reseni', '')}\n\n"
                 f"**ŘEŠÍME PROBLÉM:**\n{canvas.get('problem', '')}\n\n"
@@ -325,9 +339,9 @@ with tab_mentor:
         st.markdown(f"<div class='{div_class}'><b>{'Vy' if msg['role']=='user' else 'Strategický Mentor'}:</b><br>{file_tag}{msg['content']}</div>", unsafe_allow_html=True)
         
     def submit_mentor():
-        if st.session_state.mentor_input.strip() and not is_teacher:
+        if st.session_state.mentor_input.strip() and (not is_teacher or is_demo):
             user_input = st.session_state.mentor_input
-            st.session_state.mentor_input = ""  # Automatické vymazání pole po odeslání Enterem
+            st.session_state.mentor_input = ""
             
             file_payload = None
             extra_text_content = ""
@@ -411,7 +425,7 @@ with tab_mentor:
                     chat_history.append({"role": "mentor", "content": f"Chyba při zpracování: {str(e)}", "file": None})
                     save_to_db({"chat_history": chat_history})
 
-    st.text_input("Napište zprávu mentorovi a stiskněte Enter (odeslání proběhne bez tlačítka)...", key="mentor_input", on_change=submit_mentor)
+    st.text_input("Napište zprávu mentorovi a stiskněte Enter...", key="mentor_input", on_change=submit_mentor)
 
 # ==================== TAB 3: ZÁKAZNÍK ====================
 with tab_zakaznik:
@@ -430,9 +444,9 @@ with tab_zakaznik:
         st.markdown(f"<div class='{div_class}'><b>{'Vy' if msg['role']=='user' else 'Zákazník'}:</b><br>{msg['content']}</div>", unsafe_allow_html=True)
     
     def submit_customer():
-        if st.session_state.customer_input.strip() and not is_teacher:
+        if st.session_state.customer_input.strip() and (not is_teacher or is_demo):
             cust_input = st.session_state.customer_input
-            st.session_state.customer_input = "" # Automatické vymazání pole po odeslání Enterem
+            st.session_state.customer_input = ""
             
             st.session_state.customer_history.append({"role": "user", "content": cust_input})
             
@@ -450,14 +464,14 @@ with tab_zakaznik:
                 except Exception as e:
                     st.error(f"Chyba: {e}")
 
-    st.text_input("Položte zákazníkovi otázku a stiskněte Enter (odeslání proběhne bez tlačítka)...", key="customer_input", on_change=submit_customer)
+    st.text_input("Položte zákazníkovi otázku a stiskněte Enter...", key="customer_input", on_change=submit_customer)
 
 # ==================== TAB 4: KRIZE ====================
 with tab_krize:
     st.subheader("Black Swan (Simulace tržních rizik)")
     st.write("Vygenerujte realistickou tržní komplikaci a otestujte schopnost týmu reagovat.")
     
-    if st.button("Simulovat tržní komplikaci", type="primary") and not is_teacher:
+    if st.button("Simulovat tržní komplikaci", type="primary") and (not is_teacher or is_demo):
         prompt_krize = f"""
         Kontext projektu: {json.dumps(canvas, ensure_ascii=False)}.
         Vymysli věcnou, vysoce realistickou tržní nebo provozní komplikaci (např. zpoždění dotačních titulů na školách, nezájem části sboru o novou metodiku, změna legislativy).
@@ -473,9 +487,9 @@ with tab_krize:
         st.markdown(f"<div class='crisis-box'><b>SCÉNÁŘ K ŘEŠENÍ:</b><br><br>{st.session_state.krize_aktivni}</div><br>", unsafe_allow_html=True)
         
         def submit_crisis():
-            if st.session_state.krize_input.strip() and not is_teacher:
+            if st.session_state.krize_input.strip() and (not is_teacher or is_demo):
                 reseni = st.session_state.krize_input
-                st.session_state.krize_input = "" # Automatické vymazání pole po odeslání Enterem
+                st.session_state.krize_input = ""
                 
                 prompt_reseni = f"""
                 Krizová situace: {st.session_state.krize_aktivni}.
