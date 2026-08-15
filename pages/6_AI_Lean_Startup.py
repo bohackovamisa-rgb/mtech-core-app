@@ -34,8 +34,6 @@ html, body, [class*="css"] { font-family: 'Montserrat', sans-serif !important; }
 .score-panel { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 1px solid #334155; border-radius: 8px; padding: 18px; text-align: center; color: #ffffff; margin-bottom: 20px;}
 .score-val { font-size: 2.6rem; font-weight: 800; background: -webkit-linear-gradient(45deg, #00B4D8, #0077B6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; line-height: 1.1; margin: 6px 0; }
 .score-lbl { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8; font-weight: 600; }
-
-/* TMAVÝ DESIGN PRO CANVAS A CHAT */
 .canvas-block { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 15px; min-height: 140px; color: #e2e8f0; }
 .canvas-tag { font-size: 0.75rem; font-weight: 800; color: #00B4D8; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #334155; padding-bottom: 6px; margin-bottom: 10px; }
 .chat-mentor { background: #1e293b; border-left: 4px solid #00B4D8; padding: 15px; border-radius: 0 8px 8px 0; margin-bottom: 10px; color: #e2e8f0; font-size: 0.95rem; }
@@ -45,7 +43,7 @@ html, body, [class*="css"] { font-family: 'Montserrat', sans-serif !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# Paměť pro funkce, které se neukládají do DB (zákazník a krize)
+# Paměť pro funkce
 if "customer_history" not in st.session_state: st.session_state.customer_history = []
 if "krize_aktivni" not in st.session_state: st.session_state.krize_aktivni = None
 if "aktivni_model_nazev" not in st.session_state: st.session_state.aktivni_model_nazev = "Automatická detekce"
@@ -281,17 +279,19 @@ with tab_canvas:
     with col7:
         st.markdown(f"<div class='canvas-block'><div class='canvas-tag'>7. Zdroje Příjmů</div>{canvas.get('prijmy', '')}</div>", unsafe_allow_html=True)
 
-    # =============== PŘEPIS DO FIREMNÍHO REJSTŘÍKU PŘI 80 % ===============
     if val_score >= 80 and not is_teacher:
         st.divider()
         st.success("Dosáhli jste potřebného ověření (80 %)! Váš byznys model je schválen mentorem.")
         st.markdown("Nyní můžete svůj validovaný model zapsat do hlavního profilu vaší firmy (Zakladatelského spisu).")
         
         if st.button("Zapsat schválený byznys plán do firemního rejstříku", type="primary"):
-            spis_text = f"**NAŠE ŘEŠENÍ (MVP):**\n{canvas.get('reseni', '')}\n\n" \
-                        f"**ŘEŠÍME PROBLÉM:**\n{canvas.get('problem', '')}\n\n" \
-                        f"**CÍLOVÁ SKUPINA:**\n{canvas.get('cilovka', '')}\n\n" \
-                        f"**UNIKÁTNÍ HODNOTA:**\n{canvas.get('hodnota', '')}"
+            # OPRAVA CHYBY: Bezpečné sčítání textu (odstraněna zpětná lomítka z konce řádků)
+            spis_text = (
+                f"**NAŠE ŘEŠENÍ (MVP):**\n{canvas.get('reseni', '')}\n\n"
+                f"**ŘEŠÍME PROBLÉM:**\n{canvas.get('problem', '')}\n\n"
+                f"**CÍLOVÁ SKUPINA:**\n{canvas.get('cilovka', '')}\n\n"
+                f"**UNIKÁTNÍ HODNOTA:**\n{canvas.get('hodnota', '')}"
+            )
             
             r_patch = requests.patch(
                 f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{active_firma_id}",
@@ -316,8 +316,6 @@ with tab_mentor:
             type=["png", "jpg", "jpeg", "webp", "pdf", "docx", "txt", "csv", "md"],
             key="mentor_file_uploader"
         )
-        if uploaded_doc:
-            st.success(f"Připraven soubor: `{uploaded_doc.name}`")
 
     st.divider()
 
@@ -326,61 +324,168 @@ with tab_mentor:
         file_tag = f"<div class='file-badge'>Příloha: {msg['file']}</div><br>" if msg.get("file") else ""
         st.markdown(f"<div class='{div_class}'><b>{'Vy' if msg['role']=='user' else 'Strategický Mentor'}:</b><br>{file_tag}{msg['content']}</div>", unsafe_allow_html=True)
         
-    # TEXT INPUT - POTVRDÍ SE ENTEREM, ŽÁDNÉ TLAČÍTKO
-    user_input = st.text_input("Napište zprávu mentorovi a stiskněte Enter...", key="mentor_input")
-    
-    if user_input and not is_teacher:
-        file_payload = None
-        extra_text_content = ""
-        attached_name = None
-        
-        if uploaded_doc:
-            file_payload, extra_text_content = prepare_local_file_payload(uploaded_doc)
-            attached_name = uploaded_doc.name
-        
-        chat_history.append({
-            "role": "user", 
-            "content": user_input,
-            "file": attached_name
-        })
-        
-        full_user_prompt = user_input + extra_text_content
-        
-        prompt = f"""
-        Jsi zkušený, konstruktivní a věcný Lean Startup mentor a akcelerátorový partner (metodika Eric Ries / Steve Blank / Y Combinator).
-        Mluvíš česky. Nepoužívej žádné emotikony.
+    def submit_mentor():
+        if st.session_state.mentor_input.strip() and not is_teacher:
+            user_input = st.session_state.mentor_input
+            st.session_state.mentor_input = ""  # Automatické vymazání pole po odeslání Enterem
+            
+            file_payload = None
+            extra_text_content = ""
+            attached_name = None
+            
+            if uploaded_doc:
+                file_payload, extra_text_content = prepare_local_file_payload(uploaded_doc)
+                attached_name = uploaded_doc.name
+            
+            chat_history.append({
+                "role": "user", 
+                "content": user_input,
+                "file": attached_name
+            })
+            
+            full_user_prompt = user_input + extra_text_content
+            
+            prompt = f"""
+            Jsi zkušený, konstruktivní a věcný Lean Startup mentor a akcelerátorový partner (metodika Eric Ries / Steve Blank / Y Combinator).
+            Mluvíš česky. Nepoužívej žádné emotikony.
 
-        TVŮJ PŘÍSTUP:
-        1. Buď věcný, analytický, profesionální partner k diskusi.
-        2. Pokud zakladatel přiložil dokument, tabulku, výkres nebo jiný soubor, detailně jej zanalyzuj a zohledni ve své odpovědi.
-        3. Rozuměj fázím vývoje: Pokud je projekt ve fázi MVP/pilotu, zaměř se na ověření u Early Adopters a první reálné testy.
-        4. Zhodnoť argumenty zakladatele, potvrď, co dává smysl, a polož 1-2 přesné diagnostické otázky k ověření rizik.
+            TVŮJ PŘÍSTUP:
+            1. Buď věcný, analytický, profesionální partner k diskusi.
+            2. Pokud zakladatel přiložil dokument, detailně jej zanalyzuj a zohledni ve své odpovědi.
+            3. Rozuměj fázím vývoje: Pokud je projekt ve fázi MVP/pilotu, zaměř se na ověření u Early Adopters a první reálné testy.
+            4. Zhodnoť argumenty zakladatele, potvrď, co dává smysl, a polož 1-2 přesné diagnostické otázky k ověření rizik.
 
-        Aktuální stav Lean Canvasu: {json.dumps(canvas, ensure_ascii=False)}
-        Aktuální skóre validace (0-100): {val_score}
-        Vstup od zakladatele: {full_user_prompt}
+            Aktuální stav Lean Canvasu: {json.dumps(canvas, ensure_ascii=False)}
+            Aktuální skóre validace (0-100): {val_score}
+            Vstup od zakladatele: {full_user_prompt}
 
-        POKYN: Odpověz VÝHRADNĚ ve validním JSON formátu bez jakýchkoliv markdown značek okolo.
-        Struktura:
-        {{
-            "odpoved_mentora": "Strukturovaná, věcná zpětná vazba + 1-2 přesné otázky k ověření hypotézy.",
-            "nove_skore": [Číslo 0-100 podle toho, nakolik je model ujasněný a promyšlený],
-            "canvas_updaty": {{
-                "problem": "Stručný souhrn problému",
-                "reseni": "Stručný souhrn řešení / MVP",
-                "hodnota": "Unikátní hodnota (USP)",
-                "nefer_vyhoda": "Bariéra vstupu / nefér výhoda",
-                "cilovka": "Konkrétní Early Adopters",
-                "metriky": "Klíčové metriky úspěchu pilotu",
-                "kanaly": "Jak se dostat k nákupčímu",
-                "naklady": "Hlavní nákladové položky",
-                "prijmy": "Cenový model / monetizace"
+            POKYN: Odpověz VÝHRADNĚ ve validním JSON formátu bez jakýchkoliv markdown značek okolo.
+            Struktura:
+            {{
+                "odpoved_mentora": "Strukturovaná, věcná zpětná vazba + 1-2 přesné otázky k ověření hypotézy.",
+                "nove_skore": 50,
+                "canvas_updaty": {{
+                    "problem": "Stručný souhrn problému",
+                    "reseni": "Stručný souhrn řešení / MVP",
+                    "hodnota": "Unikátní hodnota (USP)",
+                    "nefer_vyhoda": "Bariéra vstupu / nefér výhoda",
+                    "cilovka": "Konkrétní Early Adopters",
+                    "metriky": "Klíčové metriky úspěchu pilotu",
+                    "kanaly": "Jak se dostat k nákupčímu",
+                    "naklady": "Hlavní nákladové položky",
+                    "prijmy": "Cenový model / monetizace"
+                }}
             }}
-        }}
+            """
+            
+            with st.spinner("Mentor analyzuje zprávu a přiložené podklady..."):
+                try:
+                    raw_text = call_ai_multimodal(prompt, file_payload)
+                    raw_text = re.sub(r'^```json\s*', '', raw_text)
+                    raw_text = re.sub(r'\s*```$', '', raw_text)
+                    
+                    match = re.search(r'\{.*\}', raw_text, re.DOTALL)
+                    if match:
+                        ai_data = json.loads(match.group(0))
+                        chat_history.append({
+                            "role": "mentor", 
+                            "content": ai_data.get("odpoved_mentora", "Rozumím."),
+                            "file": None
+                        })
+                        new_score = ai_data.get("nove_skore", val_score)
+                        
+                        new_canvas = ai_data.get("canvas_updaty", {})
+                        for k in canvas.keys():
+                            if k in new_canvas and new_canvas[k]: 
+                                canvas[k] = new_canvas[k]
+
+                        save_to_db({
+                            "chat_history": chat_history,
+                            "validation_score": new_score,
+                            "canvas": canvas
+                        })
+                    else:
+                        chat_history.append({"role": "mentor", "content": raw_text, "file": None})
+                        save_to_db({"chat_history": chat_history})
+                except Exception as e:
+                    chat_history.append({"role": "mentor", "content": f"Chyba při zpracování: {str(e)}", "file": None})
+                    save_to_db({"chat_history": chat_history})
+
+    st.text_input("Napište zprávu mentorovi a stiskněte Enter (odeslání proběhne bez tlačítka)...", key="mentor_input", on_change=submit_mentor)
+
+# ==================== TAB 3: ZÁKAZNÍK ====================
+with tab_zakaznik:
+    st.subheader("Customer Discovery (Rozhovory nanečisto)")
+    st.write("Otestujte svou hodnotovou nabídku na konkrétní personě zákazníka.")
+    
+    with st.container(border=True):
+        col_c1, col_c2, col_c3 = st.columns(3)
+        with col_c1: persona_vek = st.text_input("Věk zákazníka:", value="52")
+        with col_c2: persona_role = st.text_input("Povolání / Pozice:", value="Ředitel / Učitel odborné školy")
+        with col_c3: persona_zajem = st.text_input("Charakteristika / Priority:", value="Konzervativní, málo času na novinky, limitovaný rozpočet")
+    
+    st.divider()
+    for msg in st.session_state.customer_history:
+        div_class = "chat-user" if msg["role"] == "user" else "chat-mentor"
+        st.markdown(f"<div class='{div_class}'><b>{'Vy' if msg['role']=='user' else 'Zákazník'}:</b><br>{msg['content']}</div>", unsafe_allow_html=True)
+    
+    def submit_customer():
+        if st.session_state.customer_input.strip() and not is_teacher:
+            cust_input = st.session_state.customer_input
+            st.session_state.customer_input = "" # Automatické vymazání pole po odeslání Enterem
+            
+            st.session_state.customer_history.append({"role": "user", "content": cust_input})
+            
+            prompt_cust = f"""
+            Hraješ roli reálného potenciálního zákazníka. Tvé parametry: Věk {persona_vek}, Pozice: {persona_role}, Vlastnosti: {persona_zajem}.
+            Kontext projektu zakladatele: {json.dumps(canvas, ensure_ascii=False)}.
+            Mluvíš česky. Reaguj autenticky a realisticky podle své role. Zajímej se o to, co ti to ušetří, kolik času tě to bude stát a jak složité je to zavést. Nepoužívej emotikony.
+
+            Vstup od zakladatele: {cust_input}
+            """
+            with st.spinner("Zákazník formuluje odpověď..."):
+                try:
+                    res_cust = call_ai_multimodal(prompt_cust)
+                    st.session_state.customer_history.append({"role": "customer", "content": res_cust})
+                except Exception as e:
+                    st.error(f"Chyba: {e}")
+
+    st.text_input("Položte zákazníkovi otázku a stiskněte Enter (odeslání proběhne bez tlačítka)...", key="customer_input", on_change=submit_customer)
+
+# ==================== TAB 4: KRIZE ====================
+with tab_krize:
+    st.subheader("Black Swan (Simulace tržních rizik)")
+    st.write("Vygenerujte realistickou tržní komplikaci a otestujte schopnost týmu reagovat.")
+    
+    if st.button("Simulovat tržní komplikaci", type="primary") and not is_teacher:
+        prompt_krize = f"""
+        Kontext projektu: {json.dumps(canvas, ensure_ascii=False)}.
+        Vymysli věcnou, vysoce realistickou tržní nebo provozní komplikaci (např. zpoždění dotačních titulů na školách, nezájem části sboru o novou metodiku, změna legislativy).
+        Popiš situaci ve 2-3 větách a polož otázku na strategické řešení. Nepoužívej emotikony.
         """
-        
-        with st.spinner("Mentor analyzuje zprávu a přiložené podklady..."):
+        with st.spinner("Generuji krizový scénář..."):
             try:
-                raw_text = call_ai_multimodal(prompt, file_payload)
-                raw_text = re.sub(r'^```json\s*', '', raw_text)
-                raw_text = re.sub(r'\s*
+                st.session_state.krize_aktivni = call_ai_multimodal(prompt_krize)
+            except Exception as e:
+                st.error(f"Chyba: {e}")
+        
+    if st.session_state.krize_aktivni:
+        st.markdown(f"<div class='crisis-box'><b>SCÉNÁŘ K ŘEŠENÍ:</b><br><br>{st.session_state.krize_aktivni}</div><br>", unsafe_allow_html=True)
+        
+        def submit_crisis():
+            if st.session_state.krize_input.strip() and not is_teacher:
+                reseni = st.session_state.krize_input
+                st.session_state.krize_input = "" # Automatické vymazání pole po odeslání Enterem
+                
+                prompt_reseni = f"""
+                Krizová situace: {st.session_state.krize_aktivni}.
+                Navržené řešení zakladatele: {reseni}.
+                Zhodnoť věcně a realisticky, zda je toto řešení proveditelné a jaká nová rizika případně přináší. Ohodnoť 1-10 body. Nepoužívej emotikony.
+                """
+                with st.spinner("Vyhodnocuji řešení..."):
+                    try:
+                        st.info(call_ai_multimodal(prompt_reseni))
+                    except Exception as e:
+                        st.error(f"Chyba: {e}")
+
+        st.text_input("Váš návrh řešení a mitigace rizika (Odešlete stisknutím klávesy Enter)...", key="krize_input", on_change=submit_crisis)
