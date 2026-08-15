@@ -46,11 +46,13 @@ if not st.session_state.prihlasen and "user" in st.query_params:
         st.session_state.skolni_kod = res_auto[0].get("skolni_kod", "")
         st.session_state.trida_nazev = res_auto[0].get("trida_nazev", "")
 
+# DEFINICE STRÁNEK
 zaci_page = st.Page("pages/1_Zaci.py", title="Moje peněženka")
 firma_page = st.Page("pages/2_Firma.py", title="Firemní Dashboard")
 ucitel_page = st.Page("pages/3_Ucitel.py", title="Kontrolní úřad")
 trh_page = st.Page("pages/4_Trh.py", title="Tržiště produktů")
 zebricky_page = st.Page("pages/5_Zebricky.py", title="Síň slávy")
+lean_page = st.Page("pages/6_AI_Lean_Startup.py", title="Lean Startup Validator")
 
 # Živá synchronizace aktuálních údajů
 if st.session_state.prihlasen and st.session_state.uzivatel:
@@ -61,7 +63,7 @@ if st.session_state.prihlasen and st.session_state.uzivatel:
         st.session_state.trida_nazev = res_live[0].get("trida_nazev", "")
         st.session_state.skolni_kod = res_live[0].get("skolni_kod", "")
 
-# KONTROLA, ZDA ŽÁK PATŘÍ K NĚJAKÉ FIRMĚ (CEO, CFO, CTO NEBO ZAMĚSTNANEC)
+# Kontrola firemní příslušnosti uživatele
 ma_pristup_k_firme = False
 moje_firemni_pozice = None
 
@@ -127,7 +129,6 @@ if not st.session_state.prihlasen:
                         st.session_state.skolni_kod = res[0].get("skolni_kod", "")
                         st.session_state.trida_nazev = res[0].get("trida_nazev", "")
                         
-                        # Uložení do URL pro přežití F5
                         st.query_params["user"] = res[0]["jmeno"]
                         st.rerun()
                     else:
@@ -303,15 +304,15 @@ else:
             st.rerun()
             
     # =========================================================================
-    # CHYTRÁ NAVIGACE: POKUD JE ŽÁK VE FIRMĚ, MÁ AUTOMATICKY PŘÍSTUP K DASHBOARDU
+    # NAVIGACE SE ZAPRACOVANÝM LEAN STARTUP VALIDATOREM
     # =========================================================================
     if st.session_state.role == "ucitel":
-        pg = st.navigation([ucitel_page, trh_page, zebricky_page])
+        pg = st.navigation([ucitel_page, trh_page, zebricky_page, lean_page])
     elif st.session_state.role == "admin":
-        pg = st.navigation([zaci_page, firma_page, ucitel_page, trh_page, zebricky_page])
+        pg = st.navigation([zaci_page, firma_page, ucitel_page, trh_page, zebricky_page, lean_page])
     elif st.session_state.role == "firma" or ma_pristup_k_firme:
-        pg = st.navigation([firma_page, zaci_page, trh_page, zebricky_page])
+        pg = st.navigation([firma_page, zaci_page, trh_page, zebricky_page, lean_page])
     else:
-        pg = st.navigation([zaci_page, trh_page, zebricky_page])
+        pg = st.navigation([zaci_page, trh_page, zebricky_page, lean_page])
     
     pg.run()
