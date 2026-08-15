@@ -67,23 +67,26 @@ if st.session_state.prihlasen and st.session_state.uzivatel and st.session_state
     r_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{sk_kod}&select=*", headers=headers).json()
     if isinstance(r_firmy, list):
         for f in r_firmy:
+            # Bezpečné získání názvu firmy (obchodni_firma nebo nazev)
+            jmeno_firmy = f.get("obchodni_firma", f.get("nazev", "Firemní tým"))
+            
             if str(f.get('ceo_jmeno','')).lower() == u_name:
                 ma_pristup_k_firme = True
                 moje_firemni_pozice = "CEO"
-                st.session_state.firma_id = f["id"]
-                st.session_state.firma_nazev = f["nazev"]
+                st.session_state.firma_id = f.get("id")
+                st.session_state.firma_nazev = jmeno_firmy
                 break
             elif str(f.get('cfo_jmeno','')).lower() == u_name:
                 ma_pristup_k_firme = True
                 moje_firemni_pozice = "CFO"
-                st.session_state.firma_id = f["id"]
-                st.session_state.firma_nazev = f["nazev"]
+                st.session_state.firma_id = f.get("id")
+                st.session_state.firma_nazev = jmeno_firmy
                 break
             elif str(f.get('cto_jmeno','')).lower() == u_name:
                 ma_pristup_k_firme = True
                 moje_firemni_pozice = "CTO"
-                st.session_state.firma_id = f["id"]
-                st.session_state.firma_nazev = f["nazev"]
+                st.session_state.firma_id = f.get("id")
+                st.session_state.firma_nazev = jmeno_firmy
                 break
                 
     if not ma_pristup_k_firme:
@@ -92,7 +95,7 @@ if st.session_state.prihlasen and st.session_state.uzivatel and st.session_state
             ma_pristup_k_firme = True
             moje_firemni_pozice = r_zam[0].get("pozice", "Zaměstnanec")
             st.session_state.firma_id = r_zam[0].get("firma_id")
-            st.session_state.firma_nazev = r_zam[0].get("firma_nazev")
+            st.session_state.firma_nazev = r_zam[0].get("firma_nazev", "Tým")
 
 if not st.session_state.prihlasen:
     st.markdown("""
