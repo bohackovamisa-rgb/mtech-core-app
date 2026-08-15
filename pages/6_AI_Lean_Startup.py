@@ -281,6 +281,32 @@ with tab_canvas:
     with col7:
         st.markdown(f"<div class='canvas-block'><div class='canvas-tag'>7. Zdroje Příjmů</div>{canvas.get('prijmy', '')}</div>", unsafe_allow_html=True)
 
+    # =============== PŘEPIS DO FIREMNÍHO REJSTŘÍKU PŘI 80 % ===============
+    if val_score >= 80 and not is_teacher:
+        st.divider()
+        st.success("🎉 Dosáhli jste potřebného ověření (80 %)! Váš byznys model je schválen mentorem.")
+        st.markdown("Nyní můžete svůj validovaný model zapsat do hlavního profilu vaší firmy (Zakladatelského spisu).")
+        
+        if st.button("✅ Zapsat schválený byznys plán do firemního rejstříku", type="primary"):
+            # Vytvoření čitelného textu z Canvasu
+            spis_text = f"**NAŠE ŘEŠENÍ (MVP):**\n{canvas.get('reseni', '')}\n\n" \
+                        f"**ŘEŠÍME PROBLÉM:**\n{canvas.get('problem', '')}\n\n" \
+                        f"**CÍLOVÁ SKUPINA:**\n{canvas.get('cilovka', '')}\n\n" \
+                        f"**UNIKÁTNÍ HODNOTA:**\n{canvas.get('hodnota', '')}"
+            
+            # Odeslání do hlavní tabulky firmy (předpokládáme, že popis se ukládá do sloupce 'popis')
+            r_patch = requests.patch(
+                f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{active_firma_id}",
+                headers=HEADERS,
+                json={"popis": spis_text}
+            )
+            
+            if r_patch.status_code in [200, 204]:
+                st.balloons()
+                st.success("Úspěšně zapsáno! Váš byznys plán je nyní viditelný na profilu firmy v M-TECH CORE.")
+            else:
+                st.error(f"Něco se pokazilo při zápisu do databáze (Kód: {r_patch.status_code}). Zkontrolujte, zda tabulka firmy obsahuje sloupec 'popis'.")
+
 # ==================== TAB 2: MENTOR ====================
 with tab_mentor:
     st.subheader("Konzultace s Lean Startup Mentorem")
