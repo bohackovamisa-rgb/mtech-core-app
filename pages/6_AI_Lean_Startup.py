@@ -3,11 +3,12 @@ import json
 import re
 import requests
 
-if "user_id" not in st.session_state or not st.session_state.user_id:
-    st.warning("Pro přístup k modulu Lean Startup je nutné se přihlásit.")
+# 1. Kontrola přihlášení podle proměnných z app.py
+if not st.session_state.get("prihlasen") or not st.session_state.get("uzivatel"):
+    st.warning("Pro přístup k modulu Lean Startup je nutné se přihlásit na hlavní stránce.")
     st.stop()
 
-SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
+SUPABASE_URL = st.secrets.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 API_KEY = st.secrets.get("GEMINI_API_KEY", "") or st.secrets.get("AI_API_KEY", "")
 
@@ -37,33 +38,59 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
 </style>
 """, unsafe_allow_html=True)
 
-firma_id = st.session_state.get("firma_id")
+uzivatel = str(st.session_state.uzivatel).strip()
+skolni_kod = st.session_state.get("skolni_kod", "")
 is_teacher = st.session_state.get("role") == "ucitel"
 
-if not firma_id and not is_teacher:
-    st.info("Pro zobrazení modulu Lean Startup musíte být zakladatelem nebo zaměstnancem registrované firmy.")
-    st.stop()
+active_firma_id = None
+active_firma_nazev = None
 
+# 2. Automatické dohledání firmy přihlášeného žáka / učitele
 if is_teacher:
     st.markdown("<div class='mtech-header'>Kontrolní audit: Lean Startup projekty</div>", unsafe_allow_html=True)
-    res_f = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skola_id=eq.{st.session_state.skola_id}&select=id,nazev", headers=HEADERS).json()
-    firm_opts = {f["nazev"]: f["id"] for f in res_f} if res_f else {}
+    res_f = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{skolni_kod}&select=id,nazev", headers=HEADERS).json()
+    firm_opts = {f["nazev"]: f["id"] for f in res_f} if isinstance(res_f, list) and res_f else {}
     if not firm_opts:
-        st.warning("V této instanci zatím nejsou evidovány žádné studentské firmy.")
+        st.warning("V této škole zatím nejsou evidovány žádné studentské firmy.")
         st.stop()
     selected_firm_name = st.selectbox("Vyberte firmu k auditu:", list(firm_opts.keys()))
     active_firma_id = firm_opts[selected_firm_name]
+    active_firma_nazev = selected_firm_name
 else:
-    st.markdown("<div class='mtech-header'>M-TECH Lean Startup Validator</div>", unsafe_allow_html=True)
-    st.markdown("<div class='mtech-sub'>Validace hypotéz, experimentální testování a řízení životního cyklu produktu podle metodiky Erica Riese.</div>", unsafe_allow_html=True)
-    active_firma_id = firma_id
+    # Kontrola, zda je žák CEO, CFO nebo CTO
+    r_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{skolni_kod}&select=id,nazev,ceo_jmeno,cfo_jmeno,cto_jmeno", headers=HEADERS).json()
+    if isinstance(r_firmy, list):
+        for f in r_firmy:
+            if uzivatel.lower() in [str(f.get('ceo_jmeno','')).lower(), str(f.get('cfo_jmeno','')).lower(), str(f.get('cto_jmeno','')).lower()]:
+                active_firma_id = f["id"]
+                active_firma_nazev = f["nazev"]
+                break
+                
+    # Kontrola, zda je žák řadový zaměstnanec
+    if not active_firma_id:
+        r_zam = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?jmeno_zamestnance=eq.{uzivatel}&select=*", headers=HEADERS).json()
+        if isinstance(r_zam, list) and len(r_zam) > 0:
+            active_firma_id = r_zam[0].get("firma_id")
+            active_firma_nazev = r_zam[0].get("firma_nazev", "Firemní tým")
+            if not active_firma_id and active_firma_nazev:
+                r_f_by_name = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?nazev=eq.{active_firma_nazev}&skolni_kod=eq.{skolni_kod}&select=id", headers=HEADERS).json()
+                if isinstance(r_f_by_name, list) and r_f_by_name:
+                    active_firma_id = r_f_by_name[0]["id"]
 
+    if not active_firma_id:
+        st.info("Pro práci s modulem Lean Startup musíte být zakladatelem nebo členem firmy. Založte firmu v záložce Firemní Dashboard.")
+        st.stop()
+
+    st.markdown(f"<div class='mtech-header'>M-TECH Lean Startup Validator: {active_firma_nazev}</div>", unsafe_allow_html=True)
+    st.markdown("<div class='mtech-sub'>Validace hypotéz, experimentální testování a řízení životního cyklu produktu podle metodiky Erica Riese.</div>", unsafe_allow_html=True)
+
+# 3. Načtení dat z tabulky firma_lean_projects
 res_p = requests.get(f"{SUPABASE_URL}/rest/v1/firma_lean_projects?firma_id=eq.{active_firma_id}", headers=HEADERS).json()
 
-if not res_p:
+if not res_p or not isinstance(res_p, list) or len(res_p) == 0:
     init_payload = {
         "firma_id": active_firma_id,
-        "skola_id": st.session_state.get("skola_id", ""),
+        "skola_id": skolni_kod,
         "canvas": {"problem": "", "reseni": "", "hodnota": "", "nefer_vyhoda": "", "cilovka": "", "metriky": "", "kanaly": "", "naklady": "", "prijmy": ""},
         "validation_score": 0,
         "current_phase": "1. Formulace hypotézy",
@@ -73,7 +100,7 @@ if not res_p:
         "pivot_history": []
     }
     r_create = requests.post(f"{SUPABASE_URL}/rest/v1/firma_lean_projects", headers=HEADERS, json=init_payload).json()
-    project_data = r_create[0] if r_create else init_payload
+    project_data = r_create[0] if (isinstance(r_create, list) and len(r_create) > 0) else init_payload
 else:
     project_data = res_p[0]
 
