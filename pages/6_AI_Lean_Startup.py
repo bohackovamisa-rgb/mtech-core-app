@@ -3,7 +3,6 @@ import json
 import re
 import requests
 
-# 1. Kontrola přihlášení podle proměnných z app.py
 if not st.session_state.get("prihlasen") or not st.session_state.get("uzivatel"):
     st.warning("Pro přístup k modulu Lean Startup je nutné se přihlásit na hlavní stránce.")
     st.stop()
@@ -45,10 +44,13 @@ is_teacher = st.session_state.get("role") == "ucitel"
 active_firma_id = None
 active_firma_nazev = None
 
-# 2. Automatické dohledání firmy přihlášeného žáka / učitele
+# Automatická detekce firemní příslušnosti
 if is_teacher:
     st.markdown("<div class='mtech-header'>Kontrolní audit: Lean Startup projekty</div>", unsafe_allow_html=True)
-    res_f = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{skolni_kod}&select=id,nazev", headers=HEADERS).json()
+    url_f = f"{SUPABASE_URL}/rest/v1/firmy?select=id,nazev,skolni_kod"
+    if skolni_kod:
+        url_f += f"&skolni_kod=eq.{skolni_kod}"
+    res_f = requests.get(url_f, headers=HEADERS).json()
     firm_opts = {f["nazev"]: f["id"] for f in res_f} if isinstance(res_f, list) and res_f else {}
     if not firm_opts:
         st.warning("V této škole zatím nejsou evidovány žádné studentské firmy.")
@@ -57,23 +59,29 @@ if is_teacher:
     active_firma_id = firm_opts[selected_firm_name]
     active_firma_nazev = selected_firm_name
 else:
-    # Kontrola, zda je žák CEO, CFO nebo CTO
-    r_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{skolni_kod}&select=id,nazev,ceo_jmeno,cfo_jmeno,cto_jmeno", headers=HEADERS).json()
+    # 1. Kontrola vedení (CEO, CFO, CTO) napříč celou tabulkou firem
+    r_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?select=id,nazev,ceo_jmeno,cfo_jmeno,cto_jmeno,skolni_kod", headers=HEADERS).json()
     if isinstance(r_firmy, list):
         for f in r_firmy:
-            if uzivatel.lower() in [str(f.get('ceo_jmeno','')).lower(), str(f.get('cfo_jmeno','')).lower(), str(f.get('cto_jmeno','')).lower()]:
+            ceo = str(f.get('ceo_jmeno', '') or '').strip().lower()
+            cfo = str(f.get('cfo_jmeno', '') or '').strip().lower()
+            cto = str(f.get('cto_jmeno', '') or '').strip().lower()
+            u_low = uzivatel.lower()
+            if u_low in [ceo, cfo, cto]:
                 active_firma_id = f["id"]
                 active_firma_nazev = f["nazev"]
+                if not skolni_kod and f.get("skolni_kod"):
+                    skolni_kod = f.get("skolni_kod")
                 break
                 
-    # Kontrola, zda je žák řadový zaměstnanec
+    # 2. Kontrola řadových zaměstnanců
     if not active_firma_id:
         r_zam = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?jmeno_zamestnance=eq.{uzivatel}&select=*", headers=HEADERS).json()
         if isinstance(r_zam, list) and len(r_zam) > 0:
             active_firma_id = r_zam[0].get("firma_id")
             active_firma_nazev = r_zam[0].get("firma_nazev", "Firemní tým")
             if not active_firma_id and active_firma_nazev:
-                r_f_by_name = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?nazev=eq.{active_firma_nazev}&skolni_kod=eq.{skolni_kod}&select=id", headers=HEADERS).json()
+                r_f_by_name = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?nazev=eq.{active_firma_nazev}&select=id", headers=HEADERS).json()
                 if isinstance(r_f_by_name, list) and r_f_by_name:
                     active_firma_id = r_f_by_name[0]["id"]
 
@@ -84,13 +92,13 @@ else:
     st.markdown(f"<div class='mtech-header'>M-TECH Lean Startup Validator: {active_firma_nazev}</div>", unsafe_allow_html=True)
     st.markdown("<div class='mtech-sub'>Validace hypotéz, experimentální testování a řízení životního cyklu produktu podle metodiky Erica Riese.</div>", unsafe_allow_html=True)
 
-# 3. Načtení dat z tabulky firma_lean_projects
+# Načtení dat z tabulky firma_lean_projects
 res_p = requests.get(f"{SUPABASE_URL}/rest/v1/firma_lean_projects?firma_id=eq.{active_firma_id}", headers=HEADERS).json()
 
 if not res_p or not isinstance(res_p, list) or len(res_p) == 0:
     init_payload = {
-        "firma_id": active_firma_id,
-        "skola_id": skolni_kod,
+        "firma_id": int(active_firma_id),
+        "skola_id": str(skolni_kod or ""),
         "canvas": {"problem": "", "reseni": "", "hodnota": "", "nefer_vyhoda": "", "cilovka": "", "metriky": "", "kanaly": "", "naklady": "", "prijmy": ""},
         "validation_score": 0,
         "current_phase": "1. Formulace hypotézy",
