@@ -53,12 +53,12 @@ if not st.session_state.get("prihlasen"):
                     st.session_state.firma_id = r_zam[0].get("firma_id")
                     st.session_state.firma_nazev = r_zam[0].get("firma_nazev", "Tým")
             
-            st.rerun() # Okamžitě načte stránku znovu, už s přihlášením
+            st.rerun()
 
-# Pokud ani záchranný kruh nepomohl (žák umazal jméno z URL):
+# Pokud ani záchranný kruh nepomohl:
 if not st.session_state.get("prihlasen") or not st.session_state.get("uzivatel"):
     st.warning("Spojení s aplikací bylo přerušeno (např. obnovením stránky bez parametrů).")
-    if st.button("🏠 Přejít zpět na hlavní přihlašovací stránku"):
+    if st.button("Přejít zpět na hlavní přihlašovací stránku"):
         st.switch_page("app.py")
     st.stop()
 
@@ -184,7 +184,7 @@ def call_ai_multimodal(prompt_text, inline_attachment=None):
 tab_canvas, tab_mentor, tab_zakaznik, tab_krize = st.tabs(["1. Lean Canvas", "2. Strategický mentor", "3. Zákaznický simulátor", "4. Generátor krizí"])
 
 with tab_canvas:
-    st.info("💡 **Lean Canvas je dynamický nástroj**, který se vyvíjí. Můžete si jej sice ručně vyplňovat a přepisovat sami v záložce Firemní Dashboard, ale pokud jej do Dashboardu **propíšete přímo odsud** (až po úspěšném obhájení a splnění 80 % u Mentora), získáte mnohem větší jistotu, že je váš byznys model skutečně reálný a životaschopný.")
+    st.info("Lean Canvas je dynamický nástroj, který se vyvíjí. Můžete si jej sice ručně vyplňovat a přepisovat sami v záložce Firemní Dashboard, ale pokud jej do Dashboardu propíšete přímo odsud (až po úspěšném obhájení a splnění 80 % u Mentora), získáte mnohem větší jistotu, že je váš byznys model skutečně reálný a životaschopný.")
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.markdown(f"<div class='canvas-block'><div class='canvas-tag'>1. Problém</div>{canvas.get('problem', '')}</div><br><div class='canvas-block'><div class='canvas-tag'>8. Klíčové Metriky</div>{canvas.get('metriky', '')}</div>", unsafe_allow_html=True)
@@ -204,10 +204,16 @@ with tab_canvas:
             spis_text = f"**NAŠE ŘEŠENÍ (MVP):**\n{canvas.get('reseni', '')}\n\n**ŘEŠÍME PROBLÉM:**\n{canvas.get('problem', '')}\n\n**CÍLOVÁ SKUPINA:**\n{canvas.get('cilovka', '')}\n\n**UNIKÁTNÍ HODNOTA:**\n{canvas.get('hodnota', '')}"
             requests.patch(f"{SUPABASE_URL}/rest/v1/firmy?id=eq.{active_firma_id}", headers=HEADERS, json={"popis": spis_text})
             
+            # OPRAVA MAPOVÁNÍ SLOUPCŮ DO DATABÁZE
             lc_payload = {
-                "problem": canvas.get("problem", ""), "reseni": canvas.get("reseni", ""), "hodnota": canvas.get("hodnota", ""),
-                "nefer_vyhoda": canvas.get("nefer_vyhoda", ""), "cilovka": canvas.get("cilovka", ""), "metriky": canvas.get("metriky", ""),
-                "kanaly": canvas.get("kanaly", ""), "naklady": canvas.get("naklady", ""), "prijmy": canvas.get("prijmy", "")
+                "problem": canvas.get("problem", ""), 
+                "reseni": canvas.get("reseni", ""), 
+                "hodnota": canvas.get("hodnota", ""),
+                "vyhoda": canvas.get("nefer_vyhoda", ""), 
+                "cilova_skupina": canvas.get("cilovka", ""), 
+                "kanaly": canvas.get("kanaly", ""), 
+                "naklady": canvas.get("naklady", ""), 
+                "prijmy": canvas.get("prijmy", "")
             }
             r_lc = requests.get(f"{SUPABASE_URL}/rest/v1/lean_canvas?firma_id=eq.{active_firma_id}", headers=HEADERS).json()
             if isinstance(r_lc, list) and len(r_lc) > 0:
@@ -218,7 +224,7 @@ with tab_canvas:
                 
             if r_patch.status_code in [200, 201, 204]:
                 st.balloons()
-                st.success("Úspěšně zapsáno! Váš AI vyvalidovaný plán se právě propsal do všech 9 okének na Firemním Dashboardu.")
+                st.success("Úspěšně zapsáno! Váš AI vyvalidovaný plán se právě propsal do všech okének na Firemním Dashboardu.")
             else: st.error(f"Chyba databáze ({r_patch.status_code}).")
 
 with tab_mentor:
