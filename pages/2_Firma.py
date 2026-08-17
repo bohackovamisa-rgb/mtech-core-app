@@ -490,7 +490,7 @@ if tab_vyvoj:
 # ==========================================
 if tab_hr:
     with tab_hr:
-        st.markdown(f"#### Obsazenost týmu: `{pocet_celkem_tym} / {planovany_pocet_clenu} osob`")
+        st.markdown(f"#### Obsazenost týmu: **{pocet_celkem_tym} / {planovany_pocet_clenu} osob**")
         
         if zamestnanci_firmy:
             df_zam = pd.DataFrame(zamestnanci_firmy)
