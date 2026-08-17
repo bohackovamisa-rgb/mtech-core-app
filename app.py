@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import random
 import string
+import urllib.parse
 
 st.set_page_config(page_title="M-TECH CORE", layout="wide")
 
@@ -35,11 +36,17 @@ if "firma_id" not in st.session_state: st.session_state.firma_id = None
 if "firma_nazev" not in st.session_state: st.session_state.firma_nazev = None
 
 # =========================================================================
-# NEPRŮSTŘELNÝ AUTO-LOGIN PŘI F5 (Z URL PARAMETRU)
+# NEPRŮSTŘELNÝ AUTO-LOGIN PŘI F5 (Z URL PARAMETRU) - OPRAVA KÓDOVÁNÍ
 # =========================================================================
 qs_user = st.query_params.get("user")
 if not st.session_state.prihlasen and qs_user:
-    res_auto = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{qs_user}&select=*", headers=headers).json()
+    # Zde je oprava s params, která řeší diakritiku
+    res_auto = requests.get(
+        f"{SUPABASE_URL}/rest/v1/uzivatele", 
+        headers=headers, 
+        params={"jmeno": f"eq.{qs_user}", "select": "*"}
+    ).json()
+    
     if isinstance(res_auto, list) and len(res_auto) > 0:
         st.session_state.prihlasen = True
         st.session_state.role = str(res_auto[0]["role"]).lower()
@@ -48,8 +55,7 @@ if not st.session_state.prihlasen and qs_user:
         st.session_state.skolni_kod = res_auto[0].get("skolni_kod", "")
         st.session_state.trida_nazev = res_auto[0].get("trida_nazev", "")
 
-# AGRESIVNÍ VYNUCENÍ PARAMETRU: Pokud je přihlášený, okamžitě to vrazí do URL
-# (Tohle přesně zabrání tomu, aby F5 zhavarovalo)
+# AGRESIVNÍ VYNUCENÍ PARAMETRU
 if st.session_state.prihlasen and st.session_state.uzivatel:
     st.query_params["user"] = st.session_state.uzivatel
 
@@ -64,12 +70,17 @@ lean_page = st.Page("pages/6_AI_Lean_Startup.py", title="Lean Startup Validator"
 ma_pristup_k_firme = False
 moje_firemni_pozice = None
 
-# ZJIŠTĚNÍ FIRMY UŽIVATELE
+# ZJIŠTĚNÍ FIRMY UŽIVATELE (BEZPEČNÉ DOTAZY)
 if st.session_state.prihlasen and st.session_state.uzivatel and st.session_state.role in ["zak", "firma"]:
     u_name = str(st.session_state.uzivatel).strip().lower()
     sk_kod = st.session_state.get("skolni_kod", "")
     
-    r_firmy = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{sk_kod}&select=*", headers=headers).json()
+    r_firmy = requests.get(
+        f"{SUPABASE_URL}/rest/v1/firmy", 
+        headers=headers, 
+        params={"skolni_kod": f"eq.{sk_kod}", "select": "*"}
+    ).json()
+    
     if isinstance(r_firmy, list):
         for f in r_firmy:
             jmeno_firmy = f.get("obchodni_firma", f.get("nazev", "Firemní tým"))
@@ -93,7 +104,12 @@ if st.session_state.prihlasen and st.session_state.uzivatel and st.session_state
                 break
                 
     if not ma_pristup_k_firme:
-        r_zam = requests.get(f"{SUPABASE_URL}/rest/v1/zamestnanci?jmeno_zamestnance=ilike.{u_name}&select=*", headers=headers).json()
+        r_zam = requests.get(
+            f"{SUPABASE_URL}/rest/v1/zamestnanci", 
+            headers=headers, 
+            params={"jmeno_zamestnance": f"ilike.{u_name}", "select": "*"}
+        ).json()
+        
         if isinstance(r_zam, list) and len(r_zam) > 0:
             ma_pristup_k_firme = True
             moje_firemni_pozice = r_zam[0].get("pozice", "Zaměstnanec")
@@ -113,7 +129,12 @@ if not st.session_state.prihlasen:
         heslo = st.text_input("Heslo:", type="password")
         if st.form_submit_button("Vstoupit do ekosystému"):
             if jmeno and heslo:
-                res = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{jmeno}&heslo=eq.{heslo}&select=*", headers=headers).json()
+                res = requests.get(
+                    f"{SUPABASE_URL}/rest/v1/uzivatele", 
+                    headers=headers, 
+                    params={"jmeno": f"eq.{jmeno}", "heslo": f"eq.{heslo}", "select": "*"}
+                ).json()
+                
                 if isinstance(res, list) and len(res) > 0:
                     st.session_state.prihlasen = True
                     st.session_state.role = str(res[0]["role"]).lower()
