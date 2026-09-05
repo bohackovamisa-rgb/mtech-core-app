@@ -4,6 +4,22 @@ import datetime
 import pandas as pd
 import json
 import re
+from docx import Document
+import io
+
+def vygeneruj_formular_docx(nadpis, radky):
+    doc = Document()
+    doc.add_heading(nadpis, level=1)
+    doc.add_paragraph("Metodika M-TECH CORE — oficiální formulář projektu")
+    doc.add_paragraph("")
+    for label, hodnota in radky:
+        p = doc.add_paragraph()
+        p.add_run(f"{label}: ").bold = True
+        p.add_run(str(hodnota))
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf
 
 st.set_page_config(page_title="Startup Hub a Dashboard", layout="wide")
 
@@ -280,6 +296,23 @@ if moje_firma["stave_licence"] == "UKONCENO":
     st.error("Tato společnost byla oficiálně zlikvidována a ukončena.")
 
 if je_vedeni:
+    if moje_firma.get("stave_licence") in ["SCHVALENO", "CEKA_NA_SCHVALENI"]:
+        with st.expander("📄 Zakladatelská listina (ke stažení)"):
+            radky_listiny = [
+                ("Název firmy", moje_firma.get("nazev_firmy", "")),
+                ("Právní forma", "Studentská firma v rámci projektu M-TECH CORE"),
+                ("Škola / licenční kód", moje_firma.get("skolni_kod", "")),
+                ("Třída", moje_firma.get("trida_nazev", "")),
+                ("Generální ředitel (CEO)", moje_firma.get("ceo_jmeno", "")),
+                ("Finanční ředitel (CFO)", moje_firma.get("cfo_jmeno", "-- neobsazeno --")),
+                ("Technický ředitel (CTO)", moje_firma.get("cto_jmeno", "-- neobsazeno --")),
+                ("Podnikatelský záměr", moje_firma.get("podnikatelsky_zamer", "")),
+                ("Zvolená úroveň projektu", f"Úroveň {moje_firma.get('uroven_projektu', 2)}" + (" (rozšíření o reálný prodej)" if int(moje_firma.get('uroven_projektu', 2)) == 3 else "")),
+                ("Počáteční kapitál", f"{moje_firma.get('pocatecni_kapital', 0)} M-Kreditů"),
+                ("Stav licence", moje_firma.get("stave_licence", "")),
+            ]
+            doc_buf = vygeneruj_formular_docx("Zakladatelská listina", radky_listiny)
+            st.download_button("⬇️ Stáhnout zakladatelskou listinu (Word)", data=doc_buf, file_name=f"zakladatelska_listina_{moje_firma.get('nazev_firmy','firma')}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")    
     tab_zalozeni, tab_brand, tab_vyvoj, tab_hr, tab_kalkulace, tab_ucto, tab_burza, tab_denik, tab_likvidace = st.tabs([
         "1. Zakladatelský Spis", "2. Brand a AI Tank", "3. Řízení (Agile)", "4. Tým a HR", "5. Cenotvorba", "6. Účetnictví a Platby", "7. Burza", "8. Deník a Porady", "9. Likvidace firmy"
     ])
@@ -562,6 +595,27 @@ if tab_kalkulace:
                 requests.post(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy", headers=headers, json={"firma_id": moje_firma["id"], "nazev_produktu": prod_nazev, "popis": popis, "prime_naklady": p_naklady, "marze_zisk": marze, "mtech_dan_procento": akt_dan_mtech, "konecna_cena": k_cena, "schvaleno_uradem": False})
                 st.rerun()
 
+        st.divider()
+        st.markdown("#### 📋 Vytvořené kalkulační listy")
+        res_moje_kalk = requests.get(f"{SUPABASE_URL}/rest/v1/kalkulacni_listy?firma_id=eq.{moje_firma['id']}&order=id.desc", headers=headers).json()
+        if isinstance(res_moje_kalk, list) and len(res_moje_kalk) > 0:
+            for kl in res_moje_kalk:
+                stav = "✅ Schváleno" if kl.get("schvaleno_uradem") else "⏳ Čeká na schválení"
+                st.write(f"**{kl['nazev_produktu']}** — {kl['konecna_cena']:.2f} M-K ({stav})")
+                radky_kalk = [
+                    ("Firma", moje_firma.get("nazev_firmy", "")),
+                    ("Název produktu", kl.get("nazev_produktu", "")),
+                    ("Popis", kl.get("popis", "")),
+                    ("Přímé náklady", f"{kl.get('prime_naklady', 0)} M-K"),
+                    ("Marže (odměna firmy)", f"{kl.get('marze_zisk', 0)} M-K"),
+                    ("M-TECH daň", f"{kl.get('mtech_dan_procento', 0)} %"),
+                    ("Konečná prodejní cena", f"{kl.get('konecna_cena', 0):.2f} M-K"),
+                    ("Schváleno Úřadem", "Ano" if kl.get("schvaleno_uradem") else "Ne"),
+                ]
+                doc_buf_kalk = vygeneruj_formular_docx(f"Kalkulační list produktu: {kl.get('nazev_produktu','')}", radky_kalk)
+                st.download_button("⬇️ Stáhnout kalkulační list (Word)", data=doc_buf_kalk, file_name=f"kalkulacni_list_{kl.get('nazev_produktu','produkt')}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", key=f"dl_kalk_{kl['id']}")
+        else:
+            st.info("Zatím nemáte vytvořený žádný kalkulační list.")
 # ==========================================
 # ZÁLOŽKA 6: ÚČETNICTVÍ A FIREMNÍ PLATBY
 # ==========================================
@@ -792,6 +846,20 @@ if tab_likvidace:
                 st.rerun()
 
         st.divider()       
+        st.markdown("#### 📄 Protokol o likvidaci a finančním vypořádání")
+        res_realny_lik = requests.get(f"{SUPABASE_URL}/rest/v1/realny_prodej?firma_id=eq.{moje_firma['id']}", headers=headers).json()
+        celkem_realnych_kc = sum(float(r.get('castka_kc', 0)) for r in (res_realny_lik if isinstance(res_realny_lik, list) else []))
+        radky_protokol = [
+            ("Firma", moje_firma.get("nazev_firmy", "")),
+            ("Škola / třída", f"{moje_firma.get('skolni_kod','')} / {moje_firma.get('trida_nazev','')}"),
+            ("Úroveň projektu", f"Úroveň {moje_firma.get('uroven_projektu', 2)}"),
+            ("Zůstatek firemního účtu (virtuálně)", f"{firemni_zustatek} M-Kreditů"),
+            ("Reálný výtěžek z prodeje veřejnosti", f"{celkem_realnych_kc:,.0f} Kč (zůstává ve Fondu rozvoje Unie rodičů/školy)"),
+            ("Stav likvidace", moje_firma.get("stave_licence", "")),
+            ("Datum vystavení", pd.Timestamp.now().strftime("%d.%m.%Y")),
+        ]
+        doc_buf_lik = vygeneruj_formular_docx("Protokol o likvidaci a finančním vypořádání", radky_protokol)
+        st.download_button("⬇️ Stáhnout likvidační protokol (Word)", data=doc_buf_lik, file_name=f"likvidacni_protokol_{moje_firma.get('nazev_firmy','firma')}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
         st.divider()
         if moje_firma.get("stave_licence") == "UKONCENO":
             st.info("Společnost již byla úspěšně zlikvidována a vymazána z rejstříku.")
