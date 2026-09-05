@@ -282,16 +282,20 @@ with tab_krize:
             canvas_pro_prompt = canvas if canvas else {"popis": "obecná studentská firma prodávající vlastní výrobky nebo drobnou službu spolužákům"}
             prompt_krize = (
                 "Jsi mentor studentských firem v ekonomickém vzdělávacím programu. "
-                "Vymysli REALISTICKOU PODNIKATELSKOU krizi (např. problém s dodavatelem, "
-                "výpadek klíčového člena týmu, náhlá změna poptávky na trhu, cash flow "
-                "problém, stížnost zákazníka, konkurence se stejným nápadem apod.) pro "
-                f"firmu s tímto byznys modelem: {json.dumps(canvas_pro_prompt, ensure_ascii=False)}. "
+                "Vymysli REALISTICKÝ MAKROEKONOMICKÝ NEBO GEOPOLITICKÝ ŠOK, který "
+                "zasáhne firmu zvenčí (např. válka nebo konflikt narušující dovoz "
+                "ropy a zvyšující ceny pohonných hmot, náhlé zvýšení daní vládou ČR, "
+                "uvalení cel na dovoz z Číny, prudká inflace, oslabení koruny, "
+                "zvýšení úrokových sazeb ČNB, celosvětová recese apod.) pro firmu "
+                f"s tímto byznys modelem: {json.dumps(canvas_pro_prompt, ensure_ascii=False)}. "
                 "Pokud byznys model neobsahuje dostatek konkrétních údajů, sám si dosaď "
                 "přiměřený příklad studentské firmy a NIKDY se neptej uživatele na "
                 "doplnění údajů — vždy rovnou vymysli konkrétní krizi, bez výjimky. "
                 "Piš ve 2 větách v češtině a na konci polož jednu konkrétní otázku, jak "
-                "by firma měla zareagovat. Krize se MUSÍ týkat podnikání a byznysu, "
-                "nikdy ne detektivních, špionážních nebo fantasy témat."
+                "by firma měla na tento vnější ekonomický šok zareagovat. Krize se MUSÍ "
+                "týkat makroekonomiky nebo geopolitiky s dopadem na byznys, nikdy ne "
+                "detektivních, špionážních nebo fantasy témat, a nikdy ne pouze interních "
+                "firemních problémů (dodavatel, zaměstnanci) bez vnějšího ekonomického základu."
             )
             try: st.session_state.krize_aktivni = call_ai_multimodal(prompt_krize)
             except Exception as e: st.error(str(e))
