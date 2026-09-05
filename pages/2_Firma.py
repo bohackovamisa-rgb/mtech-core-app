@@ -173,6 +173,10 @@ if not moje_firma:
         st.session_state.reg_data["ubo"] = st.text_input("Skutečný majitel (UBO):", value=f"{uzivatel}")
         st.session_state.reg_data["kodex_souhlas"] = st.checkbox("Zavazujeme se dodržovat Etický kodex mladého podnikatele.", value=True)
         st.write("---")
+        st.markdown("#### Rozšíření o reálný prodej")
+        st.caption("Zapojit firmu do reálného prodeje veřejnosti (např. na Dni otevřených dveří) schvaluje výhradně učitel/Úřad — zaškrtnutím jen podáváte žádost.")
+        st.session_state.reg_data["zada_urovne_3"] = st.checkbox("Žádáme o zapojení do rozšíření o reálný prodej (Úroveň 3).", value=False)
+        st.write("---")
         
         vklad_k_prevodu = int(st.session_state.reg_data.get("vklad", 0))
         st.caption(f"Odesláním žádosti bude z vaší osobní peněženky převedena částka **{vklad_k_prevodu} M-K** do základního kapitálu firmy.")
@@ -198,8 +202,9 @@ if not moje_firma:
                 requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers, json={"kredity": novy_osobni_zustatek})
                 st.session_state.kredity = novy_osobni_zustatek
 
+                zvolena_uroven = 3 if d.get("zada_urovne_3", False) else 2
                 payload = {
-                    "nazev_firmy": nazev, "skolni_kod": skolni_kod, "trida_nazev": trida_nazev, "uroven_projektu": 2,
+                    "nazev_firmy": nazev, "skolni_kod": skolni_kod, "trida_nazev": trida_nazev, "uroven_projektu": zvolena_uroven,
                     "ceo_jmeno": uzivatel, "cfo_jmeno": cfo_val, "cto_jmeno": cto_val, "podnikatelsky_zamer": zamer_str,
                     "pocatecni_kapital": int(vklad_k_prevodu), "stave_licence": "CEKA_NA_SCHVALENI", "duvod_zamitnuti": ""
                 }
