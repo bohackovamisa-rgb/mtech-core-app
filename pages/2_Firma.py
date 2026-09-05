@@ -643,7 +643,33 @@ if tab_ucto:
             st.dataframe(pd.DataFrame(res_kniha)[['datum', 'typ_transakce', 'titul', 'castka']], use_container_width=True)
         else:
             st.info("Kniha transakcí je prázdná.")
+        if int(moje_firma.get("uroven_projektu", 2)) == 3:
+            st.divider()
+            st.markdown("#### 🏪 Zápis reálného prodeje (Úroveň 3)")
+            st.caption("Sem zapisuj skutečné tržby z prodeje veřejnosti — v Kč. Tyto peníze jdou vždy přímo na účet školy/Unie rodičů, appka je jen eviduje pro účetní.")
+            with st.form("form_realny_prodej", clear_on_submit=True):
+                rp_produkt = st.text_input("Název produktu:")
+                col_rp1, col_rp2 = st.columns(2)
+                rp_ks = col_rp1.number_input("Počet kusů:", min_value=1, value=1)
+                rp_castka = col_rp2.number_input("Celková částka (Kč):", min_value=0.0, value=0.0, step=1.0)
+                rp_platba = st.selectbox("Způsob platby:", ["hotovost", "QR platba"])
+                rp_poznamka = st.text_input("Poznámka (nepovinné):")
+                if st.form_submit_button("Zapsat reálný prodej"):
+                    if not rp_produkt.strip() or rp_castka <= 0:
+                        st.error("Vyplňte název produktu a částku větší než 0.")
+                    else:
+                        requests.post(f"{SUPABASE_URL}/rest/v1/realny_prodej", headers=headers, json={
+                            "firma_id": moje_firma["id"], "popis_produktu": rp_produkt.strip(),
+                            "pocet_ks": rp_ks, "castka_kc": rp_castka, "zpusob_platby": rp_platba,
+                            "zapsal": uzivatel, "poznamka": rp_poznamka.strip()
+                        })
+                        st.success("Reálný prodej zapsán.")
+                        st.rerun()
 
+            res_moje_rp = requests.get(f"{SUPABASE_URL}/rest/v1/realny_prodej?firma_id=eq.{moje_firma['id']}&order=datum.desc", headers=headers).json()
+            if isinstance(res_moje_rp, list) and len(res_moje_rp) > 0:
+                st.dataframe(pd.DataFrame(res_moje_rp)[["datum", "popis_produktu", "pocet_ks", "castka_kc", "zpusob_platby"]], use_container_width=True)
+                st.metric("Celkem reálných tržeb", f"{sum(r['castka_kc'] for r in res_moje_rp):,.0f} Kč")
 # ==========================================
 # ZÁLOŽKA 7: BURZA
 # ==========================================
