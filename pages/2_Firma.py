@@ -727,7 +727,40 @@ if tab_likvidace:
             st.markdown("1. **Vypořádání závazků:** Vyplacení všech mezd zaměstnancům a zaplacení daní.")
             st.markdown("2. **Rozdělení likvidačního zůstatku:** Zbývající finanční prostředky zůstávají zakladatelům.")
             st.markdown("3. **Výmaz z rejstříku:** Oznámení Kontrolnímu úřadu o definitivním ukončení činnosti.")
-        
+         st.divider()
+        st.markdown("#### Rozdělení dividendy (nepovinné, před ukončením)")
+        st.caption("Rozděl část virtuálního zisku firmy mezi vlastníky akcií (investory), pokud firma nějaké akcie prodala.")
+
+        res_akcionari = requests.get(f"{SUPABASE_URL}/rest/v1/vlastnici_akcii?firma_id=eq.{moje_firma['id']}&select=*", headers=headers).json()
+        akcionari = res_akcionari if isinstance(res_akcionari, list) else []
+        celkem_prodanych_akcii = sum(int(a.get('pocet_akcii', 0)) for a in akcionari)
+
+        if celkem_prodanych_akcii == 0:
+            st.info("Firma zatím neprodala žádné akcie, dividendu není komu vyplatit.")
+        else:
+            st.write(f"Firma má {celkem_prodanych_akcii} prodaných podílů mezi {len(akcionari)} investory.")
+            dividenda_pct = st.slider("Kolik % aktuálního zůstatku rozdělit jako dividendu:", 0, 50, 20, key="divid_pct")
+            castka_na_rozdeleni = firemni_zustatek * (dividenda_pct / 100.0)
+            st.write(f"K rozdělení: **{castka_na_rozdeleni:.1f} M-K** (podle podílu na {celkem_prodanych_akcii} akciích)")
+
+            if st.button("Vyplatit dividendu akcionářům", key="btn_vyplat_dividendu"):
+                for a in akcionari:
+                    podil = int(a.get('pocet_akcii', 0)) / celkem_prodanych_akcii
+                    castka_akcionari = castka_na_rozdeleni * podil
+                    if castka_akcionari > 0:
+                        res_akcionar_u = requests.get(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{a['majitel_jmeno']}", headers=headers).json()
+                        if res_akcionar_u:
+                            requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{a['majitel_jmeno']}", headers=headers, json={
+                                "kredity": res_akcionar_u[0]['kredity'] + castka_akcionari
+                            })
+                requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={
+                    "firma_id": moje_firma['id'], "typ_transakce": "VYDEJ",
+                    "titul": f"Výplata dividendy akcionářům ({dividenda_pct}% zisku)", "castka": castka_na_rozdeleni, "auditovano": True
+                })
+                st.success("Dividenda byla vyplacena.")
+                st.rerun()
+
+        st.divider()       
         st.divider()
         if moje_firma.get("stave_licence") == "UKONCENO":
             st.info("Společnost již byla úspěšně zlikvidována a vymazána z rejstříku.")
