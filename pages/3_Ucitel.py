@@ -553,3 +553,46 @@ else:
                             st.markdown(cisty_text)
                 else:
                     st.info("Firma zatím neodevzdala žádný zápis z porady.")
+st.divider()
+st.markdown("### 📥 Export reálných tržeb pro účetní")
+st.caption("Stáhni přehled reálných tržeb všech firem (Úroveň 3) za zvolené období — pro účetní Unie rodičů nebo školní účetní.")
+
+col_exp1, col_exp2 = st.columns(2)
+datum_od = col_exp1.date_input("Od data:")
+datum_do = col_exp2.date_input("Do data:")
+
+if st.button("Vygenerovat export"):
+    res_export = requests.get(
+        f"{SUPABASE_URL}/rest/v1/realny_prodej?datum=gte.{datum_od}&datum=lte.{datum_do}&order=datum.asc",
+        headers=headers
+    ).json()
+    radky = res_export if isinstance(res_export, list) else []
+
+    if not radky:
+        st.info("Za zvolené období nejsou žádné reálné tržby.")
+    else:
+        firmy_pro_export = requests.get(f"{SUPABASE_URL}/rest/v1/firmy?skolni_kod=eq.{skolni_kod}&select=id,nazev_firmy,trida_nazev", headers=headers).json()
+        firmy_map = {f["id"]: f for f in (firmy_pro_export if isinstance(firmy_pro_export, list) else [])}
+
+        df_export = pd.DataFrame(radky)
+        df_export["Firma"] = df_export["firma_id"].map(lambda x: firmy_map.get(x, {}).get("nazev_firmy", "Neznámá"))
+        df_export["Třída"] = df_export["firma_id"].map(lambda x: firmy_map.get(x, {}).get("trida_nazev", ""))
+        df_export = df_export.rename(columns={
+            "datum": "Datum", "popis_produktu": "Produkt", "pocet_ks": "Počet ks",
+            "castka_kc": "Částka (Kč)", "zpusob_platby": "Způsob platby",
+            "zapsal": "Zapsal", "poznamka": "Poznámka"
+        })
+        sloupce_final = ["Datum", "Firma", "Třída", "Produkt", "Počet ks", "Částka (Kč)", "Způsob platby", "Zapsal", "Poznámka"]
+        df_export = df_export[[c for c in sloupce_final if c in df_export.columns]]
+
+        st.dataframe(df_export, use_container_width=True)
+        celkem_kc = df_export["Částka (Kč)"].sum()
+        st.metric("Celková částka za období", f"{celkem_kc:,.0f} Kč")
+
+        csv_data = df_export.to_csv(index=False, sep=";").encode("utf-8-sig")
+        st.download_button(
+            "📥 Stáhnout CSV pro účetní",
+            data=csv_data,
+            file_name=f"realne_trzby_{datum_od}_{datum_do}.csv",
+            mime="text/csv"
+        )
