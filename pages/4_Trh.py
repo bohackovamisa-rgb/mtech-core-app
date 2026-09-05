@@ -105,3 +105,50 @@ if res_moje_objednavky:
     st.dataframe(df[['datum', 'Firma', 'produkt', 'cena']], use_container_width=True)
 else:
     st.info("Zatím jste na tržišti neprovedli žádný nákup.")
+st.write("---")
+st.subheader("📈 Burza: Investice do studentských firem")
+st.caption("Investuj své M-Kredity do akcií (podílů) studentských firem. Riziko i případná dividenda jsou virtuální — žádné reálné peníze.")
+
+res_nabidky = requests.get(f"{SUPABASE_URL}/rest/v1/burza_nabidky?aktivni=eq.true&select=*", headers=headers).json()
+nabidky = res_nabidky if isinstance(res_nabidky, list) else []
+
+if not nabidky:
+    st.info("Momentálně nejsou na burze žádné aktivní nabídky akcií.")
+else:
+    for nab in nabidky:
+        fid = nab['firma_id']
+        nazev_firmy_b = firmy_dict.get(fid, "Neznámá firma")
+        k_prodeji = int(nab.get('pocet_k_prodeji', 0))
+        cena_kus = float(nab.get('cena_za_kus', 0))
+        if k_prodeji <= 0:
+            continue
+        with st.container(border=True):
+            col_b1, col_b2, col_b3 = st.columns([2, 1, 1])
+            col_b1.markdown(f"**{nazev_firmy_b}** — nabízí {k_prodeji} podílů po {cena_kus:.1f} M-K/ks")
+            pocet_ke_koupi = col_b2.number_input("Počet podílů:", min_value=1, max_value=k_prodeji, value=1, key=f"kup_akcie_pocet_{nab['id']}")
+            if col_b3.button("Investovat", key=f"kup_akcie_btn_{nab['id']}", use_container_width=True):
+                celkova_cena = pocet_ke_koupi * cena_kus
+                if aktualni_kredity < celkova_cena:
+                    st.error("Nedostatek M-Kreditů na tuto investici.")
+                else:
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/uzivatele?jmeno=eq.{uzivatel}", headers=headers, json={"kredity": aktualni_kredity - celkova_cena})
+                    requests.post(f"{SUPABASE_URL}/rest/v1/kniha_prijmu_vydaju", headers=headers, json={
+                        "firma_id": fid, "typ_transakce": "PRIJEM",
+                        "titul": f"Prodej akcií investorovi ({uzivatel})", "castka": celkova_cena, "auditovano": False
+                    })
+                    zbyva = k_prodeji - pocet_ke_koupi
+                    requests.patch(f"{SUPABASE_URL}/rest/v1/burza_nabidky?id=eq.{nab['id']}", headers=headers, json={
+                        "pocet_k_prodeji": zbyva, "aktivni": zbyva > 0
+                    })
+                    res_moje_akcie_b = requests.get(f"{SUPABASE_URL}/rest/v1/vlastnici_akcii?majitel_jmeno=eq.{uzivatel}&firma_id=eq.{fid}", headers=headers).json()
+                    if isinstance(res_moje_akcie_b, list) and len(res_moje_akcie_b) > 0:
+                        stavajici = res_moje_akcie_b[0]
+                        requests.patch(f"{SUPABASE_URL}/rest/v1/vlastnici_akcii?id=eq.{stavajici['id']}", headers=headers, json={
+                            "pocet_akcii": int(stavajici.get('pocet_akcii', 0)) + pocet_ke_koupi
+                        })
+                    else:
+                        requests.post(f"{SUPABASE_URL}/rest/v1/vlastnici_akcii", headers=headers, json={
+                            "majitel_jmeno": uzivatel, "firma_id": fid, "pocet_akcii": pocet_ke_koupi
+                        })
+                    st.success(f"Investováno {celkova_cena:.1f} M-K do firmy {nazev_firmy_b}.")
+                    st.rerun()
