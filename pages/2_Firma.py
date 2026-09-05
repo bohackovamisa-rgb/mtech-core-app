@@ -117,11 +117,31 @@ else:
     moje_role = "CEO" if st.session_state.get("role") in ["firma", "admin"] else "ZAMESTNANEC"
 
 je_vedeni = moje_role in ["CEO", "CFO", "CTO"]
+je_vedeni = moje_role in ["CEO", "CFO", "CTO"]
+
+# =========================================================================
+# NÁHLED FIRMY PRO ÚŘAD (ADMIN/UČITEL)
+# =========================================================================
+if not moje_firma and str(st.session_state.get("role", "")).lower() in ["ucitel", "admin"]:
+    st.markdown("### 🔍 Náhled firemního dashboardu (režim Úřad)")
+    st.caption("Vyberte existující firmu, jejíž dashboard chcete zobrazit — uvidíte totéž, co vedení firmy (Agile řízení, kalkulace, likvidace atd.).")
+    if vsechny_firmy:
+        nazvy_firem_preview = {f["nazev_firmy"]: f["id"] for f in vsechny_firmy}
+        vybrana_firma_nazev = st.selectbox("Firma k náhledu:", ["-- Nevybráno --"] + list(nazvy_firem_preview.keys()))
+        if vybrana_firma_nazev != "-- Nevybráno --":
+            moje_firma = next((f for f in vsechny_firmy if f["id"] == nazvy_firem_preview[vybrana_firma_nazev]), None)
+            moje_role = "AUDITOR"
+            je_vedeni = True
+            st.info(f"🔍 Prohlížíte firmu **{vybrana_firma_nazev}** v režimu Úřad.")
+        else:
+            st.stop()
+    else:
+        st.info("Ve škole zatím nejsou žádné založené firmy k náhledu.")
+        st.stop()
 
 akt_dan_mtech = 15.0
 akt_dan_prijem = 15.0
 kurz_kc = 10.0
-
 target_skola = moje_firma['skolni_kod'] if moje_firma else (skolni_kod or 'SYSTEM')
 nastaveni_res = requests.get(f"{SUPABASE_URL}/rest/v1/skolni_nastaveni?skolni_kod=eq.{target_skola}", headers=headers).json()
 if isinstance(nastaveni_res, list) and len(nastaveni_res) > 0:
