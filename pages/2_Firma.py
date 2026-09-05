@@ -724,8 +724,8 @@ if tab_likvidace:
         st.subheader("Ukončení a likvidace společnosti")
         with st.container(border=True):
             st.markdown("#### Právní kroky likvidace:")
-            st.markdown("1. **Vypořádání závazků:** Vyplacení všech mezd zaměstnancům a zaplacení daní.")
-            st.markdown("2. **Rozdělení likvidačního zůstatku:** Zbývající finanční prostředky zůstávají zakladatelům.")
+            st.markdown("1. **Vypořádání závazků:** Vyhodnocení virtuálních M-Kreditů a zaplacení virtuální daně.")
+            st.markdown("2. **Rozdělení likvidačního zůstatku:** Zbývající M-Kredity zůstávají zakladatelům firmy.")
             st.markdown("3. **Výmaz z rejstříku:** Oznámení Kontrolnímu úřadu o definitivním ukončení činnosti.")
          st.divider()
         st.markdown("#### Rozdělení dividendy (nepovinné, před ukončením)")
