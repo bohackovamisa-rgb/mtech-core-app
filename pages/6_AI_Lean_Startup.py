@@ -279,12 +279,16 @@ with tab_krize:
     st.subheader("Black Swan (Simulace rizik)")
     if st.button("Vygenerovat krizi") and (not is_teacher or is_demo):
         with st.spinner("Tvořím scénář..."):
+            canvas_pro_prompt = canvas if canvas else {"popis": "obecná studentská firma prodávající vlastní výrobky nebo drobnou službu spolužákům"}
             prompt_krize = (
                 "Jsi mentor studentských firem v ekonomickém vzdělávacím programu. "
                 "Vymysli REALISTICKOU PODNIKATELSKOU krizi (např. problém s dodavatelem, "
                 "výpadek klíčového člena týmu, náhlá změna poptávky na trhu, cash flow "
                 "problém, stížnost zákazníka, konkurence se stejným nápadem apod.) pro "
-                f"firmu s tímto byznys modelem: {json.dumps(canvas, ensure_ascii=False)}. "
+                f"firmu s tímto byznys modelem: {json.dumps(canvas_pro_prompt, ensure_ascii=False)}. "
+                "Pokud byznys model neobsahuje dostatek konkrétních údajů, sám si dosaď "
+                "přiměřený příklad studentské firmy a NIKDY se neptej uživatele na "
+                "doplnění údajů — vždy rovnou vymysli konkrétní krizi, bez výjimky. "
                 "Piš ve 2 větách v češtině a na konci polož jednu konkrétní otázku, jak "
                 "by firma měla zareagovat. Krize se MUSÍ týkat podnikání a byznysu, "
                 "nikdy ne detektivních, špionážních nebo fantasy témat."
