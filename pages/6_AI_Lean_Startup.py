@@ -84,7 +84,7 @@ if "customer_history" not in st.session_state: st.session_state.customer_history
 if "krize_aktivni" not in st.session_state: st.session_state.krize_aktivni = None
 if "aktivni_model_nazev" not in st.session_state: st.session_state.aktivni_model_nazev = "Automatická detekce"
 
-is_teacher = st.session_state.get("role") == "ucitel"
+is_teacher = st.session_state.get("role") in ["ucitel", "admin"]
 is_demo = False
 
 if is_teacher:
