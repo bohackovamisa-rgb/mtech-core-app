@@ -279,23 +279,25 @@ with tab_krize:
     st.subheader("Black Swan (Simulace rizik)")
     if st.button("Vygenerovat krizi") and (not is_teacher or is_demo):
         with st.spinner("Tvořím scénář..."):
-            canvas_pro_prompt = canvas if canvas else {"popis": "obecná studentská firma prodávající vlastní výrobky nebo drobnou službu spolužákům"}
+            ma_data_canvas = bool(canvas) and any(str(v).strip() for v in canvas.values())
             prompt_krize = (
                 "Jsi mentor studentských firem v ekonomickém vzdělávacím programu. "
                 "Vymysli REALISTICKÝ MAKROEKONOMICKÝ NEBO GEOPOLITICKÝ ŠOK, který "
-                "zasáhne firmu zvenčí (např. válka nebo konflikt narušující dovoz "
+                "zasáhne firmy zvenčí (např. válka nebo konflikt narušující dovoz "
                 "ropy a zvyšující ceny pohonných hmot, náhlé zvýšení daní vládou ČR, "
                 "uvalení cel na dovoz z Číny, prudká inflace, oslabení koruny, "
-                "zvýšení úrokových sazeb ČNB, celosvětová recese apod.) pro firmu "
-                f"s tímto byznys modelem: {json.dumps(canvas_pro_prompt, ensure_ascii=False)}. "
-                "Pokud byznys model neobsahuje dostatek konkrétních údajů, sám si dosaď "
-                "přiměřený příklad studentské firmy a NIKDY se neptej uživatele na "
-                "doplnění údajů — vždy rovnou vymysli konkrétní krizi, bez výjimky. "
-                "Piš ve 2 větách v češtině a na konci polož jednu konkrétní otázku, jak "
-                "by firma měla na tento vnější ekonomický šok zareagovat. Krize se MUSÍ "
-                "týkat makroekonomiky nebo geopolitiky s dopadem na byznys, nikdy ne "
-                "detektivních, špionážních nebo fantasy témat, a nikdy ne pouze interních "
-                "firemních problémů (dodavatel, zaměstnanci) bez vnějšího ekonomického základu."
+                "zvýšení úrokových sazeb ČNB, celosvětová recese apod.). "
+                "DŮLEŽITÉ: Popiš krizi OBECNĚ, jako ekonomickou zprávu ze světa "
+                "byznysu (např. z novin) — NIKDY si nevymýšlej ani nezmiňuj konkrétní "
+                "produkt, obor ani jméno firmy, protože neznáš, co konkrétní firma "
+                "vyrábí. Popiš jen samotnou ekonomickou událost a její typické dopady "
+                "(dražší vstupy, dražší úvěry, nižší poptávka, změna nákladů na dovoz "
+                "apod.), a na konci polož obecnou otázku, jak by NA TOTO měla "
+                "zareagovat firma čtenáře — nechej na něm, aby si dopad sám odvodil "
+                "pro svůj vlastní byznys model. Piš ve 2-3 větách v češtině. Krize se "
+                "MUSÍ týkat makroekonomiky nebo geopolitiky, nikdy ne detektivních, "
+                "špionážních nebo fantasy témat, a nikdy nesmí vymýšlet, co firma "
+                "vyrábí nebo prodává."
             )
             try: st.session_state.krize_aktivni = call_ai_multimodal(prompt_krize)
             except Exception as e: st.error(str(e))
