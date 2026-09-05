@@ -279,7 +279,17 @@ with tab_krize:
     st.subheader("Black Swan (Simulace rizik)")
     if st.button("Vygenerovat krizi") and (not is_teacher or is_demo):
         with st.spinner("Tvořím scénář..."):
-            try: st.session_state.krize_aktivni = call_ai_multimodal(f"Vymysli krizi pro: {json.dumps(canvas, ensure_ascii=False)}. 2 věty, polož otázku.")
+            prompt_krize = (
+                "Jsi mentor studentských firem v ekonomickém vzdělávacím programu. "
+                "Vymysli REALISTICKOU PODNIKATELSKOU krizi (např. problém s dodavatelem, "
+                "výpadek klíčového člena týmu, náhlá změna poptávky na trhu, cash flow "
+                "problém, stížnost zákazníka, konkurence se stejným nápadem apod.) pro "
+                f"firmu s tímto byznys modelem: {json.dumps(canvas, ensure_ascii=False)}. "
+                "Piš ve 2 větách v češtině a na konci polož jednu konkrétní otázku, jak "
+                "by firma měla zareagovat. Krize se MUSÍ týkat podnikání a byznysu, "
+                "nikdy ne detektivních, špionážních nebo fantasy témat."
+            )
+            try: st.session_state.krize_aktivni = call_ai_multimodal(prompt_krize)
             except Exception as e: st.error(str(e))
     if st.session_state.krize_aktivni:
         st.markdown(f"<div class='crisis-box'><b>KRIZE:</b><br>{st.session_state.krize_aktivni}</div><br>", unsafe_allow_html=True)
